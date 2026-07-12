@@ -476,6 +476,17 @@ button {
   font-size: 12px;
 }
 
+.job-card {
+  border-color: #cdded6;
+  background: #f4faf7;
+}
+
+.job-card small {
+  color: #8a2424;
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+
 .badge {
   min-height: 26px;
   padding: 0 8px;

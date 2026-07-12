@@ -1,5 +1,6 @@
 from pathlib import Path
 from uuid import UUID
+from typing import Any
 import hashlib
 import logging
 
@@ -60,7 +61,15 @@ def persist_document_ingestion(
                       CAST(:extraction_metadata AS jsonb), :uploaded_by, now()
                     )
                     ON CONFLICT (id) DO UPDATE SET
+                      mime_type = EXCLUDED.mime_type,
+                      content_sha256 = EXCLUDED.content_sha256,
+                      byte_size = EXCLUDED.byte_size,
                       status = EXCLUDED.status,
+                      visibility = EXCLUDED.visibility,
+                      allowed_role_names = EXCLUDED.allowed_role_names,
+                      ocr_required = EXCLUDED.ocr_required,
+                      extraction_metadata = EXCLUDED.extraction_metadata,
+                      uploaded_by = EXCLUDED.uploaded_by,
                       updated_at = now()
                     """
                 ),
@@ -141,6 +150,188 @@ def persist_document_ingestion(
     except SQLAlchemyError:
         logger.exception("Failed to persist document ingestion for %s", document_id)
         return
+
+
+def persist_processing_job_created(job: Any) -> None:
+    if not get_settings().enable_db_persistence:
+        return
+
+    try:
+        from app.db import engine
+
+        content_hash = _sha256(job.path)
+        byte_size = job.path.stat().st_size
+        metadata = {
+            "source": "async_upload",
+            "force_ocr": job.force_ocr,
+            "uploaded_by_subject": job.uploaded_by,
+        }
+        with engine.begin() as connection:
+            connection.execute(
+                text(
+                    """
+                    INSERT INTO documents (
+                      id, tenant_id, source_uri, file_name, mime_type, content_sha256,
+                      byte_size, status, visibility, allowed_role_names, ocr_required,
+                      extraction_metadata, uploaded_by, updated_at
+                    )
+                    VALUES (
+                      :id, :tenant_id, :source_uri, :file_name, NULL, :content_sha256,
+                      :byte_size, 'pending', CAST(:visibility AS visibility),
+                      CAST(:allowed_role_names AS text[]), :ocr_required,
+                      CAST(:extraction_metadata AS jsonb), :uploaded_by, now()
+                    )
+                    ON CONFLICT (id) DO NOTHING
+                    """
+                ),
+                {
+                    "id": job.document_id,
+                    "tenant_id": job.tenant_id,
+                    "source_uri": str(job.path),
+                    "file_name": job.file_name,
+                    "content_sha256": content_hash,
+                    "byte_size": byte_size,
+                    "visibility": job.visibility,
+                    "allowed_role_names": job.allowed_role_names,
+                    "ocr_required": job.force_ocr,
+                    "extraction_metadata": _json_string(metadata),
+                    "uploaded_by": job.uploaded_by_user_id,
+                },
+            )
+            connection.execute(
+                text(
+                    """
+                    INSERT INTO processing_jobs (
+                      id, tenant_id, document_id, stage, status, attempts, error_message,
+                      started_at, finished_at, created_at
+                    )
+                    VALUES (
+                      :id, :tenant_id, :document_id, CAST(:stage AS processing_stage),
+                      :status, :attempts, :error_message, :started_at, :finished_at,
+                      COALESCE(:created_at, now())
+                    )
+                    ON CONFLICT (id) DO UPDATE SET
+                      status = EXCLUDED.status,
+                      stage = EXCLUDED.stage,
+                      attempts = EXCLUDED.attempts,
+                      error_message = EXCLUDED.error_message,
+                      started_at = EXCLUDED.started_at,
+                      finished_at = EXCLUDED.finished_at
+                    """
+                ),
+                _job_params(job),
+            )
+    except SQLAlchemyError:
+        logger.exception("Failed to persist processing job %s", job.job_id)
+
+
+def persist_processing_job_update(job: Any) -> None:
+    if not get_settings().enable_db_persistence:
+        return
+
+    try:
+        from app.db import engine
+
+        document_status = {
+            "queued": "pending",
+            "processing": "extracting" if job.stage in {"upload", "extract", "ocr"} else "chunking",
+            "completed": "embedded",
+            "failed": "failed",
+        }.get(job.status, "pending")
+        with engine.begin() as connection:
+            connection.execute(
+                text(
+                    """
+                    UPDATE processing_jobs
+                    SET status = :status,
+                        stage = CAST(:stage AS processing_stage),
+                        attempts = :attempts,
+                        error_message = :error_message,
+                        started_at = :started_at,
+                        finished_at = :finished_at
+                    WHERE id = :id
+                    """
+                ),
+                _job_params(job),
+            )
+            connection.execute(
+                text(
+                    """
+                    UPDATE documents
+                    SET status = CAST(:status AS document_status),
+                        updated_at = now()
+                    WHERE id = :document_id
+                    """
+                ),
+                {"document_id": job.document_id, "status": document_status},
+            )
+    except SQLAlchemyError:
+        logger.exception("Failed to update processing job %s", job.job_id)
+
+
+def get_persisted_processing_job(job_id: UUID):
+    if not get_settings().enable_db_persistence:
+        return None
+
+    try:
+        from app.db import engine
+        from app.rag.jobs import ProcessingJob
+
+        with engine.begin() as connection:
+            row = connection.execute(
+                text(
+                    """
+                    SELECT
+                      j.id AS job_id,
+                      j.tenant_id,
+                      j.document_id,
+                      j.stage::text AS stage,
+                      j.status,
+                      j.attempts,
+                      j.error_message,
+                      j.started_at,
+                      j.finished_at,
+                      j.created_at,
+                      d.source_uri,
+                      d.file_name,
+                      d.visibility::text AS visibility,
+                      d.allowed_role_names,
+                      d.ocr_required,
+                      d.uploaded_by,
+                      d.extraction_metadata
+                    FROM processing_jobs j
+                    JOIN documents d ON d.id = j.document_id
+                    WHERE j.id = :job_id
+                    """
+                ),
+                {"job_id": job_id},
+            ).mappings().first()
+            if row is None:
+                return None
+
+            metadata = dict(row["extraction_metadata"] or {})
+            return ProcessingJob(
+                job_id=row["job_id"],
+                document_id=row["document_id"],
+                tenant_id=row["tenant_id"],
+                path=Path(row["source_uri"]),
+                file_name=row["file_name"],
+                visibility=row["visibility"],
+                allowed_role_names=list(row["allowed_role_names"] or []),
+                force_ocr=bool(row["ocr_required"]),
+                uploaded_by=metadata.get("uploaded_by_subject") or "",
+                uploaded_by_user_id=row["uploaded_by"],
+                status=row["status"],
+                stage=row["stage"],
+                attempts=row["attempts"],
+                error_message=row["error_message"],
+                created_at=row["created_at"],
+                started_at=row["started_at"],
+                finished_at=row["finished_at"],
+            )
+    except SQLAlchemyError:
+        logger.exception("Failed to load processing job %s", job_id)
+        return None
 
 
 def load_persisted_chunks() -> list[ChunkDTO]:
@@ -406,3 +597,18 @@ def _json_string(value: dict) -> str:
     import json
 
     return json.dumps(value)
+
+
+def _job_params(job: Any) -> dict:
+    return {
+        "id": job.job_id,
+        "tenant_id": job.tenant_id,
+        "document_id": job.document_id,
+        "stage": job.stage,
+        "status": job.status,
+        "attempts": job.attempts,
+        "error_message": job.error_message,
+        "started_at": job.started_at,
+        "finished_at": job.finished_at,
+        "created_at": job.created_at,
+    }

@@ -49,3 +49,16 @@ class DocumentDetail(DocumentSummary):
 
 class DocumentListResponse(BaseModel):
     documents: list[DocumentSummary] = Field(default_factory=list)
+
+
+class ProcessingJobStatus(BaseModel):
+    job_id: UUID
+    document_id: UUID
+    file_name: str
+    status: str
+    stage: str
+    attempts: int = 0
+    error_message: str | None = None
+    created_at: datetime | None = None
+    started_at: datetime | None = None
+    finished_at: datetime | None = None

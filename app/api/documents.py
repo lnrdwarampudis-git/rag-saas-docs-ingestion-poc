@@ -9,9 +9,9 @@ from pydantic import BaseModel, Field
 from app.auth.dependencies import get_current_user
 from app.auth.models import AuthenticatedUser
 from app.config import get_settings
-from app.rag.chunking import ChunkingConfig, chunk_text
-from app.rag.parsers import extract_document_text
-from app.rag.persistence import get_persisted_document, list_persisted_documents, persist_document_ingestion
+from app.rag.persistence import get_persisted_document, list_persisted_documents
+from app.rag.ingestion import process_document_path
+from app.rag.jobs import create_processing_job, enqueue_processing_job
 from app.rag.retrieval import is_chunk_authorized
 from app.rag.store import document_store
 from app.schemas.documents import (
@@ -21,6 +21,7 @@ from app.schemas.documents import (
     DocumentListResponse,
     DocumentSummary,
     IngestRequest,
+    ProcessingJobStatus,
 )
 
 router = APIRouter(prefix="/documents", tags=["documents"])
@@ -51,7 +52,7 @@ def ingest_document(
     if not path.exists() or not path.is_file():
         raise HTTPException(status_code=404, detail=f"File not found: {payload.local_path}")
 
-    return _process_document_path(
+    return process_document_path(
         path=path,
         tenant_id=current_user.tenant_id,
         uploaded_by=current_user.keycloak_subject,
@@ -76,7 +77,7 @@ def upload_document(
         raise HTTPException(status_code=422, detail="Uploaded file must have a filename")
 
     path, original_file_name = _save_upload(file)
-    return _process_document_path(
+    return process_document_path(
         path=path,
         file_name=original_file_name,
         tenant_id=current_user.tenant_id,
@@ -86,6 +87,34 @@ def upload_document(
         allowed_role_names=allowed_role_names if visibility == "role" else [],
         force_ocr=force_ocr,
     )
+
+
+@router.post("/upload-async", response_model=ProcessingJobStatus, status_code=202)
+def upload_document_async(
+    visibility: str = Form("tenant"),
+    allowed_role_names: list[str] = Form(default=[]),
+    force_ocr: bool = Form(False),
+    file: UploadFile = File(...),
+    current_user: AuthenticatedUser = Depends(get_current_user),
+) -> ProcessingJobStatus:
+    if visibility not in {"private", "tenant", "role"}:
+        raise HTTPException(status_code=422, detail="visibility must be private, tenant, or role")
+    if not file.filename:
+        raise HTTPException(status_code=422, detail="Uploaded file must have a filename")
+
+    path, original_file_name = _save_upload(file)
+    job = create_processing_job(
+        path=path,
+        file_name=original_file_name,
+        tenant_id=current_user.tenant_id,
+        uploaded_by=current_user.keycloak_subject,
+        uploaded_by_user_id=current_user.app_user_id,
+        visibility=visibility,
+        allowed_role_names=allowed_role_names if visibility == "role" else [],
+        force_ocr=force_ocr,
+    )
+    enqueue_processing_job(job.job_id)
+    return job.to_status()
 
 
 @router.get("/{document_id}", response_model=DocumentDetail)
@@ -134,83 +163,6 @@ def get_document_chunks(
     if all_chunks and not authorized_chunks:
         raise HTTPException(status_code=404, detail="Document not found")
     return DocumentChunksResponse(document_id=document_id, chunks=authorized_chunks)
-
-
-def _process_document_path(
-    path: Path,
-    tenant_id: UUID,
-    uploaded_by: str,
-    uploaded_by_user_id: UUID | None,
-    visibility: str,
-    allowed_role_names: list[str],
-    force_ocr: bool,
-    file_name: str | None = None,
-) -> DocumentIngestResult:
-    settings = get_settings()
-    extraction = extract_document_text(path, force_ocr=force_ocr)
-    document_id = uuid4()
-
-    chunks = chunk_text(
-        extraction.text,
-        config=ChunkingConfig(
-            target_tokens=settings.chunk_target_tokens,
-            overlap_tokens=settings.chunk_overlap_tokens,
-        ),
-        base_metadata={
-            "tenant_id": str(tenant_id),
-            "document_id": str(document_id),
-            "file_name": file_name or path.name,
-            "visibility": visibility,
-            "allowed_role_names": allowed_role_names,
-            "uploaded_by": uploaded_by,
-            "ocr_used": extraction.ocr_used,
-            "mime_type": extraction.mime_type,
-        },
-    )
-
-    chunk_dtos = [
-        ChunkDTO(
-            chunk_index=chunk.chunk_index,
-            text=chunk.text,
-            token_count=chunk.token_count,
-            metadata=chunk.metadata,
-        )
-        for chunk in chunks
-    ]
-    document_store.put_chunks(
-        document_id,
-        chunk_dtos,
-        tenant_id=tenant_id,
-        file_name=file_name or path.name,
-        status="embedded" if chunk_dtos else "failed",
-        visibility=visibility,
-        allowed_role_names=allowed_role_names,
-        ocr_used=extraction.ocr_used,
-        byte_size=path.stat().st_size,
-        mime_type=extraction.mime_type,
-        uploaded_by=uploaded_by,
-    )
-    persist_document_ingestion(
-        document_id=document_id,
-        tenant_id=tenant_id,
-        path=path,
-        file_name=file_name or path.name,
-        mime_type=extraction.mime_type,
-        visibility=visibility,
-        allowed_role_names=allowed_role_names,
-        force_ocr=force_ocr,
-        ocr_used=extraction.ocr_used,
-        chunks=chunk_dtos,
-        uploaded_by_user_id=uploaded_by_user_id,
-    )
-
-    return DocumentIngestResult(
-        document_id=document_id,
-        file_name=file_name or path.name,
-        chunks_created=len(chunk_dtos),
-        ocr_used=extraction.ocr_used,
-        extraction_warnings=extraction.warnings,
-    )
 
 
 def _save_upload(file: UploadFile) -> tuple[Path, str]:

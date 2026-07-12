@@ -92,6 +92,29 @@ curl -H "Authorization: Bearer $TOKEN" \
   http://127.0.0.1:8000/api/v1/documents/$DOC_ID
 ```
 
+Queue a file for background processing:
+
+```bash
+JOB_RESPONSE=$(curl -s -H "Authorization: Bearer $TOKEN" \
+  -F visibility=tenant \
+  -F force_ocr=false \
+  -F file=@./data/ingest/example.txt \
+  http://127.0.0.1:8000/api/v1/documents/upload-async)
+
+echo "$JOB_RESPONSE"
+JOB_ID=$(echo "$JOB_RESPONSE" | python3 -c "import sys,json; print(json.load(sys.stdin)['job_id'])")
+
+curl -H "Authorization: Bearer $TOKEN" \
+  http://127.0.0.1:8000/api/v1/processing-jobs/$JOB_ID
+```
+
+In Docker, the `worker` service polls Redis and processes queued jobs automatically. For a local API-only smoke test without the worker loop, run one job explicitly:
+
+```bash
+curl -X POST -H "Authorization: Bearer $TOKEN" \
+  http://127.0.0.1:8000/api/v1/processing-jobs/$JOB_ID/run
+```
+
 Ask a question:
 
 ```bash
@@ -115,8 +138,9 @@ curl -H "Authorization: Bearer $TOKEN" http://127.0.0.1:8000/api/v1/auth/me
 2. Sign in with `admin-demo` / `Passw0rd!`.
 3. Confirm the A&A panel shows the resolved tenant and roles, and the Session panel shows token expiry/refresh state.
 4. Upload a PDF, DOCX, XLSX, PPTX, text/CSV/markdown, or image file from the Upload panel.
-5. Use Document Management to refresh the authorized inventory, open the uploaded document, and confirm chunk previews are visible.
-6. Ask a question in the Query panel and confirm citations/latency/cache status appear.
+5. Use "Upload to queue" to exercise the background processing path; the UI polls job status until the worker completes or fails it.
+6. Use Document Management to refresh the authorized inventory, open the uploaded document, and confirm chunk previews are visible.
+7. Ask a question in the Query panel and confirm citations/latency/cache status appear.
 
 ## Inspect Persisted Data
 

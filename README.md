@@ -58,6 +58,7 @@ For full setup, execution, test, and GitHub export instructions, see:
 - Server-side RBAC resolved from Postgres (`app_users`/`roles`/`user_roles`), with tenant_id/roles always taken from the validated token -- never from request bodies
 - PDF, Word DOCX, Excel XLSX, PowerPoint PPTX, text, CSV/TSV, markdown, and image intake
 - Document management inventory with authorized list/detail APIs, ingestion status, visibility, OCR flags, chunk counts, and chunk preview
+- Week 6 background ingestion path with queued upload, Redis-backed worker polling, processing job status API, and UI job polling
 
 ## Recommended Week 1 Commands
 
@@ -104,8 +105,11 @@ docker compose up --build
 - `GET /api/v1/documents`
 - `POST /api/v1/documents/ingest`
 - `POST /api/v1/documents/upload`
+- `POST /api/v1/documents/upload-async`
 - `GET /api/v1/documents/{document_id}`
 - `GET /api/v1/documents/{document_id}/chunks`
+- `GET /api/v1/processing-jobs/{job_id}`
+- `POST /api/v1/processing-jobs/{job_id}/run`
 - `POST /api/v1/query`
 
 The document list/detail endpoints power the UI's Document Management panel. They apply the same tenant and RBAC rules as retrieval: users can inspect only documents and chunks their authenticated identity is authorized to see.
@@ -113,6 +117,8 @@ The document list/detail endpoints power the UI's Document Management panel. The
 The ingestion endpoint accepts a local file path for Week 1 development. Production upload should stream files into MinIO first, then enqueue parsing and chunking workers.
 
 The upload endpoint accepts multipart browser uploads and is the preferred local SaaS-style flow because it does not require Docker path mapping.
+
+The async upload endpoint returns `202 Accepted` with a `job_id` and `document_id`. Docker Compose includes a `worker` service that polls Redis, processes queued files, updates `processing_jobs`, and transitions documents from `pending` to `embedded` or `failed`.
 
 Supported POC intake formats:
 
@@ -135,6 +141,7 @@ After login, the frontend shows:
 - Format intake guidance for PDF, DOCX, XLSX, PPTX, text/CSV/markdown, and image OCR uploads.
 - Authorized document inventory with file name, status, visibility, OCR indicator, chunk count, updated time, and detail inspection.
 - Chunk preview for the selected document, using the same RBAC checks as the query/retrieval path.
+- Queued upload status for background ingestion jobs, with automatic polling until completion or failure.
 
 When running with Docker, the backend cannot read arbitrary Mac paths such as `/Users/name/Documents/file.pdf`. Put local files under `data/ingest/` in this repo, then enter the container path in the UI:
 

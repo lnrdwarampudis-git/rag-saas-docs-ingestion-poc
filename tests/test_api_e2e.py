@@ -135,6 +135,71 @@ def test_upload_document_then_query_context(tmp_path: Path, api_client_as) -> No
     assert "Uploaded files" in query_payload["answer"]
 
 
+def test_async_upload_job_can_be_processed_then_queried(api_client_as) -> None:
+    tenant_id = "00000000-0000-4000-8000-000000000006"
+    client = api_client_as(tenant_id, ["admin"], "async-admin")
+
+    upload_response = client.post(
+        "/api/v1/documents/upload-async",
+        data={
+            "visibility": "tenant",
+            "force_ocr": "false",
+        },
+        files={
+            "file": (
+                "queued-policy.txt",
+                b"QUEUED POLICY\nBackground workers process queued documents for retrieval.",
+                "text/plain",
+            )
+        },
+    )
+
+    assert upload_response.status_code == 202
+    queued_job = upload_response.json()
+    assert queued_job["status"] == "queued"
+    assert queued_job["stage"] == "upload"
+    UUID(queued_job["job_id"])
+    UUID(queued_job["document_id"])
+
+    status_response = client.get(f"/api/v1/processing-jobs/{queued_job['job_id']}")
+    assert status_response.status_code == 200
+    assert status_response.json()["status"] == "queued"
+
+    run_response = client.post(f"/api/v1/processing-jobs/{queued_job['job_id']}/run")
+    assert run_response.status_code == 200
+    completed_job = run_response.json()
+    assert completed_job["status"] == "completed"
+    assert completed_job["attempts"] == 1
+
+    detail_response = client.get(f"/api/v1/documents/{queued_job['document_id']}")
+    assert detail_response.status_code == 200
+    assert detail_response.json()["chunks"]
+
+    query_response = client.post(
+        "/api/v1/query",
+        json={
+            "query": "What processes queued documents?",
+            "top_k": 3,
+        },
+    )
+    assert query_response.status_code == 200
+    assert "Background workers" in query_response.json()["answer"]
+
+
+def test_processing_job_status_is_tenant_scoped(api_client_as) -> None:
+    owner_client = api_client_as("00000000-0000-4000-8000-000000000007", ["admin"], "owner")
+    upload_response = owner_client.post(
+        "/api/v1/documents/upload-async",
+        data={"visibility": "tenant", "force_ocr": "false"},
+        files={"file": ("tenant-job.txt", b"Tenant scoped job", "text/plain")},
+    )
+    assert upload_response.status_code == 202
+    job_id = upload_response.json()["job_id"]
+
+    other_tenant_client = api_client_as("00000000-0000-4000-8000-000000000008", ["admin"], "other")
+    assert other_tenant_client.get(f"/api/v1/processing-jobs/{job_id}").status_code == 404
+
+
 def test_document_management_lists_and_details_authorized_documents(tmp_path: Path, api_client_as) -> None:
     tenant_id = "00000000-0000-4000-8000-000000000004"
     client = api_client_as(tenant_id, ["finance"], "finance-subject")

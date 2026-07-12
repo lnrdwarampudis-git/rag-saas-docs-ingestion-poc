@@ -37,6 +37,34 @@ services:
       timeout: 5s
       retries: 5
 
+  worker:
+    build:
+      context: .
+      dockerfile: Dockerfile.backend
+    command: ["python", "-m", "app.worker"]
+    environment:
+      APP_NAME: rag-saas-docs-ingestion-poc
+      ENVIRONMENT: docker
+      DATABASE_URL: postgresql+psycopg://rag:rag@postgres:5432/rag
+      REDIS_URL: redis://redis:6379/0
+      MINIO_ENDPOINT: http://minio:9000
+      QDRANT_URL: http://qdrant:6333
+      KEYCLOAK_ISSUER: http://localhost:8080/realms/rag
+      KEYCLOAK_INTERNAL_ISSUER: http://keycloak:8080/realms/rag
+      KEYCLOAK_AUDIENCE: rag-api
+      KEYCLOAK_CLIENT_ID: rag-frontend
+      UPLOAD_DIR: /data/uploads
+      ENABLE_DB_PERSISTENCE: "true"
+    volumes:
+      - ./data/ingest:/data/ingest:ro
+      - ./data/uploads:/data/uploads
+      - ${HOST_DOWNLOADS_DIR:-./data/host-downloads}:/host-downloads:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_started
+
   frontend:
     build:
       context: ./frontend

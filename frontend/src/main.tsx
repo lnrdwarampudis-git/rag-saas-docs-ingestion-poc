@@ -77,6 +77,19 @@ type ManagedDocumentDetail = ManagedDocument & {
   }>;
 };
 
+type ProcessingJobStatus = {
+  job_id: string;
+  document_id: string;
+  file_name: string;
+  status: string;
+  stage: string;
+  attempts: number;
+  error_message?: string | null;
+  created_at?: string | null;
+  started_at?: string | null;
+  finished_at?: string | null;
+};
+
 const DEFAULT_INGEST_PATH = "/data/ingest/sample.docx";
 const roleOptions = ["admin", "finance", "engineering", "legal", "support"];
 
@@ -131,6 +144,7 @@ function AuthenticatedApp() {
   const [query, setQuery] = React.useState("");
   const [topK, setTopK] = React.useState(5);
   const [ingests, setIngests] = React.useState<IngestResult[]>([]);
+  const [processingJobs, setProcessingJobs] = React.useState<ProcessingJobStatus[]>([]);
   const [documents, setDocuments] = React.useState<ManagedDocument[]>([]);
   const [selectedDocument, setSelectedDocument] = React.useState<ManagedDocumentDetail | null>(null);
   const [result, setResult] = React.useState<QueryResult | null>(null);
@@ -257,6 +271,73 @@ function AuthenticatedApp() {
     } catch (caught) {
       if (!handleAuthError(caught)) {
         setError(caught instanceof Error ? caught.message : "Document upload failed");
+        setStatus("Needs attention");
+      }
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const refreshJob = React.useCallback(async (jobId: string) => {
+    const response = await apiFetch(`/api/v1/processing-jobs/${jobId}`);
+    if (!response.ok) {
+      throw new Error(await response.text());
+    }
+    const payload = (await response.json()) as ProcessingJobStatus;
+    setProcessingJobs((items) => items.map((item) => (item.job_id === jobId ? payload : item)));
+    if (payload.status === "completed" || payload.status === "failed") {
+      loadDocuments();
+    }
+    return payload;
+  }, [loadDocuments]);
+
+  React.useEffect(() => {
+    const activeJobs = processingJobs.filter((job) => !["completed", "failed"].includes(job.status));
+    if (!activeJobs.length) {
+      return;
+    }
+    const timer = window.setInterval(() => {
+      activeJobs.forEach((job) => {
+        refreshJob(job.job_id).catch((caught) => {
+          if (!handleAuthError(caught)) {
+            setError(caught instanceof Error ? caught.message : "Job refresh failed");
+          }
+        });
+      });
+    }, 2500);
+    return () => window.clearInterval(timer);
+  }, [processingJobs, refreshJob]);
+
+  const uploadDocumentAsync = async () => {
+    if (!selectedFile) {
+      return;
+    }
+    setBusy(true);
+    setError("");
+    setStatus("Queueing");
+    try {
+      const form = new FormData();
+      form.append("visibility", visibility);
+      if (visibility === "role") {
+        allowedRoles.forEach((role) => form.append("allowed_role_names", role));
+      }
+      form.append("force_ocr", String(forceOcr));
+      form.append("file", selectedFile);
+
+      const response = await apiFetch("/api/v1/documents/upload-async", {
+        method: "POST",
+        body: form
+      });
+      if (!response.ok) {
+        throw new Error(await response.text());
+      }
+      const payload = (await response.json()) as ProcessingJobStatus;
+      setProcessingJobs((items) => [payload, ...items]);
+      setStatus("Queued");
+      loadDocuments();
+    } catch (caught) {
+      if (!handleAuthError(caught)) {
+        setError(caught instanceof Error ? caught.message : "Async upload failed");
         setStatus("Needs attention");
       }
     } finally {
@@ -444,6 +525,16 @@ function AuthenticatedApp() {
             <button
               className="secondary-action"
               type="button"
+              disabled={busy || !selectedFile}
+              onClick={uploadDocumentAsync}
+            >
+              <Activity size={18} />
+              Upload to queue
+            </button>
+
+            <button
+              className="secondary-action"
+              type="button"
               disabled={busy || !localPath.trim()}
               onClick={ingestDocument}
             >
@@ -452,6 +543,18 @@ function AuthenticatedApp() {
             </button>
 
             <div className="document-list">
+              {processingJobs.map((job) => (
+                <article className="document-card job-card" key={job.job_id}>
+                  <div>
+                    <strong>{job.file_name}</strong>
+                    <span>
+                      {job.status} / {job.stage} / attempt {job.attempts}
+                    </span>
+                    {job.error_message ? <small>{job.error_message}</small> : null}
+                  </div>
+                  <Badge label={job.status} />
+                </article>
+              ))}
               {ingests.map((item) => (
                 <article className="document-card" key={item.document_id}>
                   <div>
