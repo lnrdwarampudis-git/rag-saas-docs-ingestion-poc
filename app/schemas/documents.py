@@ -1,4 +1,5 @@
 from uuid import UUID
+from datetime import datetime
 
 from pydantic import BaseModel, Field
 
@@ -23,3 +24,28 @@ class DocumentIngestResult(BaseModel):
     chunks_created: int
     ocr_used: bool
     extraction_warnings: list[str] = Field(default_factory=list)
+
+
+class DocumentSummary(BaseModel):
+    document_id: UUID
+    tenant_id: UUID
+    file_name: str
+    status: str
+    visibility: str
+    allowed_role_names: list[str] = Field(default_factory=list)
+    chunks_created: int
+    ocr_used: bool
+    byte_size: int | None = None
+    mime_type: str | None = None
+    uploaded_by: str | None = None
+    created_at: datetime | None = None
+    updated_at: datetime | None = None
+    latest_audit_action: str | None = None
+
+
+class DocumentDetail(DocumentSummary):
+    chunks: list[ChunkDTO] = Field(default_factory=list)
+
+
+class DocumentListResponse(BaseModel):
+    documents: list[DocumentSummary] = Field(default_factory=list)

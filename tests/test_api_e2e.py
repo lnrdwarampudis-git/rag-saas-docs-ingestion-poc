@@ -135,6 +135,68 @@ def test_upload_document_then_query_context(tmp_path: Path, api_client_as) -> No
     assert "Uploaded files" in query_payload["answer"]
 
 
+def test_document_management_lists_and_details_authorized_documents(tmp_path: Path, api_client_as) -> None:
+    tenant_id = "00000000-0000-4000-8000-000000000004"
+    client = api_client_as(tenant_id, ["finance"], "finance-subject")
+    source = tmp_path / "finance-policy.txt"
+    source.write_text("Finance members can review quarterly forecast policy.", encoding="utf-8")
+
+    ingest_response = client.post(
+        "/api/v1/documents/ingest",
+        json={
+            "local_path": str(source),
+            "visibility": "role",
+            "allowed_role_names": ["finance"],
+            "force_ocr": False,
+        },
+    )
+    assert ingest_response.status_code == 200
+    document_id = ingest_response.json()["document_id"]
+
+    list_response = client.get("/api/v1/documents")
+    assert list_response.status_code == 200
+    documents = list_response.json()["documents"]
+    matching = [document for document in documents if document["document_id"] == document_id]
+    assert matching
+    assert matching[0]["file_name"] == "finance-policy.txt"
+    assert matching[0]["visibility"] == "role"
+    assert matching[0]["chunks_created"] >= 1
+
+    detail_response = client.get(f"/api/v1/documents/{document_id}")
+    assert detail_response.status_code == 200
+    detail = detail_response.json()
+    assert detail["document_id"] == document_id
+    assert detail["chunks"]
+    assert "quarterly forecast" in detail["chunks"][0]["text"]
+
+
+def test_document_management_hides_unauthorized_documents(tmp_path: Path, api_client_as) -> None:
+    tenant_id = "00000000-0000-4000-8000-000000000005"
+    legal_client = api_client_as(tenant_id, ["legal"], "legal-subject")
+    source = tmp_path / "legal-only.txt"
+    source.write_text("Legal settlement terms are restricted.", encoding="utf-8")
+
+    ingest_response = legal_client.post(
+        "/api/v1/documents/ingest",
+        json={
+            "local_path": str(source),
+            "visibility": "role",
+            "allowed_role_names": ["legal"],
+            "force_ocr": False,
+        },
+    )
+    assert ingest_response.status_code == 200
+    document_id = ingest_response.json()["document_id"]
+
+    support_client = api_client_as(tenant_id, ["support"], "support-subject")
+    list_response = support_client.get("/api/v1/documents")
+    assert list_response.status_code == 200
+    assert all(document["document_id"] != document_id for document in list_response.json()["documents"])
+
+    detail_response = support_client.get(f"/api/v1/documents/{document_id}")
+    assert detail_response.status_code == 404
+
+
 def test_query_requires_authentication() -> None:
     from fastapi.testclient import TestClient
 

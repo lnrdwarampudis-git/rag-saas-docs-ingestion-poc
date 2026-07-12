@@ -51,6 +51,32 @@ type QueryResult = {
   };
 };
 
+type ManagedDocument = {
+  document_id: string;
+  tenant_id: string;
+  file_name: string;
+  status: string;
+  visibility: string;
+  allowed_role_names: string[];
+  chunks_created: number;
+  ocr_used: boolean;
+  byte_size?: number | null;
+  mime_type?: string | null;
+  uploaded_by?: string | null;
+  created_at?: string | null;
+  updated_at?: string | null;
+  latest_audit_action?: string | null;
+};
+
+type ManagedDocumentDetail = ManagedDocument & {
+  chunks: Array<{
+    chunk_index: number;
+    text: string;
+    token_count: number;
+    metadata: Record<string, unknown>;
+  }>;
+};
+
 const DEFAULT_INGEST_PATH = "/data/ingest/sample.docx";
 const roleOptions = ["admin", "finance", "engineering", "legal", "support"];
 
@@ -105,6 +131,8 @@ function AuthenticatedApp() {
   const [query, setQuery] = React.useState("");
   const [topK, setTopK] = React.useState(5);
   const [ingests, setIngests] = React.useState<IngestResult[]>([]);
+  const [documents, setDocuments] = React.useState<ManagedDocument[]>([]);
+  const [selectedDocument, setSelectedDocument] = React.useState<ManagedDocumentDetail | null>(null);
   const [result, setResult] = React.useState<QueryResult | null>(null);
   const [status, setStatus] = React.useState("Idle");
   const [busy, setBusy] = React.useState(false);
@@ -124,6 +152,48 @@ function AuthenticatedApp() {
     }
     return false;
   };
+
+  const loadDocuments = React.useCallback(async () => {
+    try {
+      const response = await apiFetch("/api/v1/documents");
+      if (!response.ok) {
+        throw new Error(await response.text());
+      }
+      const payload = (await response.json()) as { documents: ManagedDocument[] };
+      setDocuments(payload.documents);
+    } catch (caught) {
+      if (!handleAuthError(caught)) {
+        setError(caught instanceof Error ? caught.message : "Document list failed");
+        setStatus("Needs attention");
+      }
+    }
+  }, []);
+
+  const inspectDocument = async (documentId: string) => {
+    setBusy(true);
+    setError("");
+    setStatus("Loading document");
+    try {
+      const response = await apiFetch(`/api/v1/documents/${documentId}`);
+      if (!response.ok) {
+        throw new Error(await response.text());
+      }
+      const payload = (await response.json()) as ManagedDocumentDetail;
+      setSelectedDocument(payload);
+      setStatus("Document loaded");
+    } catch (caught) {
+      if (!handleAuthError(caught)) {
+        setError(caught instanceof Error ? caught.message : "Document detail failed");
+        setStatus("Needs attention");
+      }
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  React.useEffect(() => {
+    loadDocuments();
+  }, [loadDocuments]);
 
   const ingestDocument = async () => {
     setBusy(true);
@@ -146,6 +216,7 @@ function AuthenticatedApp() {
       const payload = (await response.json()) as IngestResult;
       setIngests((items) => [payload, ...items]);
       setStatus("Indexed");
+      loadDocuments();
     } catch (caught) {
       if (!handleAuthError(caught)) {
         setError(caught instanceof Error ? caught.message : "Document ingest failed");
@@ -182,6 +253,7 @@ function AuthenticatedApp() {
       const payload = (await response.json()) as IngestResult;
       setIngests((items) => [payload, ...items]);
       setStatus("Indexed");
+      loadDocuments();
     } catch (caught) {
       if (!handleAuthError(caught)) {
         setError(caught instanceof Error ? caught.message : "Document upload failed");
@@ -293,7 +365,7 @@ function AuthenticatedApp() {
         {error ? <div className="error-banner">{error}</div> : null}
 
         <div className="content-grid">
-          <section className="panel" id="documents">
+          <section className="panel" id="intake">
             <div className="panel-header">
               <div>
                 <p className="eyebrow">Ingestion</p>
@@ -475,6 +547,81 @@ function AuthenticatedApp() {
           </section>
         </div>
 
+        <section className="panel management-panel" id="documents">
+          <div className="panel-header">
+            <div>
+              <p className="eyebrow">Document Management</p>
+              <h3>Authorized document inventory</h3>
+            </div>
+            <button className="secondary-action compact-action" type="button" onClick={loadDocuments}>
+              <RefreshCw size={16} />
+              Refresh
+            </button>
+          </div>
+
+          <div className="document-table" role="table" aria-label="Authorized documents">
+            <div className="document-row table-head" role="row">
+              <span>File</span>
+              <span>Status</span>
+              <span>Access</span>
+              <span>Chunks</span>
+              <span>OCR</span>
+              <span>Updated</span>
+              <span>Action</span>
+            </div>
+            {documents.map((document) => (
+              <div className="document-row" role="row" key={document.document_id}>
+                <span className="document-name">{document.file_name}</span>
+                <Badge label={document.status} />
+                <span>{document.visibility}</span>
+                <span>{document.chunks_created}</span>
+                <span>{document.ocr_used ? "Yes" : "No"}</span>
+                <span>{formatDate(document.updated_at ?? document.created_at)}</span>
+                <button
+                  className="secondary-action compact-action"
+                  type="button"
+                  onClick={() => inspectDocument(document.document_id)}
+                >
+                  <FileSearch size={16} />
+                  View
+                </button>
+              </div>
+            ))}
+            {!documents.length ? (
+              <div className="empty-state">No authorized documents found yet.</div>
+            ) : null}
+          </div>
+
+          {selectedDocument ? (
+            <article className="chunk-preview">
+              <div className="panel-header">
+                <div>
+                  <p className="eyebrow">Chunk Preview</p>
+                  <h3>{selectedDocument.file_name}</h3>
+                </div>
+                <Badge label={`${selectedDocument.chunks.length} visible chunks`} />
+              </div>
+              <div className="status-list document-detail-grid">
+                <StatusItem label="Visibility" value={selectedDocument.visibility} />
+                <StatusItem
+                  label="Allowed roles"
+                  value={selectedDocument.allowed_role_names.join(", ") || "tenant members"}
+                />
+                <StatusItem label="Audit" value={selectedDocument.latest_audit_action ?? "none"} />
+                <StatusItem label="MIME" value={selectedDocument.mime_type ?? "unknown"} />
+              </div>
+              <div className="chunk-list">
+                {selectedDocument.chunks.slice(0, 5).map((chunk) => (
+                  <div className="chunk-card" key={chunk.chunk_index}>
+                    <strong>Chunk {chunk.chunk_index}</strong>
+                    <p>{chunk.text}</p>
+                  </div>
+                ))}
+              </div>
+            </article>
+          ) : null}
+        </section>
+
         <div className="ops-grid">
           <section className="panel" id="access">
             <div className="panel-header">
@@ -553,6 +700,18 @@ function StatusItem({ label, value }: { label: string; value: string }) {
       <strong>{value}</strong>
     </div>
   );
+}
+
+function formatDate(value?: string | null) {
+  if (!value) {
+    return "unknown";
+  }
+  return new Intl.DateTimeFormat(undefined, {
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit"
+  }).format(new Date(value));
 }
 
 function RolePicker({

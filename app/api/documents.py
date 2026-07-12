@@ -11,16 +11,35 @@ from app.auth.models import AuthenticatedUser
 from app.config import get_settings
 from app.rag.chunking import ChunkingConfig, chunk_text
 from app.rag.parsers import extract_document_text
-from app.rag.persistence import persist_document_ingestion
+from app.rag.persistence import get_persisted_document, list_persisted_documents, persist_document_ingestion
 from app.rag.retrieval import is_chunk_authorized
 from app.rag.store import document_store
-from app.schemas.documents import ChunkDTO, DocumentIngestResult, IngestRequest
+from app.schemas.documents import (
+    ChunkDTO,
+    DocumentDetail,
+    DocumentIngestResult,
+    DocumentListResponse,
+    DocumentSummary,
+    IngestRequest,
+)
 
 router = APIRouter(prefix="/documents", tags=["documents"])
 
 class DocumentChunksResponse(BaseModel):
     document_id: UUID
     chunks: list[ChunkDTO] = Field(default_factory=list)
+
+
+@router.get("", response_model=DocumentListResponse)
+def list_documents(current_user: AuthenticatedUser = Depends(get_current_user)) -> DocumentListResponse:
+    documents = list_persisted_documents(current_user)
+    if not documents:
+        documents = [
+            document
+            for document in document_store.list_documents()
+            if _is_document_summary_authorized(document, current_user)
+        ]
+    return DocumentListResponse(documents=documents)
 
 
 @router.post("/ingest", response_model=DocumentIngestResult)
@@ -36,6 +55,7 @@ def ingest_document(
         path=path,
         tenant_id=current_user.tenant_id,
         uploaded_by=current_user.keycloak_subject,
+        uploaded_by_user_id=current_user.app_user_id,
         visibility=payload.visibility,
         allowed_role_names=payload.allowed_role_names,
         force_ocr=payload.force_ocr,
@@ -61,10 +81,36 @@ def upload_document(
         file_name=original_file_name,
         tenant_id=current_user.tenant_id,
         uploaded_by=current_user.keycloak_subject,
+        uploaded_by_user_id=current_user.app_user_id,
         visibility=visibility,
         allowed_role_names=allowed_role_names if visibility == "role" else [],
         force_ocr=force_ocr,
     )
+
+
+@router.get("/{document_id}", response_model=DocumentDetail)
+def get_document(
+    document_id: UUID,
+    current_user: AuthenticatedUser = Depends(get_current_user),
+) -> DocumentDetail:
+    persisted = get_persisted_document(document_id, current_user)
+    if persisted is not None:
+        return persisted
+
+    document = document_store.get_document(document_id)
+    if document is None or not _is_document_summary_authorized(document, current_user):
+        raise HTTPException(status_code=404, detail="Document not found")
+    authorized_chunks = [
+        chunk
+        for chunk in document.chunks
+        if is_chunk_authorized(
+            chunk,
+            str(current_user.tenant_id),
+            current_user.roles,
+            current_user.keycloak_subject,
+        )
+    ]
+    return DocumentDetail(**document.model_dump(exclude={"chunks"}), chunks=authorized_chunks)
 
 
 @router.get("/{document_id}/chunks", response_model=DocumentChunksResponse)
@@ -94,6 +140,7 @@ def _process_document_path(
     path: Path,
     tenant_id: UUID,
     uploaded_by: str,
+    uploaded_by_user_id: UUID | None,
     visibility: str,
     allowed_role_names: list[str],
     force_ocr: bool,
@@ -130,7 +177,19 @@ def _process_document_path(
         )
         for chunk in chunks
     ]
-    document_store.put_chunks(document_id, chunk_dtos)
+    document_store.put_chunks(
+        document_id,
+        chunk_dtos,
+        tenant_id=tenant_id,
+        file_name=file_name or path.name,
+        status="embedded" if chunk_dtos else "failed",
+        visibility=visibility,
+        allowed_role_names=allowed_role_names,
+        ocr_used=extraction.ocr_used,
+        byte_size=path.stat().st_size,
+        mime_type=extraction.mime_type,
+        uploaded_by=uploaded_by,
+    )
     persist_document_ingestion(
         document_id=document_id,
         tenant_id=tenant_id,
@@ -142,6 +201,7 @@ def _process_document_path(
         force_ocr=force_ocr,
         ocr_used=extraction.ocr_used,
         chunks=chunk_dtos,
+        uploaded_by_user_id=uploaded_by_user_id,
     )
 
     return DocumentIngestResult(
@@ -177,3 +237,16 @@ def _resolve_ingest_path(raw_path: str) -> Path:
             return Path("/host-downloads") / normalized.removeprefix(host_prefix)
 
     return Path(normalized)
+
+
+def _is_document_summary_authorized(
+    document: DocumentSummary,
+    current_user: AuthenticatedUser,
+) -> bool:
+    if document.tenant_id != current_user.tenant_id:
+        return False
+    if document.visibility == "tenant":
+        return True
+    if document.visibility == "private":
+        return document.uploaded_by == current_user.keycloak_subject
+    return bool(set(document.allowed_role_names).intersection(current_user.roles))

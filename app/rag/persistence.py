@@ -7,7 +7,9 @@ from sqlalchemy import text
 from sqlalchemy.exc import SQLAlchemyError
 
 from app.config import get_settings
-from app.schemas.documents import ChunkDTO
+from app.auth.models import AuthenticatedUser
+from app.rag.retrieval import is_chunk_authorized
+from app.schemas.documents import ChunkDTO, DocumentDetail, DocumentSummary
 
 logger = logging.getLogger(__name__)
 
@@ -24,6 +26,7 @@ def persist_document_ingestion(
     force_ocr: bool,
     ocr_used: bool,
     chunks: list[ChunkDTO],
+    uploaded_by_user_id: UUID | None = None,
 ) -> None:
     if not get_settings().enable_db_persistence:
         return
@@ -48,13 +51,13 @@ def persist_document_ingestion(
                     INSERT INTO documents (
                       id, tenant_id, source_uri, file_name, mime_type, content_sha256,
                       byte_size, status, visibility, allowed_role_names, ocr_required,
-                      extraction_metadata, updated_at
+                      extraction_metadata, uploaded_by, updated_at
                     )
                     VALUES (
                       :id, :tenant_id, :source_uri, :file_name, :mime_type, :content_sha256,
                       :byte_size, CAST(:status AS document_status), CAST(:visibility AS visibility),
                       CAST(:allowed_role_names AS text[]), :ocr_required,
-                      CAST(:extraction_metadata AS jsonb), now()
+                      CAST(:extraction_metadata AS jsonb), :uploaded_by, now()
                     )
                     ON CONFLICT (id) DO UPDATE SET
                       status = EXCLUDED.status,
@@ -74,6 +77,7 @@ def persist_document_ingestion(
                     "allowed_role_names": allowed_role_names,
                     "ocr_required": force_ocr,
                     "extraction_metadata": _json_string(extraction_metadata),
+                    "uploaded_by": uploaded_by_user_id,
                 },
             )
             for chunk in chunks:
@@ -195,6 +199,199 @@ def load_persisted_chunks() -> list[ChunkDTO]:
     except SQLAlchemyError:
         logger.exception("Failed to load persisted document chunks")
         return []
+
+
+def list_persisted_documents(current_user: AuthenticatedUser) -> list[DocumentSummary]:
+    if not get_settings().enable_db_persistence:
+        return []
+
+    try:
+        from app.db import engine
+
+        with engine.begin() as connection:
+            rows = connection.execute(
+                text(
+                    """
+                    SELECT
+                      d.id,
+                      d.tenant_id,
+                      d.file_name,
+                      d.status::text AS status,
+                      d.visibility::text AS visibility,
+                      d.allowed_role_names,
+                      d.byte_size,
+                      d.mime_type,
+                      d.uploaded_by,
+                      d.created_at,
+                      d.updated_at,
+                      d.extraction_metadata,
+                      count(c.id) AS chunk_count,
+                      bool_or(c.ocr_used) AS ocr_used,
+                      max(c.source_metadata ->> 'uploaded_by') AS uploaded_by_subject,
+                      max(a.action) AS latest_audit_action
+                    FROM documents d
+                    LEFT JOIN document_chunks c ON c.document_id = d.id
+                    LEFT JOIN audit_logs a ON a.resource_id = d.id
+                    WHERE d.tenant_id = :tenant_id
+                    GROUP BY d.id
+                    ORDER BY d.created_at DESC
+                    LIMIT 200
+                    """
+                ),
+                {"tenant_id": current_user.tenant_id},
+            )
+            documents: list[DocumentSummary] = []
+            for row in rows.mappings():
+                summary = _summary_from_row(row)
+                if _is_document_summary_authorized(summary, row["uploaded_by"], current_user):
+                    documents.append(summary)
+            return documents
+    except SQLAlchemyError:
+        logger.exception("Failed to list persisted documents")
+        return []
+
+
+def get_persisted_document(
+    document_id: UUID,
+    current_user: AuthenticatedUser,
+) -> DocumentDetail | None:
+    if not get_settings().enable_db_persistence:
+        return None
+
+    try:
+        from app.db import engine
+
+        with engine.begin() as connection:
+            document_row = connection.execute(
+                text(
+                    """
+                    SELECT
+                      d.id,
+                      d.tenant_id,
+                      d.file_name,
+                      d.status::text AS status,
+                      d.visibility::text AS visibility,
+                      d.allowed_role_names,
+                      d.byte_size,
+                      d.mime_type,
+                      d.uploaded_by,
+                      d.created_at,
+                      d.updated_at,
+                      d.extraction_metadata,
+                      count(c.id) AS chunk_count,
+                      bool_or(c.ocr_used) AS ocr_used,
+                      max(c.source_metadata ->> 'uploaded_by') AS uploaded_by_subject,
+                      max(a.action) AS latest_audit_action
+                    FROM documents d
+                    LEFT JOIN document_chunks c ON c.document_id = d.id
+                    LEFT JOIN audit_logs a ON a.resource_id = d.id
+                    WHERE d.id = :document_id AND d.tenant_id = :tenant_id
+                    GROUP BY d.id
+                    """
+                ),
+                {"document_id": document_id, "tenant_id": current_user.tenant_id},
+            ).mappings().first()
+            if document_row is None:
+                return None
+
+            summary = _summary_from_row(document_row)
+            if not _is_document_summary_authorized(summary, document_row["uploaded_by"], current_user):
+                return None
+
+            chunk_rows = connection.execute(
+                text(
+                    """
+                    SELECT
+                      c.chunk_index,
+                      c.text,
+                      c.token_count,
+                      c.source_metadata,
+                      c.tenant_id,
+                      c.document_id,
+                      c.visibility::text AS visibility,
+                      c.allowed_role_names,
+                      c.ocr_used,
+                      d.file_name,
+                      d.mime_type
+                    FROM document_chunks c
+                    JOIN documents d ON d.id = c.document_id
+                    WHERE c.document_id = :document_id AND c.tenant_id = :tenant_id
+                    ORDER BY c.chunk_index ASC
+                    """
+                ),
+                {"document_id": document_id, "tenant_id": current_user.tenant_id},
+            )
+            chunks = [_chunk_from_row(row) for row in chunk_rows.mappings()]
+            authorized_chunks = [
+                chunk
+                for chunk in chunks
+                if is_chunk_authorized(
+                    chunk,
+                    str(current_user.tenant_id),
+                    current_user.roles,
+                    current_user.keycloak_subject,
+                )
+            ]
+            return DocumentDetail(**summary.model_dump(), chunks=authorized_chunks)
+    except SQLAlchemyError:
+        logger.exception("Failed to get persisted document %s", document_id)
+        return None
+
+
+def _summary_from_row(row) -> DocumentSummary:
+    metadata = dict(row["extraction_metadata"] or {})
+    return DocumentSummary(
+        document_id=row["id"],
+        tenant_id=row["tenant_id"],
+        file_name=row["file_name"],
+        status=row["status"],
+        visibility=row["visibility"],
+        allowed_role_names=list(row["allowed_role_names"] or []),
+        chunks_created=int(row["chunk_count"] or metadata.get("chunk_count") or 0),
+        ocr_used=bool(row["ocr_used"] or metadata.get("ocr_used", False)),
+        byte_size=row["byte_size"],
+        mime_type=row["mime_type"],
+        uploaded_by=row["uploaded_by_subject"],
+        created_at=row["created_at"],
+        updated_at=row["updated_at"],
+        latest_audit_action=row["latest_audit_action"],
+    )
+
+
+def _chunk_from_row(row) -> ChunkDTO:
+    metadata = dict(row["source_metadata"] or {})
+    metadata.update(
+        {
+            "tenant_id": str(row["tenant_id"]),
+            "document_id": str(row["document_id"]),
+            "file_name": row["file_name"],
+            "visibility": row["visibility"],
+            "allowed_role_names": list(row["allowed_role_names"] or []),
+            "ocr_used": row["ocr_used"],
+            "mime_type": row["mime_type"],
+        }
+    )
+    return ChunkDTO(
+        chunk_index=row["chunk_index"],
+        text=row["text"],
+        token_count=row["token_count"],
+        metadata=metadata,
+    )
+
+
+def _is_document_summary_authorized(
+    document: DocumentSummary,
+    uploaded_by_user_id: UUID | None,
+    current_user: AuthenticatedUser,
+) -> bool:
+    if document.visibility == "tenant":
+        return True
+    if document.visibility == "private":
+        return bool(
+            (document.uploaded_by and document.uploaded_by == current_user.keycloak_subject)
+            or (uploaded_by_user_id and uploaded_by_user_id == current_user.app_user_id)
+        )
+    return bool(set(document.allowed_role_names).intersection(current_user.roles))
 
 
 def _sha256(path: Path) -> str:
