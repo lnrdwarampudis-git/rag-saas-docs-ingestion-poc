@@ -82,11 +82,17 @@ flowchart TD
   redis -- yes --> answer["Return Cached Answer"]
   redis -- no --> chunks["Load Candidate Chunks"]
   chunks --> filter["RBAC Chunk Filter<br/>tenant, role, private owner"]
-  filter --> embed["Embedding Provider<br/>local hashing default"]
-  embed --> rank["Hybrid Retrieval + Ranking"]
+  filter --> embed{"Embedding Provider"}
+  embed -- hashing --> localHash["In-process hashing"]
+  embed -- ollama --> ollamaEmbed["Ollama /api/embed<br/>host.docker.internal or ollama service"]
+  localHash --> rank["Hybrid Retrieval + Ranking"]
+  ollamaEmbed --> rank
   rank --> threshold["Precision Thresholds<br/>min score + keyword overlap"]
-  threshold --> compose["Answer Provider<br/>extractive default"]
-  compose --> saveCache["Store Redis Answer"]
+  threshold --> compose{"Answer Provider"}
+  compose -- extractive --> extractiveAnswer["Extractive answer"]
+  compose -- ollama --> ollamaAnswer["Ollama /api/generate<br/>authorized context prompt"]
+  extractiveAnswer --> saveCache["Store Redis Answer"]
+  ollamaAnswer --> saveCache
   saveCache --> answer
 ```
 
@@ -129,6 +135,22 @@ flowchart LR
   ollamaLlm --> cacheKey
 ```
 
+## Local Ollama Connectivity
+
+```mermaid
+flowchart TD
+  macOllama["Mac Ollama<br/>http://localhost:11434"] --> hostAlias["Docker host alias<br/>host.docker.internal:11434"]
+  composeOllama["Compose Ollama service<br/>http://ollama:11434<br/>profile: local-models"] --> dockerNetwork["Compose network"]
+  backend["backend container"] --> hostAlias
+  worker["worker container"] --> hostAlias
+  backend --> dockerNetwork
+  worker --> dockerNetwork
+  env[".env model settings"] --> backend
+  env --> worker
+  env --> embedSetting["LOCAL_EMBEDDING_RUNTIME=ollama"]
+  env --> llmSetting["LOCAL_LLM_RUNTIME=ollama"]
+```
+
 ## RBAC Visibility Rules
 
 ```mermaid
@@ -156,10 +178,14 @@ flowchart TD
   backend --> keycloak["Keycloak :8080"]
   backend --> qdrant[("Qdrant")]
   backend --> minio[("MinIO")]
+  backend -. host Ollama .-> hostOllama["Mac Ollama<br/>host.docker.internal:11434"]
+  backend -. compose profile .-> composeOllama["Ollama service<br/>ollama:11434"]
   backend --> uploads["/data/uploads bind mount"]
   worker["worker python -m app.worker"] --> redis
   worker --> postgres
   worker --> uploads
   worker --> qdrant
   worker --> minio
+  worker -. host Ollama .-> hostOllama
+  worker -. compose profile .-> composeOllama
 ```

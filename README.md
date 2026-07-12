@@ -37,6 +37,15 @@ docker compose --profile local-models up -d ollama
 
 See [Model Providers](docs/model-providers.md#running-ollama-in-docker-compose) for model pulls and `.env` settings.
 
+If Ollama already runs on your Mac and the app runs in Docker, use `host.docker.internal`:
+
+```text
+LOCAL_EMBEDDING_BASE_URL=http://host.docker.internal:11434
+LOCAL_LLM_BASE_URL=http://host.docker.internal:11434
+```
+
+See [Model Providers](docs/model-providers.md#tested-host-ollama-docker-settings) and [Execution Runbook](docs/runbook.md#mac-host-ollama-container-check) for the tested setup.
+
 For full setup, execution, test, and GitHub export instructions, see:
 
 - [Setup Guide](docs/setup.md)

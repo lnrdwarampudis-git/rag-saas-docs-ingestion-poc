@@ -50,9 +50,11 @@ flowchart TD
     query["Authorized Query"]
     cache["Redis Query Cache"]
     provider["Model Provider<br/>embedding + answer interfaces"]
+    hostOllama["Mac Host Ollama<br/>host.docker.internal:11434"]
+    composeOllama["Optional Compose Ollama<br/>ollama:11434"]
     retriever["Hybrid Retriever"]
     ranker["Precision Ranking"]
-    answer["Answer Generator<br/>extractive default"]
+    answer["Answer Generator<br/>extractive or Ollama"]
     eval["Offline Eval Runner<br/>precision, recall, relevance"]
   end
 
@@ -106,6 +108,8 @@ flowchart TD
   fastapi --> query --> cache
   cache -- hit --> answer
   cache -- miss --> provider
+  provider -. LOCAL_*_BASE_URL .-> hostOllama
+  provider -. local-models profile .-> composeOllama
   provider --> retriever
   retriever --> postgres
   retriever --> qdrant
@@ -127,7 +131,7 @@ flowchart TD
   classDef ops fill:#f5f3ff,stroke:#7c3aed,color:#111827;
 
   class browser,ui,loginScreen,aaScreen,sessionScreen,formatsScreen,docInventory,jobStatus client;
-  class nginx,fastapi,authApi,docMgmtApi,jobApi,upload,queue,worker,parser,ocr,chunker,embed,query,cache,provider,retriever,ranker,answer,eval service;
+  class nginx,fastapi,authApi,docMgmtApi,jobApi,upload,queue,worker,parser,ocr,chunker,embed,query,cache,provider,hostOllama,composeOllama,retriever,ranker,answer,eval service;
   class postgres,qdrant,minio data;
   class keycloak,demoUsers,jwtValidate,rbacResolve,authz security;
   class docker,tests ops;
@@ -167,7 +171,7 @@ sequenceDiagram
 7. Metadata and chunks are persisted in PostgreSQL. Qdrant is included as the vector search option for scale-oriented retrieval.
 8. The Document Management panel calls list/detail APIs to show only authorized document metadata and chunk previews for the caller's tenant/roles. The UI also polls processing job status until queued uploads complete or fail.
 9. Users ask questions through the query panel; `tenant_id` and roles again come from the resolved identity.
-10. Redis is checked for cached answers (the cache key includes the requester's identity plus provider/runtime/model names so private-document results and model changes never leak across users or runtimes). On cache miss, the model provider supplies the embedding model for retrieval, authorized chunks are filtered by RBAC (tenant match, then tenant/role/private-owner visibility), contexts are ranked, and the provider's answer generator composes an answer with citations, model metadata, and latency metrics.
+10. Redis is checked for cached answers (the cache key includes the requester's identity plus provider/runtime/model names so private-document results and model changes never leak across users or runtimes). On cache miss, the model provider supplies the embedding model for retrieval. With `LOCAL_EMBEDDING_RUNTIME=ollama`, backend/worker call either Mac-host Ollama at `http://host.docker.internal:11434` or the optional Compose Ollama service at `http://ollama:11434`. Authorized chunks are filtered by RBAC (tenant match, then tenant/role/private-owner visibility), contexts are ranked, and the provider's answer generator composes an answer with citations, model metadata, and latency metrics. With `LOCAL_LLM_RUNTIME=ollama`, answer generation calls the same configured local Ollama endpoint.
 11. Access tokens are short-lived and stateless (no server-side session store); the frontend silently refreshes them in the background via Keycloak's refresh-token grant and clears its session if the refresh fails, dropping the user back to the Login Screen.
 
 ## Component Responsibilities
@@ -180,7 +184,7 @@ sequenceDiagram
 - MinIO: target object storage for original files and extracted text.
 - Qdrant: optional vector index for higher-scale retrieval experiments.
 - Docker Compose: local reproducible stack for the POC, including a `--import-realm` Keycloak boot that seeds the `rag` realm from `infra/keycloak/realm-export.json`.
-- Model provider strategy: local/open-source first (`LLM_PROVIDER=local`, `EMBEDDING_PROVIDER=local`) through `app/rag/model_providers.py`. Defaults use deterministic hashing embeddings (`LOCAL_EMBEDDING_RUNTIME=hashing`) and the extractive answer generator (`LOCAL_LLM_RUNTIME=extractive`). Ollama embeddings and answer generation are available through `LOCAL_EMBEDDING_RUNTIME=ollama` and `LOCAL_LLM_RUNTIME=ollama`; vLLM adapters and reranker services are the next local model upgrades. Public token-based LLM providers should remain disabled until explicitly needed.
+- Model provider strategy: local/open-source first (`LLM_PROVIDER=local`, `EMBEDDING_PROVIDER=local`) through `app/rag/model_providers.py`. Defaults use deterministic hashing embeddings (`LOCAL_EMBEDDING_RUNTIME=hashing`) and the extractive answer generator (`LOCAL_LLM_RUNTIME=extractive`). Ollama embeddings and answer generation are available through `LOCAL_EMBEDDING_RUNTIME=ollama` and `LOCAL_LLM_RUNTIME=ollama`; this has been smoke-tested from Docker backend/worker to Mac-host Ollama with `nomic-embed-text:latest` and `llama3.1:8b`. vLLM adapters and reranker services are the next local model upgrades. Public token-based LLM providers should remain disabled until explicitly needed.
 
 ## Authentication, Authorization And Session Management
 

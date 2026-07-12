@@ -63,6 +63,8 @@ When the backend runs inside Docker Compose and Ollama runs on the host machine,
 LOCAL_EMBEDDING_BASE_URL=http://host.docker.internal:11434
 ```
 
+This host-Ollama path was smoke-tested with Docker backend/worker calling Mac Ollama, using `nomic-embed-text:latest`.
+
 When Ollama runs as the optional Docker Compose service in this repo, use:
 
 ```text
@@ -90,6 +92,8 @@ When the backend runs inside Docker Compose and Ollama runs on the host machine,
 ```text
 LOCAL_LLM_BASE_URL=http://host.docker.internal:11434
 ```
+
+This host-Ollama path was smoke-tested with Docker backend/worker calling Mac Ollama, using `llama3.1:8b`.
 
 When Ollama runs as the optional Docker Compose service in this repo, use:
 
@@ -134,6 +138,38 @@ docker compose --profile local-models up -d --build backend worker frontend
 ```
 
 The model service can also be reached from the host at `http://localhost:11434`.
+
+## Tested Host-Ollama Docker Settings
+
+Use this `.env` block when Ollama runs on your Mac and backend/worker run in Docker Compose:
+
+```text
+LOCAL_EMBEDDING_RUNTIME=ollama
+LOCAL_EMBEDDING_MODEL_NAME=nomic-embed-text:latest
+LOCAL_EMBEDDING_BASE_URL=http://host.docker.internal:11434
+LOCAL_LLM_RUNTIME=ollama
+LOCAL_LLM_MODEL_NAME=llama3.1:8b
+LOCAL_LLM_BASE_URL=http://host.docker.internal:11434
+```
+
+Restart and verify:
+
+```bash
+docker compose up -d --build backend worker
+docker compose exec backend python -c "import os; print(os.environ['LOCAL_EMBEDDING_RUNTIME'], os.environ['LOCAL_LLM_RUNTIME'])"
+docker compose exec backend python -c "import urllib.request; print(urllib.request.urlopen('http://host.docker.internal:11434/api/tags').read().decode())"
+```
+
+Expected query metrics when both Ollama runtimes are active:
+
+```json
+{
+  "local_llm_runtime": "ollama",
+  "local_embedding_runtime": "ollama",
+  "embedding_model": "nomic-embed-text:latest",
+  "answer_model": "llama3.1:8b"
+}
+```
 
 ## Query And Cache Behavior
 

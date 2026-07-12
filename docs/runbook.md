@@ -22,6 +22,18 @@ pip install -e ".[dev,parsing]"
 python3 -m pytest
 ```
 
+If your local `.env` points Docker containers at Mac-host Ollama with
+`host.docker.internal`, run host-side tests with deterministic provider
+overrides so pytest does not try to resolve Docker-only hostnames:
+
+```bash
+env LOCAL_EMBEDDING_RUNTIME=hashing \
+  LOCAL_EMBEDDING_MODEL_NAME=hashing-384 \
+  LOCAL_LLM_RUNTIME=extractive \
+  LOCAL_LLM_MODEL_NAME=extractive \
+  python3 -m pytest
+```
+
 ## Frontend Build
 
 ```bash
@@ -95,6 +107,114 @@ Then restart:
 
 ```bash
 docker compose --profile local-models up -d --build backend worker
+```
+
+## Mac-Host Ollama Container Check
+
+Use this path when Ollama runs directly on the Mac and backend/worker run in Docker.
+
+Confirm the backend container can see the Mac Ollama service:
+
+```bash
+docker compose exec backend python -c "import urllib.request; print(urllib.request.urlopen('http://host.docker.internal:11434/api/tags').read().decode())"
+```
+
+Set `.env`:
+
+```text
+LOCAL_EMBEDDING_RUNTIME=ollama
+LOCAL_EMBEDDING_MODEL_NAME=nomic-embed-text:latest
+LOCAL_EMBEDDING_BASE_URL=http://host.docker.internal:11434
+LOCAL_LLM_RUNTIME=ollama
+LOCAL_LLM_MODEL_NAME=llama3.1:8b
+LOCAL_LLM_BASE_URL=http://host.docker.internal:11434
+```
+
+Restart backend and worker:
+
+```bash
+docker compose up -d --build backend worker
+```
+
+Confirm the live backend environment:
+
+```bash
+docker compose exec backend python -c "import os; keys=['LOCAL_EMBEDDING_RUNTIME','LOCAL_EMBEDDING_MODEL_NAME','LOCAL_EMBEDDING_BASE_URL','LOCAL_LLM_RUNTIME','LOCAL_LLM_MODEL_NAME','LOCAL_LLM_BASE_URL']; print({k: os.environ.get(k) for k in keys})"
+```
+
+Expected values:
+
+```text
+LOCAL_EMBEDDING_RUNTIME=ollama
+LOCAL_EMBEDDING_MODEL_NAME=nomic-embed-text:latest
+LOCAL_EMBEDDING_BASE_URL=http://host.docker.internal:11434
+LOCAL_LLM_RUNTIME=ollama
+LOCAL_LLM_MODEL_NAME=llama3.1:8b
+LOCAL_LLM_BASE_URL=http://host.docker.internal:11434
+```
+
+Run a small authenticated API smoke from inside the backend container:
+
+```bash
+docker compose exec backend python - <<'PY'
+import json
+from pathlib import Path
+import urllib.parse
+import urllib.request
+
+Path('/data/uploads/rag-ollama-smoke.txt').write_text(
+    'Ollama local models provide private embeddings and local answer generation.\n',
+    encoding='utf-8',
+)
+
+def request(url, data=None, headers=None, timeout=180):
+    payload = None
+    if isinstance(data, dict):
+        payload = json.dumps(data).encode('utf-8')
+        headers = {'content-type': 'application/json', **(headers or {})}
+    req = urllib.request.Request(url, data=payload, headers=headers or {})
+    with urllib.request.urlopen(req, timeout=timeout) as response:
+        return json.loads(response.read().decode('utf-8'))
+
+token_data = urllib.parse.urlencode({
+    'grant_type': 'password',
+    'client_id': 'rag-frontend',
+    'username': 'admin-demo',
+    'password': 'Passw0rd!',
+}).encode('utf-8')
+token_req = urllib.request.Request(
+    'http://keycloak:8080/realms/rag/protocol/openid-connect/token',
+    data=token_data,
+    headers={'content-type': 'application/x-www-form-urlencoded', 'Host': 'localhost:8080'},
+)
+with urllib.request.urlopen(token_req, timeout=30) as response:
+    token = json.loads(response.read().decode('utf-8'))['access_token']
+
+headers = {'Authorization': f'Bearer {token}'}
+request(
+    'http://127.0.0.1:8000/api/v1/documents/ingest',
+    {'local_path': '/data/uploads/rag-ollama-smoke.txt', 'visibility': 'tenant', 'allowed_role_names': [], 'force_ocr': False},
+    headers=headers,
+)
+query = request(
+    'http://127.0.0.1:8000/api/v1/query',
+    {'query': 'What provides private embeddings and local answer generation?', 'top_k': 3},
+    headers=headers,
+)
+print(json.dumps(query['metrics'], indent=2))
+print(query['answer'])
+PY
+```
+
+Expected metrics include:
+
+```json
+{
+  "local_llm_runtime": "ollama",
+  "local_embedding_runtime": "ollama",
+  "embedding_model": "nomic-embed-text:latest",
+  "answer_model": "llama3.1:8b"
+}
 ```
 
 ## Frontend E2E Smoke Test

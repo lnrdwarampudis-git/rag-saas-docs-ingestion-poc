@@ -50,6 +50,39 @@ PUBLIC_LLM_ENABLED=false
 
 No model download or public LLM token is required for the default stack. See [Model Providers](model-providers.md) before changing these values. `LOCAL_EMBEDDING_RUNTIME=ollama` and `LOCAL_LLM_RUNTIME=ollama` are supported when Ollama is running locally; vLLM embeddings and generation are reserved until their adapters are implemented.
 
+## Optional Mac-Host Ollama For Docker Backend
+
+If Ollama already runs on your Mac and backend/worker run in Docker Compose, use Docker Desktop's host alias. Pull models on the Mac:
+
+```bash
+ollama pull nomic-embed-text
+ollama pull llama3.1
+ollama list
+```
+
+Set these values in `.env`:
+
+```text
+LOCAL_EMBEDDING_RUNTIME=ollama
+LOCAL_EMBEDDING_MODEL_NAME=nomic-embed-text:latest
+LOCAL_EMBEDDING_BASE_URL=http://host.docker.internal:11434
+LOCAL_LLM_RUNTIME=ollama
+LOCAL_LLM_MODEL_NAME=llama3.1:8b
+LOCAL_LLM_BASE_URL=http://host.docker.internal:11434
+```
+
+Restart app services:
+
+```bash
+docker compose up -d --build backend worker
+```
+
+Verify from inside the backend container:
+
+```bash
+docker compose exec backend python -c "import urllib.request; print(urllib.request.urlopen('http://host.docker.internal:11434/api/tags').read().decode())"
+```
+
 ## Start Full Stack
 
 ```bash
