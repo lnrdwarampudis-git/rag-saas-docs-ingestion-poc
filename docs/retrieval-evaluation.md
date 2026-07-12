@@ -14,6 +14,14 @@ For machine-readable output:
 python -m app.eval.run --json
 ```
 
+Authenticated users can also fetch the same quality gate through the API:
+
+```text
+GET /api/v1/evaluation/retrieval
+```
+
+The React console renders this report in the Evaluation panel so demos can show the current pass/fail state, average context precision, context recall, answer relevance, and per-case results without leaving the UI.
+
 ## Dataset
 
 Evaluation cases live in:

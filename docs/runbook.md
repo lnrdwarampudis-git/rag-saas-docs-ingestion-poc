@@ -357,6 +357,7 @@ curl -H "Authorization: Bearer $TOKEN" http://127.0.0.1:8000/api/v1/auth/me
 5. Use "Upload to queue" to exercise the background processing path; the UI polls job status until the worker completes or fails it.
 6. Use Document Management to refresh the authorized inventory, open the uploaded document, and confirm chunk previews are visible.
 7. Ask a question in the Query panel and confirm citations plus run details appear: cache outcome, contexts used, top score, retrieval/total latency, embedding runtime, answer runtime, and retrieval thresholds.
+8. Confirm the Evaluation panel shows the retrieval quality gate with all cases passing and context precision, context recall, and answer relevance averages.
 
 If the query API returns `503 Service Unavailable`, read the `detail` field. Ollama provider errors include the failed operation, configured model, endpoint, and whether the failure was a timeout, HTTP status, invalid JSON response, or transport error.
 

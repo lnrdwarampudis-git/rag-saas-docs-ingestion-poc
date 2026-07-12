@@ -294,6 +294,64 @@ button {
   align-items: start;
 }
 
+.evaluation-panel {
+  gap: 14px;
+}
+
+.evaluation-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.quality-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.evaluation-case-list {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.evaluation-case {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  min-width: 0;
+  padding: 11px;
+  border: 1px solid #e0e8e4;
+  border-radius: 8px;
+  background: #fbfcfb;
+}
+
+.evaluation-case div {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.evaluation-case strong {
+  overflow: hidden;
+  color: #17201b;
+  font-size: 14px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.evaluation-case span {
+  color: #60746c;
+  font-size: 12px;
+}
+
+.compact-empty {
+  min-height: 80px;
+}
+
 .ops-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -737,6 +795,11 @@ button {
     grid-template-columns: 1fr;
   }
 
+  .quality-grid,
+  .evaluation-case-list {
+    grid-template-columns: 1fr 1fr;
+  }
+
   .document-detail-grid {
     grid-template-columns: 1fr 1fr;
   }
@@ -792,6 +855,8 @@ button {
 
   .metrics-row,
   .content-grid,
+  .quality-grid,
+  .evaluation-case-list,
   .run-detail-grid {
     grid-template-columns: 1fr;
   }

@@ -3,6 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.auth import router as auth_router
 from app.api.documents import router as documents_router
+from app.api.evaluation import router as evaluation_router
 from app.api.jobs import router as jobs_router
 from app.api.model_status import router as model_status_router
 from app.api.query import router as query_router
@@ -21,6 +22,7 @@ app.add_middleware(
 )
 app.include_router(auth_router, prefix="/api/v1")
 app.include_router(documents_router, prefix="/api/v1")
+app.include_router(evaluation_router, prefix="/api/v1")
 app.include_router(jobs_router, prefix="/api/v1")
 app.include_router(model_status_router, prefix="/api/v1")
 app.include_router(query_router, prefix="/api/v1")

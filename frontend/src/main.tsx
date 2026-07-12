@@ -116,6 +116,28 @@ type ModelStatus = {
   answer: ModelRuntimeStatus;
 };
 
+type EvaluationReport = {
+  summary: {
+    cases: number;
+    passed: number;
+    failed: number;
+    context_precision: number;
+    context_recall: number;
+    answer_relevance: number;
+    targets: Record<string, number>;
+  };
+  results: Array<{
+    case_id: string;
+    passed: boolean;
+    context_precision: number;
+    context_recall: number;
+    answer_relevance: number;
+    retrieved_document_ids: string[];
+    expected_document_ids: string[];
+    answer: string;
+  }>;
+};
+
 const DEFAULT_INGEST_PATH = "/data/ingest/sample.docx";
 const roleOptions = ["admin", "finance", "engineering", "legal", "support"];
 
@@ -174,6 +196,7 @@ function AuthenticatedApp() {
   const [documents, setDocuments] = React.useState<ManagedDocument[]>([]);
   const [selectedDocument, setSelectedDocument] = React.useState<ManagedDocumentDetail | null>(null);
   const [modelStatus, setModelStatus] = React.useState<ModelStatus | null>(null);
+  const [evaluationReport, setEvaluationReport] = React.useState<EvaluationReport | null>(null);
   const [result, setResult] = React.useState<QueryResult | null>(null);
   const [status, setStatus] = React.useState("Idle");
   const [busy, setBusy] = React.useState(false);
@@ -225,6 +248,21 @@ function AuthenticatedApp() {
     }
   }, []);
 
+  const loadEvaluationReport = React.useCallback(async () => {
+    try {
+      const response = await apiFetch("/api/v1/evaluation/retrieval");
+      if (!response.ok) {
+        throw new Error(await response.text());
+      }
+      const payload = (await response.json()) as EvaluationReport;
+      setEvaluationReport(payload);
+    } catch (caught) {
+      if (!handleAuthError(caught)) {
+        setEvaluationReport(null);
+      }
+    }
+  }, []);
+
   const inspectDocument = async (documentId: string) => {
     setBusy(true);
     setError("");
@@ -250,7 +288,8 @@ function AuthenticatedApp() {
   React.useEffect(() => {
     loadDocuments();
     loadModelStatus();
-  }, [loadDocuments, loadModelStatus]);
+    loadEvaluationReport();
+  }, [loadDocuments, loadEvaluationReport, loadModelStatus]);
 
   const ingestDocument = async () => {
     setBusy(true);
@@ -513,6 +552,8 @@ function AuthenticatedApp() {
             icon={<MessageSquareText size={18} />}
           />
         </section>
+
+        <EvaluationPanel report={evaluationReport} onRefresh={loadEvaluationReport} />
 
         {error ? <div className="error-banner">{error}</div> : null}
 
@@ -918,6 +959,61 @@ function QueryRunDetails({
   );
 }
 
+function EvaluationPanel({
+  report,
+  onRefresh
+}: {
+  report: EvaluationReport | null;
+  onRefresh: () => void;
+}) {
+  const summary = report?.summary;
+  const passed = Boolean(summary && summary.failed === 0);
+
+  return (
+    <section className="panel evaluation-panel" aria-label="Retrieval evaluation quality gate">
+      <div className="panel-header">
+        <div>
+          <p className="eyebrow">Evaluation</p>
+          <h3>Retrieval quality gate</h3>
+        </div>
+        <div className="evaluation-actions">
+          <Badge label={summary ? (passed ? "Passed" : "Attention") : "Loading"} />
+          <button className="secondary-action compact-action" type="button" onClick={onRefresh}>
+            <RefreshCw size={16} />
+            Refresh
+          </button>
+        </div>
+      </div>
+
+      <div className="quality-grid">
+        <StatusItem
+          label="Cases"
+          value={summary ? `${summary.passed}/${summary.cases} passed` : "Loading"}
+        />
+        <StatusItem label="Context precision" value={formatPercent(summary?.context_precision)} />
+        <StatusItem label="Context recall" value={formatPercent(summary?.context_recall)} />
+        <StatusItem label="Answer relevance" value={formatPercent(summary?.answer_relevance)} />
+      </div>
+
+      <div className="evaluation-case-list">
+        {(report?.results ?? []).map((item) => (
+          <article className="evaluation-case" key={item.case_id}>
+            <div>
+              <strong>{item.case_id}</strong>
+              <span>
+                P {formatPercent(item.context_precision)} / R {formatPercent(item.context_recall)} /
+                A {formatPercent(item.answer_relevance)}
+              </span>
+            </div>
+            <Badge label={item.passed ? "PASS" : "FAIL"} />
+          </article>
+        ))}
+        {!report ? <div className="empty-state compact-empty">Evaluation report loading.</div> : null}
+      </div>
+    </section>
+  );
+}
+
 function formatDate(value?: string | null) {
   if (!value) {
     return "unknown";
@@ -961,6 +1057,13 @@ function formatScore(value?: number) {
     return "0.000";
   }
   return value.toFixed(3);
+}
+
+function formatPercent(value?: number) {
+  if (typeof value !== "number") {
+    return "0%";
+  }
+  return `${Math.round(value * 100)}%`;
 }
 
 async function readApiError(response: Response) {

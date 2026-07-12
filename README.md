@@ -85,6 +85,7 @@ For full setup, execution, test, and GitHub export instructions, see:
 - Document management inventory with authorized list/detail APIs, ingestion status, visibility, OCR flags, chunk counts, and chunk preview
 - Week 6 background ingestion path with queued upload, Redis-backed worker polling, processing job status API, and UI job polling
 - Week 7 offline retrieval evaluation dataset and runner with context precision, context recall, and answer relevance checks
+- Authenticated retrieval evaluation API and UI quality gate panel
 - Local/open-source model provider abstraction for deterministic hashing embeddings, optional Ollama embeddings, extractive answer generation, and optional Ollama answer generation, with later adapter paths for vLLM and gated public providers
 
 ## Recommended Week 1 Commands
@@ -137,6 +138,8 @@ docker compose up --build
 - `GET /api/v1/documents/{document_id}/chunks`
 - `GET /api/v1/processing-jobs/{job_id}`
 - `POST /api/v1/processing-jobs/{job_id}/run`
+- `GET /api/v1/evaluation/retrieval`
+- `GET /api/v1/model-status`
 - `POST /api/v1/query`
 
 The document list/detail endpoints power the UI's Document Management panel. They apply the same tenant and RBAC rules as retrieval: users can inspect only documents and chunks their authenticated identity is authorized to see.
