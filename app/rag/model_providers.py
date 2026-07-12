@@ -1,4 +1,5 @@
 from dataclasses import dataclass
+from json import JSONDecodeError
 import math
 import re
 from typing import Protocol
@@ -84,23 +85,21 @@ class OllamaEmbeddingModel:
         client: httpx.Client | None = None,
     ) -> None:
         self.model_name = model_name
+        self.base_url = base_url.rstrip("/")
         self._client = client or httpx.Client(
-            base_url=base_url.rstrip("/"),
+            base_url=self.base_url,
             timeout=timeout_seconds,
         )
 
     def embed(self, text: str) -> list[float]:
-        try:
-            response = self._client.post(
-                "/api/embed",
-                json={"model": self.model_name, "input": text},
-            )
-            response.raise_for_status()
-        except httpx.HTTPError as exc:
-            raise ModelProviderRequestError(
-                f"Ollama embedding request failed for model '{self.model_name}'."
-            ) from exc
-
+        response = _post_ollama_json(
+            client=self._client,
+            endpoint="/api/embed",
+            payload={"model": self.model_name, "input": text},
+            model_name=self.model_name,
+            base_url=self.base_url,
+            operation="embedding",
+        )
         embedding = _ollama_embedding_from_response(response.json())
         return _normalize_embedding(embedding)
 
@@ -114,8 +113,9 @@ class OllamaAnswerGenerator:
         client: httpx.Client | None = None,
     ) -> None:
         self.model_name = model_name
+        self.base_url = base_url.rstrip("/")
         self._client = client or httpx.Client(
-            base_url=base_url.rstrip("/"),
+            base_url=self.base_url,
             timeout=timeout_seconds,
         )
 
@@ -124,17 +124,14 @@ class OllamaAnswerGenerator:
             return ExtractiveAnswerGenerator().generate(query, results)
 
         prompt = _answer_prompt(query, results)
-        try:
-            response = self._client.post(
-                "/api/generate",
-                json={"model": self.model_name, "prompt": prompt, "stream": False},
-            )
-            response.raise_for_status()
-        except httpx.HTTPError as exc:
-            raise ModelProviderRequestError(
-                f"Ollama answer generation request failed for model '{self.model_name}'."
-            ) from exc
-
+        response = _post_ollama_json(
+            client=self._client,
+            endpoint="/api/generate",
+            payload={"model": self.model_name, "prompt": prompt, "stream": False},
+            model_name=self.model_name,
+            base_url=self.base_url,
+            operation="answer generation",
+        )
         answer = response.json().get("response")
         if not isinstance(answer, str) or not answer.strip():
             raise ModelProviderRequestError("Ollama generation response did not include answer text.")
@@ -247,6 +244,52 @@ def _ollama_embedding_from_response(data: dict) -> list[float]:
     if not isinstance(embedding, list) or not all(isinstance(value, (int, float)) for value in embedding):
         raise ModelProviderRequestError("Ollama embedding response did not include a numeric vector.")
     return [float(value) for value in embedding]
+
+
+def _post_ollama_json(
+    client: httpx.Client,
+    endpoint: str,
+    payload: dict,
+    model_name: str,
+    base_url: str,
+    operation: str,
+) -> httpx.Response:
+    try:
+        response = client.post(endpoint, json=payload)
+        response.raise_for_status()
+        response.json()
+    except httpx.TimeoutException as exc:
+        raise ModelProviderRequestError(
+            f"Ollama {operation} timed out for model '{model_name}' at {base_url}{endpoint}."
+        ) from exc
+    except httpx.HTTPStatusError as exc:
+        detail = _ollama_error_detail(exc.response)
+        raise ModelProviderRequestError(
+            f"Ollama {operation} failed for model '{model_name}' at {base_url}{endpoint} "
+            f"with HTTP {exc.response.status_code}: {detail}"
+        ) from exc
+    except httpx.HTTPError as exc:
+        raise ModelProviderRequestError(
+            f"Ollama {operation} request failed for model '{model_name}' at {base_url}{endpoint}: "
+            f"{exc.__class__.__name__}."
+        ) from exc
+    except (JSONDecodeError, ValueError) as exc:
+        raise ModelProviderRequestError(
+            f"Ollama {operation} response for model '{model_name}' was not valid JSON."
+        ) from exc
+    return response
+
+
+def _ollama_error_detail(response: httpx.Response) -> str:
+    try:
+        data = response.json()
+    except (JSONDecodeError, ValueError):
+        return response.text[:240] or "no response body"
+    if isinstance(data, dict):
+        detail = data.get("error") or data.get("detail") or data.get("message")
+        if isinstance(detail, str) and detail.strip():
+            return detail.strip()[:240]
+    return response.text[:240] or "no response body"
 
 
 def _normalize_embedding(embedding: list[float]) -> list[float]:

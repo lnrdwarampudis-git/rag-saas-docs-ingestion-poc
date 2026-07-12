@@ -45,6 +45,34 @@ def test_ollama_status_reports_ready_when_model_is_installed(monkeypatch) -> Non
     assert "configured model is installed" in status.embedding.message
 
 
+def test_ollama_status_accepts_model_field_from_tags(monkeypatch) -> None:
+    original_client = httpx.Client
+    monkeypatch.setattr(
+        httpx,
+        "Client",
+        lambda **kwargs: original_client(
+            **kwargs,
+            transport=httpx.MockTransport(
+                lambda request: httpx.Response(
+                    200,
+                    json={"models": [{"model": "llama3.1:8b"}]},
+                )
+            ),
+        ),
+    )
+
+    status = get_model_status(
+        Settings(
+            _env_file=None,
+            local_llm_runtime="ollama",
+            local_llm_model_name="llama3.1:8b",
+            local_llm_base_url="http://ollama.test",
+        )
+    )
+
+    assert status.answer.ready is True
+
+
 def test_ollama_status_reports_not_ready_when_model_is_missing(monkeypatch) -> None:
     original_client = httpx.Client
     monkeypatch.setattr(
@@ -69,6 +97,30 @@ def test_ollama_status_reports_not_ready_when_model_is_missing(monkeypatch) -> N
 
     assert status.embedding.ready is False
     assert "configured model is not installed" in status.embedding.message
+
+
+def test_ollama_status_reports_not_ready_for_invalid_tags_json(monkeypatch) -> None:
+    original_client = httpx.Client
+    monkeypatch.setattr(
+        httpx,
+        "Client",
+        lambda **kwargs: original_client(
+            **kwargs,
+            transport=httpx.MockTransport(lambda request: httpx.Response(200, content=b"nope")),
+        ),
+    )
+
+    status = get_model_status(
+        Settings(
+            _env_file=None,
+            local_embedding_runtime="ollama",
+            local_embedding_model_name="nomic-embed-text:latest",
+            local_embedding_base_url="http://ollama.test",
+        )
+    )
+
+    assert status.embedding.ready is False
+    assert "valid JSON" in status.embedding.message
 
 
 def test_model_status_endpoint_returns_authenticated_runtime_status(api_client_as, monkeypatch) -> None:

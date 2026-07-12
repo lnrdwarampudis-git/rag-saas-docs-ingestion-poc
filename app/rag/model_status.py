@@ -1,3 +1,5 @@
+from json import JSONDecodeError
+
 import httpx
 
 from app.config import Settings, get_settings
@@ -118,6 +120,15 @@ def _ollama_status(
             message=f"Ollama is not reachable: {exc.__class__.__name__}.",
             base_url=base_url,
         )
+    except (JSONDecodeError, ValueError):
+        return ModelRuntimeStatus(
+            provider=provider,
+            runtime=runtime,
+            model_name=model_name,
+            ready=False,
+            message="Ollama is reachable, but /api/tags did not return valid JSON.",
+            base_url=base_url,
+        )
 
     if model_name in models:
         return ModelRuntimeStatus(
@@ -144,9 +155,10 @@ def _ollama_model_names(payload: dict) -> set[str]:
     if not isinstance(models, list):
         return set()
     names = {
-        model.get("name")
+        model.get("name") or model.get("model")
         for model in models
-        if isinstance(model, dict) and isinstance(model.get("name"), str)
+        if isinstance(model, dict)
+        and isinstance(model.get("name") or model.get("model"), str)
     }
     return {name for name in names if name}
 
@@ -165,4 +177,3 @@ def _unsupported_runtime_status(
         ready=False,
         message=f"Unsupported runtime. Supported runtimes: {supported}.",
     )
-

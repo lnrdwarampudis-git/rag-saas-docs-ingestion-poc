@@ -202,6 +202,8 @@ The response reports the configured embedding and answer providers, runtimes, mo
 
 The React console uses this endpoint to show the model readiness pill and the active embedding/answer runtime cards.
 
+Ollama query-time failures raise `ModelProviderRequestError` with the operation, model name, endpoint, and HTTP status or timeout class. The query API converts those provider errors into `503 Service Unavailable` responses so callers see a clear local-model readiness issue instead of a generic server failure.
+
 ## Evaluation Behavior
 
 `python -m app.eval.run` still uses the same extractive answer generator as the default local provider. This keeps the retrieval quality gate aligned with the production query path while avoiding network calls or model downloads.
@@ -213,7 +215,7 @@ When adding more local model support:
 1. Implement an `EmbeddingModel`, an `AnswerGenerator`, or both in `app/rag/model_providers.py` or a focused submodule.
 2. Use `LOCAL_EMBEDDING_BASE_URL` and `LOCAL_LLM_BASE_URL` for local service endpoints.
 3. Keep `PUBLIC_LLM_ENABLED=false`; local adapters should not require public token-based APIs.
-4. Add tests for config selection, adapter failure modes, cache-key separation, and query metrics.
+4. Add tests for config selection, adapter failure modes, status checks, cache-key separation, and query metrics.
 5. Run `python3 -m pytest`, `python3 -m app.eval.run`, `npm run build`, and `docker compose config`.
 
 Public token-based providers should be added only after deployment policy allows external API usage, and should remain gated behind `PUBLIC_LLM_ENABLED=true`.

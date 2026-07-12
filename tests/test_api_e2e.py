@@ -1,6 +1,9 @@
 from pathlib import Path
 from uuid import UUID
 
+import app.api.query as query_api
+from app.rag.model_providers import ModelProviderRequestError
+
 
 def test_ingest_then_query_authorized_context(tmp_path: Path, api_client_as) -> None:
     source = tmp_path / "policy.txt"
@@ -39,6 +42,23 @@ def test_ingest_then_query_authorized_context(tmp_path: Path, api_client_as) -> 
     assert "Revenue forecasts" in query_payload["answer"]
     assert query_payload["citations"]
     assert query_payload["metrics"]["contexts_used"] >= 1
+
+
+def test_query_returns_service_unavailable_when_model_provider_fails(
+    api_client_as,
+    monkeypatch,
+) -> None:
+    class FailingPipeline:
+        def answer(self, **kwargs):
+            raise ModelProviderRequestError("Ollama answer generation timed out.")
+
+    monkeypatch.setattr(query_api, "pipeline", FailingPipeline())
+    client = api_client_as("00000000-0000-4000-8000-000000000010", ["admin"])
+
+    response = client.post("/api/v1/query", json={"query": "Will this fail?", "top_k": 3})
+
+    assert response.status_code == 503
+    assert response.json()["detail"] == "Ollama answer generation timed out."
 
 
 def test_query_hides_role_restricted_context_from_unauthorized_member(tmp_path: Path, api_client_as) -> None:

@@ -16,7 +16,7 @@ from app.schemas.documents import ChunkDTO
 
 
 def test_default_model_provider_uses_local_hashing_and_extractive_runtime() -> None:
-    provider = build_model_provider(Settings())
+    provider = build_model_provider(Settings(_env_file=None))
 
     assert provider.provider_name == "local"
     assert provider.embedding_provider == "local"
@@ -27,19 +27,22 @@ def test_default_model_provider_uses_local_hashing_and_extractive_runtime() -> N
 
 
 def test_local_embedding_dimensions_are_configurable() -> None:
-    provider = build_model_provider(Settings(embedding_dimensions=16))
+    provider = build_model_provider(Settings(_env_file=None, embedding_dimensions=16))
 
     assert len(provider.embedding_model.embed("Redis vector retrieval")) == 16
 
 
 def test_public_llm_provider_requires_explicit_enablement() -> None:
     with pytest.raises(ModelProviderConfigurationError, match="PUBLIC_LLM_ENABLED"):
-        build_model_provider(Settings(llm_provider="openai", public_llm_enabled=False))
+        build_model_provider(
+            Settings(_env_file=None, llm_provider="openai", public_llm_enabled=False)
+        )
 
 
 def test_ollama_embedding_runtime_is_available() -> None:
     provider = build_model_provider(
         Settings(
+            _env_file=None,
             local_embedding_runtime="ollama",
             local_embedding_model_name="nomic-embed-text",
             local_embedding_base_url="http://ollama:11434",
@@ -92,9 +95,50 @@ def test_ollama_embedding_model_rejects_invalid_response_shape() -> None:
         model.embed("Redis vector retrieval")
 
 
+def test_ollama_embedding_model_reports_http_status_detail() -> None:
+    client = httpx.Client(
+        base_url="http://ollama.test",
+        transport=httpx.MockTransport(
+            lambda request: httpx.Response(404, json={"error": "model not found"})
+        ),
+    )
+    model = OllamaEmbeddingModel(
+        base_url="http://ollama.test",
+        model_name="missing-embed",
+        client=client,
+    )
+
+    with pytest.raises(ModelProviderRequestError) as exc:
+        model.embed("Redis vector retrieval")
+
+    message = str(exc.value)
+    assert "HTTP 404" in message
+    assert "model not found" in message
+    assert "missing-embed" in message
+
+
+def test_ollama_embedding_model_reports_timeout() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        raise httpx.ReadTimeout("slow model", request=request)
+
+    client = httpx.Client(
+        base_url="http://ollama.test",
+        transport=httpx.MockTransport(handler),
+    )
+    model = OllamaEmbeddingModel(
+        base_url="http://ollama.test",
+        model_name="nomic-embed-text",
+        client=client,
+    )
+
+    with pytest.raises(ModelProviderRequestError, match="timed out"):
+        model.embed("Redis vector retrieval")
+
+
 def test_ollama_answer_runtime_is_available() -> None:
     provider = build_model_provider(
         Settings(
+            _env_file=None,
             local_llm_runtime="ollama",
             local_llm_model_name="llama3.1",
             local_llm_base_url="http://ollama:11434",
@@ -181,14 +225,47 @@ def test_ollama_answer_generator_rejects_invalid_response_shape() -> None:
         )
 
 
+def test_ollama_answer_generator_reports_invalid_json() -> None:
+    client = httpx.Client(
+        base_url="http://ollama.test",
+        transport=httpx.MockTransport(
+            lambda request: httpx.Response(200, content=b"not-json")
+        ),
+    )
+    generator = OllamaAnswerGenerator(
+        base_url="http://ollama.test",
+        model_name="llama3.1",
+        client=client,
+    )
+
+    with pytest.raises(ModelProviderRequestError, match="not valid JSON"):
+        generator.generate(
+            "How does Redis help?",
+            [
+                RetrievalResult(
+                    chunk=ChunkDTO(
+                        chunk_index=0,
+                        text="Redis cache improves repeated RAG query latency.",
+                        token_count=7,
+                        metadata={"file_name": "architecture.md"},
+                    ),
+                    score=1.0,
+                    keyword_score=1.0,
+                    vector_score=1.0,
+                    early_score=1.0,
+                )
+            ],
+        )
+
+
 def test_future_local_embedding_runtimes_are_reserved_until_adapter_is_implemented() -> None:
     with pytest.raises(ModelProviderConfigurationError, match="future adapter"):
-        build_model_provider(Settings(local_embedding_runtime="vllm"))
+        build_model_provider(Settings(_env_file=None, local_embedding_runtime="vllm"))
 
 
 def test_future_local_generation_runtimes_are_reserved_until_adapter_is_implemented() -> None:
     with pytest.raises(ModelProviderConfigurationError, match="future adapter"):
-        build_model_provider(Settings(local_llm_runtime="vllm"))
+        build_model_provider(Settings(_env_file=None, local_llm_runtime="vllm"))
 
 
 def _request_json(request: httpx.Request) -> dict:

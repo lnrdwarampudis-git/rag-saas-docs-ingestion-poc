@@ -358,6 +358,8 @@ curl -H "Authorization: Bearer $TOKEN" http://127.0.0.1:8000/api/v1/auth/me
 6. Use Document Management to refresh the authorized inventory, open the uploaded document, and confirm chunk previews are visible.
 7. Ask a question in the Query panel and confirm citations/latency/cache status appear.
 
+If the query API returns `503 Service Unavailable`, read the `detail` field. Ollama provider errors include the failed operation, configured model, endpoint, and whether the failure was a timeout, HTTP status, invalid JSON response, or transport error.
+
 ## Inspect Persisted Data
 
 ```bash
@@ -393,6 +395,9 @@ limit 10;
 - If query construction fails with `ModelProviderConfigurationError`, check `.env` for unsupported provider values. Today the implemented runtimes are `EMBEDDING_PROVIDER=local`, `LOCAL_EMBEDDING_RUNTIME=hashing` or `ollama`, `LLM_PROVIDER=local`, and `LOCAL_LLM_RUNTIME=extractive` or `ollama`; vLLM embeddings and generation are reserved until adapters are added.
 - If `LOCAL_EMBEDDING_RUNTIME=ollama` fails with `ModelProviderRequestError`, confirm Ollama is running, `LOCAL_EMBEDDING_BASE_URL` is reachable from the backend process, and `LOCAL_EMBEDDING_MODEL_NAME` has been pulled locally. For Docker Compose with Ollama on the host machine, use `LOCAL_EMBEDDING_BASE_URL=http://host.docker.internal:11434`.
 - If `LOCAL_LLM_RUNTIME=ollama` fails with `ModelProviderRequestError`, confirm Ollama is running, `LOCAL_LLM_BASE_URL` is reachable from the backend process, and `LOCAL_LLM_MODEL_NAME` has been pulled locally. For Docker Compose with Ollama on the host machine, use `LOCAL_LLM_BASE_URL=http://host.docker.internal:11434`.
+- If `/api/v1/model-status` says Ollama is reachable but a configured model is missing, run `ollama list` on the Mac or `docker compose --profile local-models exec ollama ollama list` for the Compose service. Pull the exact model name shown in `.env`; examples are `nomic-embed-text:latest` and `llama3.1:8b`.
+- If `/api/v1/model-status` says `/api/tags` did not return valid JSON, confirm the base URL points to Ollama itself and not a proxy, browser error page, or unrelated local service.
+- If a query returns `503` with a timeout detail, either increase `LOCAL_MODEL_REQUEST_TIMEOUT_SECONDS`, use a smaller model, or warm the model with a direct Ollama request before the demo.
 - If Ollama runs as the Compose service, use `http://ollama:11434` as the base URL from backend/worker containers, and include `--profile local-models` when starting services.
 - If Keycloak login loops back to the sign-in page or 500s on `/protocol/openid-connect/certs`, rebuild the backend (`docker compose up -d --build backend`) -- an older backend build may not skip Keycloak's non-signing (`use=enc`) JWKS key correctly.
 - If demo users/roles are missing after applying changes, you likely reused an old Postgres/Keycloak volume: run `docker compose down -v` (note the `-v`) before `docker compose up -d --build` so `init.sql` and the realm import both re-run.
