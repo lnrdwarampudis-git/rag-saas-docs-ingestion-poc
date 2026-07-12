@@ -45,7 +45,7 @@ If `LOCAL_EMBEDDING_RUNTIME=vllm` or `LOCAL_LLM_RUNTIME=vllm` is set before thos
 
 ## Ollama Embeddings
 
-To use Ollama embeddings locally:
+To use Ollama embeddings with Ollama running on the same host as the backend:
 
 1. Start Ollama on `http://localhost:11434`.
 2. Pull an embedding model, for example `nomic-embed-text`.
@@ -63,11 +63,17 @@ When the backend runs inside Docker Compose and Ollama runs on the host machine,
 LOCAL_EMBEDDING_BASE_URL=http://host.docker.internal:11434
 ```
 
+When Ollama runs as the optional Docker Compose service in this repo, use:
+
+```text
+LOCAL_EMBEDDING_BASE_URL=http://ollama:11434
+```
+
 The adapter calls `POST /api/embed` with the configured model and input text. Returned vectors are normalized before retrieval scoring so existing cosine ranking behavior remains consistent with the hashing baseline.
 
 ## Ollama Answer Generation
 
-To use Ollama for answer generation:
+To use Ollama for answer generation with Ollama running on the same host as the backend:
 
 1. Start Ollama on `http://localhost:11434`.
 2. Pull a generation model, for example `llama3.1`.
@@ -85,7 +91,49 @@ When the backend runs inside Docker Compose and Ollama runs on the host machine,
 LOCAL_LLM_BASE_URL=http://host.docker.internal:11434
 ```
 
+When Ollama runs as the optional Docker Compose service in this repo, use:
+
+```text
+LOCAL_LLM_BASE_URL=http://ollama:11434
+```
+
 The adapter calls `POST /api/generate` with `stream=false`. The prompt instructs the model to answer only from authorized retrieved context and to say when there is not enough authorized evidence. Retrieval, RBAC filtering, citations, cache keys, and response metrics still happen in the application.
+
+## Running Ollama In Docker Compose
+
+The Compose file includes an optional `ollama` service under the `local-models` profile. It is not started by the default `docker compose up` command.
+
+Start Ollama:
+
+```bash
+docker compose --profile local-models up -d ollama
+```
+
+Pull local models into the persistent `ollama_data` volume:
+
+```bash
+docker compose --profile local-models exec ollama ollama pull nomic-embed-text
+docker compose --profile local-models exec ollama ollama pull llama3.1
+```
+
+Set the backend/worker model config in `.env`:
+
+```text
+LOCAL_EMBEDDING_RUNTIME=ollama
+LOCAL_EMBEDDING_MODEL_NAME=nomic-embed-text
+LOCAL_EMBEDDING_BASE_URL=http://ollama:11434
+LOCAL_LLM_RUNTIME=ollama
+LOCAL_LLM_MODEL_NAME=llama3.1
+LOCAL_LLM_BASE_URL=http://ollama:11434
+```
+
+Then rebuild or restart the app services with the same profile:
+
+```bash
+docker compose --profile local-models up -d --build backend worker frontend
+```
+
+The model service can also be reached from the host at `http://localhost:11434`.
 
 ## Query And Cache Behavior
 

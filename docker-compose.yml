@@ -18,17 +18,17 @@ services:
       ENABLE_DB_PERSISTENCE: "true"
       RETRIEVAL_MIN_SCORE: "0.12"
       RETRIEVAL_MIN_KEYWORD_OVERLAP: "0.20"
-      LLM_PROVIDER: local
-      LOCAL_LLM_RUNTIME: extractive
-      LOCAL_LLM_MODEL_NAME: extractive
-      LOCAL_LLM_BASE_URL: http://localhost:11434
-      EMBEDDING_PROVIDER: local
-      LOCAL_EMBEDDING_RUNTIME: hashing
-      LOCAL_EMBEDDING_MODEL_NAME: hashing-384
-      EMBEDDING_DIMENSIONS: "384"
-      LOCAL_EMBEDDING_BASE_URL: http://localhost:11434
-      LOCAL_MODEL_REQUEST_TIMEOUT_SECONDS: "30"
-      PUBLIC_LLM_ENABLED: "false"
+      LLM_PROVIDER: ${LLM_PROVIDER:-local}
+      LOCAL_LLM_RUNTIME: ${LOCAL_LLM_RUNTIME:-extractive}
+      LOCAL_LLM_MODEL_NAME: ${LOCAL_LLM_MODEL_NAME:-extractive}
+      LOCAL_LLM_BASE_URL: ${LOCAL_LLM_BASE_URL:-http://ollama:11434}
+      EMBEDDING_PROVIDER: ${EMBEDDING_PROVIDER:-local}
+      LOCAL_EMBEDDING_RUNTIME: ${LOCAL_EMBEDDING_RUNTIME:-hashing}
+      LOCAL_EMBEDDING_MODEL_NAME: ${LOCAL_EMBEDDING_MODEL_NAME:-hashing-384}
+      EMBEDDING_DIMENSIONS: ${EMBEDDING_DIMENSIONS:-384}
+      LOCAL_EMBEDDING_BASE_URL: ${LOCAL_EMBEDDING_BASE_URL:-http://ollama:11434}
+      LOCAL_MODEL_REQUEST_TIMEOUT_SECONDS: ${LOCAL_MODEL_REQUEST_TIMEOUT_SECONDS:-30}
+      PUBLIC_LLM_ENABLED: ${PUBLIC_LLM_ENABLED:-false}
     ports:
       - "8000:8000"
     volumes:
@@ -70,17 +70,17 @@ services:
       ENABLE_DB_PERSISTENCE: "true"
       RETRIEVAL_MIN_SCORE: "0.12"
       RETRIEVAL_MIN_KEYWORD_OVERLAP: "0.20"
-      LLM_PROVIDER: local
-      LOCAL_LLM_RUNTIME: extractive
-      LOCAL_LLM_MODEL_NAME: extractive
-      LOCAL_LLM_BASE_URL: http://localhost:11434
-      EMBEDDING_PROVIDER: local
-      LOCAL_EMBEDDING_RUNTIME: hashing
-      LOCAL_EMBEDDING_MODEL_NAME: hashing-384
-      EMBEDDING_DIMENSIONS: "384"
-      LOCAL_EMBEDDING_BASE_URL: http://localhost:11434
-      LOCAL_MODEL_REQUEST_TIMEOUT_SECONDS: "30"
-      PUBLIC_LLM_ENABLED: "false"
+      LLM_PROVIDER: ${LLM_PROVIDER:-local}
+      LOCAL_LLM_RUNTIME: ${LOCAL_LLM_RUNTIME:-extractive}
+      LOCAL_LLM_MODEL_NAME: ${LOCAL_LLM_MODEL_NAME:-extractive}
+      LOCAL_LLM_BASE_URL: ${LOCAL_LLM_BASE_URL:-http://ollama:11434}
+      EMBEDDING_PROVIDER: ${EMBEDDING_PROVIDER:-local}
+      LOCAL_EMBEDDING_RUNTIME: ${LOCAL_EMBEDDING_RUNTIME:-hashing}
+      LOCAL_EMBEDDING_MODEL_NAME: ${LOCAL_EMBEDDING_MODEL_NAME:-hashing-384}
+      EMBEDDING_DIMENSIONS: ${EMBEDDING_DIMENSIONS:-384}
+      LOCAL_EMBEDDING_BASE_URL: ${LOCAL_EMBEDDING_BASE_URL:-http://ollama:11434}
+      LOCAL_MODEL_REQUEST_TIMEOUT_SECONDS: ${LOCAL_MODEL_REQUEST_TIMEOUT_SECONDS:-30}
+      PUBLIC_LLM_ENABLED: ${PUBLIC_LLM_ENABLED:-false}
     volumes:
       - ./data/ingest:/data/ingest:ro
       - ./data/uploads:/data/uploads
@@ -147,6 +147,19 @@ services:
     volumes:
       - qdrant_data:/qdrant/storage
 
+  ollama:
+    image: ollama/ollama:latest
+    profiles: ["local-models"]
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama_data:/root/.ollama
+    healthcheck:
+      test: ["CMD", "ollama", "list"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
   keycloak:
     image: quay.io/keycloak/keycloak:25.0
     command: start-dev --import-realm
@@ -165,3 +178,4 @@ volumes:
   minio_data:
   qdrant_data:
   keycloak_data:
+  ollama_data:

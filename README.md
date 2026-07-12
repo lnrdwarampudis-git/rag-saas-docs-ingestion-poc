@@ -29,6 +29,14 @@ Sign in with a demo user (all use password `Passw0rd!`): `admin-demo`,
 roles come from Keycloak/Postgres, not a manual UI field. See
 [Setup Guide](docs/setup.md#signing-in-keycloak) for details.
 
+Optional local models can run in Docker Compose:
+
+```bash
+docker compose --profile local-models up -d ollama
+```
+
+See [Model Providers](docs/model-providers.md#running-ollama-in-docker-compose) for model pulls and `.env` settings.
+
 For full setup, execution, test, and GitHub export instructions, see:
 
 - [Setup Guide](docs/setup.md)

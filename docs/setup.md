@@ -66,6 +66,34 @@ Services:
 - MinIO: `http://127.0.0.1:9001`
 - Qdrant: `http://127.0.0.1:6333`
 - Keycloak: `http://127.0.0.1:8080`
+- Optional Ollama service: `http://127.0.0.1:11434` when started with `docker compose --profile local-models up -d ollama`
+
+## Optional Local Models In Docker
+
+The default stack does not start Ollama. To run Ollama inside Docker Compose:
+
+```bash
+docker compose --profile local-models up -d ollama
+docker compose --profile local-models exec ollama ollama pull nomic-embed-text
+docker compose --profile local-models exec ollama ollama pull llama3.1
+```
+
+Then set these values in `.env` if you want the backend and worker containers to use the Compose Ollama service:
+
+```text
+LOCAL_EMBEDDING_RUNTIME=ollama
+LOCAL_EMBEDDING_MODEL_NAME=nomic-embed-text
+LOCAL_EMBEDDING_BASE_URL=http://ollama:11434
+LOCAL_LLM_RUNTIME=ollama
+LOCAL_LLM_MODEL_NAME=llama3.1
+LOCAL_LLM_BASE_URL=http://ollama:11434
+```
+
+Restart app services with the profile:
+
+```bash
+docker compose --profile local-models up -d --build backend worker frontend
+```
 
 ## Default Database Login
 

@@ -68,6 +68,35 @@ PUBLIC_LLM_ENABLED=false
 
 See [Model Providers](model-providers.md) for the full setting list, cache behavior, and adapter contract.
 
+## Ollama Container Check
+
+Start the optional Ollama service:
+
+```bash
+docker compose --profile local-models up -d ollama
+docker compose --profile local-models exec ollama ollama list
+```
+
+Pull common local models:
+
+```bash
+docker compose --profile local-models exec ollama ollama pull nomic-embed-text
+docker compose --profile local-models exec ollama ollama pull llama3.1
+```
+
+When backend and worker run in Compose and should use this service, set:
+
+```text
+LOCAL_EMBEDDING_BASE_URL=http://ollama:11434
+LOCAL_LLM_BASE_URL=http://ollama:11434
+```
+
+Then restart:
+
+```bash
+docker compose --profile local-models up -d --build backend worker
+```
+
 ## Frontend E2E Smoke Test
 
 ```bash
@@ -215,6 +244,7 @@ limit 10;
 - If query construction fails with `ModelProviderConfigurationError`, check `.env` for unsupported provider values. Today the implemented runtimes are `EMBEDDING_PROVIDER=local`, `LOCAL_EMBEDDING_RUNTIME=hashing` or `ollama`, `LLM_PROVIDER=local`, and `LOCAL_LLM_RUNTIME=extractive` or `ollama`; vLLM embeddings and generation are reserved until adapters are added.
 - If `LOCAL_EMBEDDING_RUNTIME=ollama` fails with `ModelProviderRequestError`, confirm Ollama is running, `LOCAL_EMBEDDING_BASE_URL` is reachable from the backend process, and `LOCAL_EMBEDDING_MODEL_NAME` has been pulled locally. For Docker Compose with Ollama on the host machine, use `LOCAL_EMBEDDING_BASE_URL=http://host.docker.internal:11434`.
 - If `LOCAL_LLM_RUNTIME=ollama` fails with `ModelProviderRequestError`, confirm Ollama is running, `LOCAL_LLM_BASE_URL` is reachable from the backend process, and `LOCAL_LLM_MODEL_NAME` has been pulled locally. For Docker Compose with Ollama on the host machine, use `LOCAL_LLM_BASE_URL=http://host.docker.internal:11434`.
+- If Ollama runs as the Compose service, use `http://ollama:11434` as the base URL from backend/worker containers, and include `--profile local-models` when starting services.
 - If Keycloak login loops back to the sign-in page or 500s on `/protocol/openid-connect/certs`, rebuild the backend (`docker compose up -d --build backend`) -- an older backend build may not skip Keycloak's non-signing (`use=enc`) JWKS key correctly.
 - If demo users/roles are missing after applying changes, you likely reused an old Postgres/Keycloak volume: run `docker compose down -v` (note the `-v`) before `docker compose up -d --build` so `init.sql` and the realm import both re-run.
 - If DBeaver cannot connect, use port `55432`, not `5432`, when a local Postgres already uses `5432`.
