@@ -2,6 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 
 from app.auth.dependencies import get_current_user
 from app.auth.models import AuthenticatedUser
+from app.rag.analytics import record_query_audit_event
 from app.rag.model_providers import ModelProviderRequestError
 from app.rag.pipeline import RagPipeline
 from app.schemas.query import QueryRequest, QueryResponse
@@ -28,6 +29,14 @@ def query_documents(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail=str(exc),
         ) from exc
+    record_query_audit_event(
+        current_user=current_user,
+        query=payload.query,
+        top_k=payload.top_k,
+        cached=result.cached,
+        citations=result.citations,
+        metrics=result.metrics,
+    )
     return QueryResponse(
         answer=result.answer,
         cached=result.cached,

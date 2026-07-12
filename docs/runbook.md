@@ -416,6 +416,12 @@ from audit_logs
 order by created_at desc
 limit 10;
 
+select action, metadata->>'query_sha256' as query_hash, metadata->>'cached' as cached, created_at
+from audit_logs
+where action = 'query.executed'
+order by created_at desc
+limit 10;
+
 select cached, retrieval_ms, total_ms, created_at
 from query_events
 order by created_at desc

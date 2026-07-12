@@ -1,5 +1,6 @@
 from collections import deque
 from dataclasses import dataclass
+import hashlib
 import json
 from statistics import mean
 
@@ -54,6 +55,59 @@ def record_query_event(
         retrieval_ms=float(retrieval_ms or 0),
         total_ms=float(total_ms or 0),
     )
+
+
+def record_query_audit_event(
+    *,
+    current_user: AuthenticatedUser,
+    query: str,
+    top_k: int,
+    cached: bool,
+    citations: list[dict],
+    metrics: dict,
+) -> None:
+    if not get_settings().enable_db_persistence:
+        return
+
+    metadata = {
+        "query_sha256": hashlib.sha256(query.encode("utf-8")).hexdigest(),
+        "query_length": len(query),
+        "top_k": top_k,
+        "cached": cached,
+        "contexts_used": int(metrics.get("contexts_used") or 0),
+        "retrieval_ms": float(metrics.get("retrieval_ms") or 0),
+        "total_ms": float(metrics.get("total_ms") or 0),
+        "embedding_model": metrics.get("embedding_model"),
+        "answer_model": metrics.get("answer_model"),
+        "citation_document_ids": _citation_document_ids(citations),
+    }
+
+    try:
+        from app.db import engine
+
+        with engine.begin() as connection:
+            connection.execute(
+                text(
+                    f"""
+                    INSERT INTO audit_logs (
+                      tenant_id, actor_user_id, action, resource_type, metadata
+                    )
+                    VALUES (
+                      :tenant_id, :actor_user_id, 'query.executed', 'query',
+                      {_metadata_sql_expression(connection)}
+                    )
+                    """
+                ),
+                {
+                    "tenant_id": str(current_user.tenant_id),
+                    "actor_user_id": (
+                        str(current_user.app_user_id) if current_user.app_user_id else None
+                    ),
+                    "metadata": json.dumps(metadata),
+                },
+            )
+    except SQLAlchemyError:
+        return
 
 
 def get_analytics(current_user: AuthenticatedUser) -> AnalyticsResponse:
@@ -362,6 +416,21 @@ def _metadata_dict(value) -> dict:
             return {}
         return parsed if isinstance(parsed, dict) else {}
     return {}
+
+
+def _metadata_sql_expression(connection: Connection) -> str:
+    if connection.dialect.name == "postgresql":
+        return "CAST(:metadata AS jsonb)"
+    return ":metadata"
+
+
+def _citation_document_ids(citations: list[dict]) -> list[str]:
+    document_ids = []
+    for citation in citations:
+        document_id = citation.get("document_id")
+        if document_id and str(document_id) not in document_ids:
+            document_ids.append(str(document_id))
+    return document_ids
 
 
 def _datetime_string(value) -> str:

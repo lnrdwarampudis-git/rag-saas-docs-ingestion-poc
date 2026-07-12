@@ -192,3 +192,63 @@ def test_persistent_audit_events_return_recent_tenant_history(monkeypatch) -> No
     assert events[0].actor == "Alex Admin"
     assert events[0].resource_id == "doc-1"
     assert events[0].metadata["file_name"] == "runbook.pdf"
+
+
+def test_query_audit_event_persists_safe_metadata(monkeypatch) -> None:
+    tenant_id = UUID("00000000-0000-4000-8000-000000000016")
+    actor_id = UUID("10000000-0000-4000-8000-000000000016")
+    engine = create_engine("sqlite+pysqlite:///:memory:")
+    with engine.begin() as connection:
+        connection.execute(
+            text(
+                """
+                CREATE TABLE audit_logs (
+                  tenant_id TEXT NOT NULL,
+                  actor_user_id TEXT,
+                  action TEXT NOT NULL,
+                  resource_type TEXT NOT NULL,
+                  metadata TEXT NOT NULL
+                )
+                """
+            )
+        )
+
+    monkeypatch.setattr(analytics.get_settings(), "enable_db_persistence", True)
+    import app.db as db
+
+    monkeypatch.setattr(db, "engine", engine)
+
+    analytics.record_query_audit_event(
+        current_user=AuthenticatedUser(
+            keycloak_subject="analytics-subject",
+            tenant_id=tenant_id,
+            roles=["admin"],
+            app_user_id=actor_id,
+        ),
+        query="What is the sensitive roadmap?",
+        top_k=3,
+        cached=False,
+        citations=[{"document_id": "doc-1"}, {"document_id": "doc-1"}, {"document_id": "doc-2"}],
+        metrics={
+            "contexts_used": 2,
+            "retrieval_ms": 11.25,
+            "total_ms": 24.5,
+            "embedding_model": "hashing-384",
+            "answer_model": "extractive",
+        },
+    )
+
+    with engine.begin() as connection:
+        row = connection.execute(text("SELECT * FROM audit_logs")).mappings().one()
+
+    metadata = analytics._metadata_dict(row["metadata"])
+    assert row["tenant_id"] == str(tenant_id)
+    assert row["actor_user_id"] == str(actor_id)
+    assert row["action"] == "query.executed"
+    assert row["resource_type"] == "query"
+    assert metadata["query_length"] == 30
+    assert metadata["top_k"] == 3
+    assert metadata["cached"] is False
+    assert metadata["contexts_used"] == 2
+    assert metadata["citation_document_ids"] == ["doc-1", "doc-2"]
+    assert "sensitive roadmap" not in row["metadata"]

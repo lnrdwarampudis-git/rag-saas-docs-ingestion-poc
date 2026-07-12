@@ -1182,7 +1182,13 @@ function AnalyticsPanel({
 
 function auditEventSummary(event: AnalyticsReport["recent_events"][number]) {
   const fileName = typeof event.metadata.file_name === "string" ? event.metadata.file_name : "";
+  const contextsUsed =
+    typeof event.metadata.contexts_used === "number" ? `${event.metadata.contexts_used} contexts` : "";
+  const cacheState = typeof event.metadata.cached === "boolean" ? (event.metadata.cached ? "cache hit" : "fresh") : "";
   const actor = event.actor ?? "system";
+  if (event.action === "query.executed") {
+    return [contextsUsed, cacheState, actor].filter(Boolean).join(" / ");
+  }
   const resource = fileName || event.resource_type;
   return `${resource} / ${actor}`;
 }
