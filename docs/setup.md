@@ -77,6 +77,17 @@ Preferred local workflow:
 3. Keep visibility as `tenant` unless testing role-restricted chunks.
 4. Ask a question in the query panel.
 
+Supported POC intake formats:
+
+- PDF
+- Word DOCX
+- Excel XLSX
+- PowerPoint PPTX
+- TXT, Markdown, CSV, TSV
+- PNG, JPG/JPEG, TIFF, BMP through OCR
+
+Legacy DOC, XLS, and PPT files should be converted to DOCX, XLSX, or PPTX.
+
 Alternative mounted-path workflow:
 
 1. Put files in `data/ingest`.

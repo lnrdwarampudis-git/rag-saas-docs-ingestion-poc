@@ -7,25 +7,34 @@ flowchart LR
   %% Client layer
   subgraph client["Client Layer"]
     browser["User Browser"]
-    ui["React/Vite UI<br/>Upload, query, citations, metrics"]
+    ui["React/Vite UI<br/>workspace, upload, query, citations"]
+    aaScreen["A&A Screen<br/>tenant, member roles, visibility"]
+    sessionScreen["Session Management Screen<br/>session mode, token status, cache state"]
+    formatsScreen["Format Intake Screen<br/>PDF, Word, Excel, PowerPoint, text, images"]
   end
 
   %% Edge and API
   subgraph api["API Layer"]
     nginx["Nginx Static Host<br/>2 GB upload limit"]
     fastapi["FastAPI Backend<br/>OpenAPI, validation, orchestration"]
+    sessionApi["Session Middleware Target<br/>JWT/session validation"]
     authz["RBAC Filter<br/>tenant, visibility, role checks"]
   end
 
   %% Identity
-  subgraph identity["Identity And Access"]
+  subgraph identity["Authentication And Authorization"]
     keycloak["Keycloak<br/>OIDC/JWT, users, roles"]
+    members["Members + Roles<br/>admin, finance, engineering, legal, support"]
   end
 
   %% Ingestion pipeline
   subgraph ingestion["Document Ingestion Pipeline"]
     upload["Upload Or Mounted Path"]
-    parser["Parser Layer<br/>PDF, DOCX, XLSX, TXT"]
+    office["Microsoft Office<br/>Word DOCX, Excel XLSX, PowerPoint PPTX"]
+    pdf["PDF Documents<br/>native text or OCR path"]
+    textFiles["Text Formats<br/>TXT, MD, CSV, TSV"]
+    images["Image Documents<br/>PNG, JPG, TIFF, BMP"]
+    parser["Parser Layer<br/>Office, PDF, text, image"]
     ocr["OCR Path<br/>Tesseract ready"]
     chunker["Chunking Strategy<br/>token target, overlap, metadata"]
     embed["Embedding Step<br/>open-source model target"]
@@ -56,13 +65,23 @@ flowchart LR
   end
 
   browser --> ui
+  ui --> aaScreen
+  ui --> sessionScreen
+  ui --> formatsScreen
   ui --> nginx
   nginx --> fastapi
-  fastapi -. validate token .-> keycloak
+  fastapi --> sessionApi
+  sessionApi -. validate token .-> keycloak
+  keycloak --> members
+  members --> authz
   fastapi --> authz
 
   ui --> upload
   upload --> fastapi
+  office --> parser
+  pdf --> parser
+  textFiles --> parser
+  images --> ocr
   fastapi --> parser
   parser --> ocr
   parser --> chunker
@@ -104,16 +123,16 @@ flowchart LR
   classDef security fill:#fef2f2,stroke:#dc2626,color:#111827;
   classDef ops fill:#f5f3ff,stroke:#7c3aed,color:#111827;
 
-  class browser,ui client;
-  class nginx,fastapi,upload,parser,ocr,chunker,embed,query,cache,retriever,ranker,answer service;
+  class browser,ui,aaScreen,sessionScreen,formatsScreen client;
+  class nginx,fastapi,sessionApi,upload,office,pdf,textFiles,images,parser,ocr,chunker,embed,query,cache,retriever,ranker,answer service;
   class postgres,qdrant,minio,audit data;
-  class keycloak,authz security;
+  class keycloak,members,authz security;
   class docker,tests,logs ops;
 ```
 
 ## Request Flow
 
-1. Users upload documents or provide a mounted path through the React/Vite UI.
+1. Users review A&A/session state, then upload documents or provide a mounted path through the React/Vite UI.
 2. FastAPI validates the request, extracts text from supported document types, invokes OCR when needed, and chunks the extracted text.
 3. Chunks are enriched with tenant, document, visibility, role, OCR, and source metadata.
 4. Metadata and chunks are persisted in PostgreSQL. Qdrant is included as the vector search option for scale-oriented retrieval.
@@ -122,14 +141,25 @@ flowchart LR
 
 ## Component Responsibilities
 
-- React/Vite UI: document upload, mounted-path ingestion, tenant/role input, query form, citations, cache status, and latency display.
+- React/Vite UI: document upload, mounted-path ingestion, A&A control surface, session state, tenant/role input, query form, citations, cache status, and latency display.
 - FastAPI backend: request validation, ingestion orchestration, retrieval orchestration, persistence, and API contracts.
-- Keycloak: target identity provider for OAuth/OIDC, JWT validation, and member roles.
+- Keycloak: target identity provider for OAuth/OIDC, JWT validation, member roles, and logout/session management.
 - PostgreSQL + pgvector: tenant metadata, RBAC tables, document records, chunk records, and audit logs.
 - Redis: query cache and future queue/rate-limit support.
 - MinIO: target object storage for original files and extracted text.
 - Qdrant: optional vector index for higher-scale retrieval experiments.
 - Docker Compose: local reproducible stack for the POC.
+
+## Supported Document Formats
+
+- PDF: native text extraction with OCR fallback path for scanned/image-backed documents.
+- Microsoft Word: DOCX extraction.
+- Microsoft Excel: XLSX sheet/cell extraction.
+- Microsoft PowerPoint: PPTX slide text extraction.
+- Text: TXT, Markdown, CSV, and TSV.
+- Images: PNG, JPG, JPEG, TIFF, and BMP through OCR.
+
+Legacy binary Office formats such as DOC, XLS, and PPT should be converted to DOCX, XLSX, or PPTX before ingestion for this POC.
 
 ## Editable Diagram Notes
 

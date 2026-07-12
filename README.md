@@ -1,6 +1,6 @@
 # RAG SaaS Docs Ingestion POC
 
-Open-source proof of concept for a multi-tenant SaaS RAG document ingestion and query workflow. It handles browser file upload, PDF/Office-aware text extraction, OCR-ready parsing, chunking, RBAC-aware retrieval, Redis query caching, Postgres persistence, and a React/Vite UI.
+Open-source proof of concept for a multi-tenant SaaS RAG document ingestion and query workflow. It handles browser file upload, PDF and Microsoft Office text extraction, OCR-ready parsing, chunking, RBAC-aware retrieval, Redis query caching, Postgres persistence, visible A&A/session management surfaces, and a React/Vite UI.
 
 The milestone targets are:
 
@@ -52,6 +52,8 @@ For full setup, execution, test, and GitHub export instructions, see:
 - Week 3 React/Vite operational UI
 - Week 4 backend/frontend Dockerfiles and Compose wiring
 - API E2E and frontend Playwright smoke tests
+- Visible A&A and session management panels for the POC workflow
+- PDF, Word DOCX, Excel XLSX, PowerPoint PPTX, text, CSV/TSV, markdown, and image intake
 
 ## Recommended Week 1 Commands
 
@@ -101,6 +103,17 @@ docker compose up --build
 The ingestion endpoint accepts a local file path for Week 1 development. Production upload should stream files into MinIO first, then enqueue parsing and chunking workers.
 
 The upload endpoint accepts multipart browser uploads and is the preferred local SaaS-style flow because it does not require Docker path mapping.
+
+Supported POC intake formats:
+
+- PDF
+- Word DOCX
+- Excel XLSX
+- PowerPoint PPTX
+- TXT, Markdown, CSV, TSV
+- PNG, JPG/JPEG, TIFF, BMP through OCR
+
+Legacy binary Office formats such as DOC, XLS, and PPT should be converted to DOCX, XLSX, or PPTX before ingestion.
 
 The Dockerized frontend nginx proxy allows uploads up to `2g` via `client_max_body_size`. Production deployments should use direct-to-object-storage multipart/resumable uploads for very large files.
 

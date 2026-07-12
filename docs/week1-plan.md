@@ -48,7 +48,7 @@ Complete the foundation for database setup, document ingestion, OCR-aware extrac
 - `docker compose up -d postgres redis minio qdrant keycloak` starts core services.
 - Schema initializes in PostgreSQL.
 - `pytest` passes.
-- Ingestion endpoint can parse a local text/PDF/DOCX file when parser dependencies are installed.
+- Ingestion endpoint can parse local text, PDF, DOCX, XLSX, and PPTX files when parser dependencies are installed.
 - Every generated chunk includes tenant, document, visibility, roles, file name, MIME type, and OCR metadata.
 
 ## Known Decisions For Week 2

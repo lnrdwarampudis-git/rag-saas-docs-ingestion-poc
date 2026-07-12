@@ -3,7 +3,9 @@ import ReactDOM from "react-dom/client";
 import {
   Activity,
   BadgeCheck,
+  Clock3,
   Database,
+  FileType2,
   FileSearch,
   Gauge,
   KeyRound,
@@ -13,7 +15,8 @@ import {
   RefreshCw,
   Search,
   ShieldCheck,
-  UploadCloud
+  UploadCloud,
+  UserRoundCheck
 } from "lucide-react";
 import "./styles.css";
 
@@ -46,7 +49,7 @@ type QueryResult = {
 };
 
 const DEFAULT_TENANT_ID = "00000000-0000-4000-8000-000000000001";
-const DEFAULT_INGEST_PATH = "/data/ingest/sample.pdf";
+const DEFAULT_INGEST_PATH = "/data/ingest/sample.docx";
 const roleOptions = ["admin", "finance", "engineering", "legal", "support"];
 
 function App() {
@@ -185,7 +188,10 @@ function App() {
             <FileSearch size={18} /> Documents
           </a>
           <a className="nav-item" href="#access">
-            <ShieldCheck size={18} /> Access
+            <ShieldCheck size={18} /> A&amp;A
+          </a>
+          <a className="nav-item" href="#sessions">
+            <Clock3 size={18} /> Sessions
           </a>
           <a className="nav-item" href="#metrics">
             <Gauge size={18} /> Metrics
@@ -247,22 +253,22 @@ function App() {
             <label className="field">
               <span>Local document path</span>
               <input
-                placeholder="/data/ingest/policy.pdf"
+                placeholder="/data/ingest/policy.docx"
                 value={localPath}
                 onChange={(event) => setLocalPath(event.target.value)}
               />
               <small className="field-help">
                 Docker can read files mounted into the backend. Put Mac files in
                 `work/rag-saas-docs-ingestion-poc/data/ingest`, then use `/data/ingest/file-name`.
-                Downloads file URLs are also accepted and mapped to `/host-downloads`.
+                Supports PDF, Word DOCX, Excel XLSX, PowerPoint PPTX, text, CSV, markdown, and images.
               </small>
             </label>
 
             <label className="field file-field">
-              <span>Upload file</span>
+              <span>Upload file: PDF, Word, Excel, PowerPoint, text, image</span>
               <input
                 type="file"
-                accept=".pdf,.txt,.md,.csv,.tsv,.docx,.png,.jpg,.jpeg,.tiff,.bmp"
+                accept=".pdf,.txt,.md,.csv,.tsv,.docx,.xlsx,.pptx,.png,.jpg,.jpeg,.tiff,.bmp"
                 onChange={(event) => setSelectedFile(event.target.files?.[0] ?? null)}
               />
               <small className="field-help">
@@ -417,6 +423,59 @@ function App() {
             </div>
           </section>
         </div>
+
+        <div className="ops-grid">
+          <section className="panel" id="access">
+            <div className="panel-header">
+              <div>
+                <p className="eyebrow">Authentication &amp; Authorization</p>
+                <h3>A&amp;A control surface</h3>
+              </div>
+              <UserRoundCheck size={20} />
+            </div>
+            <div className="status-list">
+              <StatusItem label="Identity provider" value="Keycloak OIDC/JWT target" />
+              <StatusItem label="Tenant isolation" value={tenantId.slice(0, 8) + "..."} />
+              <StatusItem label="Member roles" value={activeRoles.join(", ") || "none"} />
+              <StatusItem label="Chunk authorization" value={`${visibility} visibility`} />
+              <StatusItem label="Enforcement point" value="before retrieval ranking" />
+            </div>
+          </section>
+
+          <section className="panel" id="sessions">
+            <div className="panel-header">
+              <div>
+                <p className="eyebrow">Session Management</p>
+                <h3>Current session</h3>
+              </div>
+              <Clock3 size={20} />
+            </div>
+            <div className="status-list">
+              <StatusItem label="Session mode" value="POC local session" />
+              <StatusItem label="Token status" value="JWT validation hook ready" />
+              <StatusItem label="Cache scope" value={result?.cached ? "Redis hit" : "Redis ready"} />
+              <StatusItem label="Last workflow status" value={status} />
+              <StatusItem label="Audit trail" value="document.ingested events in Postgres" />
+            </div>
+          </section>
+
+          <section className="panel">
+            <div className="panel-header">
+              <div>
+                <p className="eyebrow">Document Formats</p>
+                <h3>Supported intake</h3>
+              </div>
+              <FileType2 size={20} />
+            </div>
+            <div className="format-grid">
+              {["PDF", "Word DOCX", "Excel XLSX", "PowerPoint PPTX", "TXT/MD/CSV", "Images + OCR"].map(
+                (format) => (
+                  <Badge key={format} label={format} />
+                )
+              )}
+            </div>
+          </section>
+        </div>
       </section>
     </main>
   );
@@ -434,6 +493,15 @@ function Metric({ label, value, icon }: { label: string; value: string; icon: Re
 
 function Badge({ label }: { label: string }) {
   return <span className="badge">{label}</span>;
+}
+
+function StatusItem({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="status-item">
+      <span>{label}</span>
+      <strong>{value}</strong>
+    </div>
+  );
 }
 
 function RolePicker({
