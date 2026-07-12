@@ -72,11 +72,24 @@ TOKEN=$(curl -s -X POST \
 Upload a file:
 
 ```bash
-curl -H "Authorization: Bearer $TOKEN" \
+UPLOAD_RESPONSE=$(curl -s -H "Authorization: Bearer $TOKEN" \
   -F visibility=tenant \
   -F force_ocr=false \
   -F file=@./data/ingest/example.txt \
-  http://127.0.0.1:8000/api/v1/documents/upload
+  http://127.0.0.1:8000/api/v1/documents/upload)
+
+echo "$UPLOAD_RESPONSE"
+DOC_ID=$(echo "$UPLOAD_RESPONSE" | python3 -c "import sys,json; print(json.load(sys.stdin)['document_id'])")
+```
+
+Inspect the authorized document inventory:
+
+```bash
+curl -H "Authorization: Bearer $TOKEN" \
+  http://127.0.0.1:8000/api/v1/documents
+
+curl -H "Authorization: Bearer $TOKEN" \
+  http://127.0.0.1:8000/api/v1/documents/$DOC_ID
 ```
 
 Ask a question:
@@ -95,6 +108,15 @@ Check who a token resolves to (tenant + roles), useful when debugging RBAC:
 ```bash
 curl -H "Authorization: Bearer $TOKEN" http://127.0.0.1:8000/api/v1/auth/me
 ```
+
+## UI Smoke Test
+
+1. Open `http://127.0.0.1:5173`.
+2. Sign in with `admin-demo` / `Passw0rd!`.
+3. Confirm the A&A panel shows the resolved tenant and roles, and the Session panel shows token expiry/refresh state.
+4. Upload a PDF, DOCX, XLSX, PPTX, text/CSV/markdown, or image file from the Upload panel.
+5. Use Document Management to refresh the authorized inventory, open the uploaded document, and confirm chunk previews are visible.
+6. Ask a question in the Query panel and confirm citations/latency/cache status appear.
 
 ## Inspect Persisted Data
 

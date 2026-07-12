@@ -12,6 +12,7 @@ flowchart TD
     aaScreen["A&A Panel<br/>tenant + roles (read-only)"]
     sessionScreen["Session Panel<br/>stateless JWT, silent refresh"]
     formatsScreen["Format Intake Screen"]
+    docInventory["Document Management Panel<br/>inventory, detail, chunk preview"]
   end
 
   %% Identity
@@ -28,6 +29,7 @@ flowchart TD
     jwtValidate["get_current_user<br/>verify sig, iss, aud, exp"]
     rbacResolve["RBAC Resolver<br/>Postgres-first, claims fallback"]
     authz["RBAC Filter<br/>tenant, visibility, role"]
+    docMgmtApi["Document Management API<br/>list/detail authorized docs"]
   end
 
   %% Ingestion pipeline
@@ -66,17 +68,22 @@ flowchart TD
   ui --> aaScreen
   ui --> sessionScreen
   ui --> formatsScreen
+  ui --> docInventory
   loginScreen <-- PKCE login --> keycloak
   keycloak --- demoUsers
 
   ui -- Bearer token --> nginx --> fastapi
   fastapi --> authApi
+  fastapi --> docMgmtApi
   fastapi --> jwtValidate
   jwtValidate -. validate via JWKS .-> keycloak
   jwtValidate --> rbacResolve
   rbacResolve -- lookup by keycloak_subject --> postgres
   fastapi --> authz
   rbacResolve --> authz
+  docMgmtApi --> authz
+  docMgmtApi --> postgres
+  docMgmtApi --> docInventory
 
   fastapi --> upload --> parser
   parser --> ocr --> chunker
@@ -102,8 +109,8 @@ flowchart TD
   classDef security fill:#fef2f2,stroke:#dc2626,color:#111827;
   classDef ops fill:#f5f3ff,stroke:#7c3aed,color:#111827;
 
-  class browser,ui,loginScreen,aaScreen,sessionScreen,formatsScreen client;
-  class nginx,fastapi,authApi,upload,parser,ocr,chunker,embed,query,cache,retriever,ranker,answer service;
+  class browser,ui,loginScreen,aaScreen,sessionScreen,formatsScreen,docInventory client;
+  class nginx,fastapi,authApi,docMgmtApi,upload,parser,ocr,chunker,embed,query,cache,retriever,ranker,answer service;
   class postgres,qdrant,minio data;
   class keycloak,demoUsers,jwtValidate,rbacResolve,authz security;
   class docker,tests ops;
@@ -140,14 +147,15 @@ sequenceDiagram
 4. Users upload documents or provide a mounted path through the React/Vite UI; `tenant_id` and the uploader's identity are taken from the resolved identity, not the request.
 5. FastAPI extracts text from supported document types, invokes OCR when needed, and chunks the extracted text. Chunks are enriched with tenant, document, visibility, role, owner, and source metadata.
 6. Metadata and chunks are persisted in PostgreSQL. Qdrant is included as the vector search option for scale-oriented retrieval.
-7. Users ask questions through the query panel; `tenant_id` and roles again come from the resolved identity.
-8. Redis is checked for cached answers (the cache key includes the requester's identity so private-document results never leak across users). On cache miss, retrieval runs against authorized chunks, applies RBAC filters (tenant match, then tenant/role/private-owner visibility), ranks contexts, and composes an answer with citations and latency metrics.
-9. Access tokens are short-lived and stateless (no server-side session store); the frontend silently refreshes them in the background via Keycloak's refresh-token grant and clears its session if the refresh fails, dropping the user back to the Login Screen.
+7. The Document Management panel calls list/detail APIs to show only authorized document metadata and chunk previews for the caller's tenant/roles.
+8. Users ask questions through the query panel; `tenant_id` and roles again come from the resolved identity.
+9. Redis is checked for cached answers (the cache key includes the requester's identity so private-document results never leak across users). On cache miss, retrieval runs against authorized chunks, applies RBAC filters (tenant match, then tenant/role/private-owner visibility), ranks contexts, and composes an answer with citations and latency metrics.
+10. Access tokens are short-lived and stateless (no server-side session store); the frontend silently refreshes them in the background via Keycloak's refresh-token grant and clears its session if the refresh fails, dropping the user back to the Login Screen.
 
 ## Component Responsibilities
 
-- React/Vite UI: PKCE login/logout, document upload, mounted-path ingestion, read-only A&A and session status display, query form, citations, cache status, and latency display.
-- FastAPI backend: bearer-token validation, RBAC resolution, request validation, ingestion orchestration, retrieval orchestration, persistence, and API contracts.
+- React/Vite UI: PKCE login/logout, document upload, mounted-path ingestion, read-only A&A and session status display, format guidance, document inventory/detail/chunk preview, query form, citations, cache status, and latency display.
+- FastAPI backend: bearer-token validation, RBAC resolution, request validation, ingestion orchestration, document inventory APIs, retrieval orchestration, persistence, and API contracts.
 - Keycloak: identity provider for OAuth/OIDC (Authorization Code + PKCE for the SPA), issues and refreshes JWTs, exposes the JWKS used to validate them, and owns realm roles and demo users.
 - PostgreSQL + pgvector: tenant metadata, RBAC tables (`app_users`, `roles`, `user_roles`) as the source of truth for tenant/role resolution, document records, chunk records, and audit logs.
 - Redis: query cache and future queue/rate-limit support.

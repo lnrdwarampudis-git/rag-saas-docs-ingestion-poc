@@ -39,3 +39,14 @@ Close the biggest gap called out in every prior week's "Production Follow-Ups": 
 - Add admin UI/API for managing tenants, roles, and user-role assignments instead of editing `infra/postgres/init.sql` by hand.
 - Tighten `role`-visibility documents so only roles the uploader themselves holds can be granted, instead of any role name.
 - Add an audit log entry for logins/token refresh, not just document ingestion.
+
+## Document Management Inventory Add-On
+
+After the authentication/RBAC slice, the POC now also includes an authorized document-management read path:
+
+- `GET /api/v1/documents` lists documents visible to the signed-in user.
+- `GET /api/v1/documents/{document_id}` returns document detail and chunk previews only when the user is authorized by tenant, visibility, role, or private ownership.
+- The React UI shows an inventory panel with ingestion status, visibility, OCR indicator, chunk count, updated time, and detail inspection.
+- API E2E tests cover authorized list/detail access and unauthorized hiding.
+
+This closes the demo gap between "I uploaded something" and "What documents can my member actually see before querying?"

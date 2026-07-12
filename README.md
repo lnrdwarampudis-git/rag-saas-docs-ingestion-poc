@@ -33,6 +33,7 @@ For full setup, execution, test, and GitHub export instructions, see:
 - [Architecture Diagram](docs/architecture.md)
 - [Execution Runbook](docs/runbook.md)
 - [GitHub Export Guide](docs/github-export.md)
+- [Week 6 Suggested Target Plan](docs/week6-plan.md)
 
 ## Scope Delivered
 
@@ -56,6 +57,7 @@ For full setup, execution, test, and GitHub export instructions, see:
 - Keycloak OIDC login (Authorization Code + PKCE), JWT validation middleware, and stateless-JWT session management with silent refresh
 - Server-side RBAC resolved from Postgres (`app_users`/`roles`/`user_roles`), with tenant_id/roles always taken from the validated token -- never from request bodies
 - PDF, Word DOCX, Excel XLSX, PowerPoint PPTX, text, CSV/TSV, markdown, and image intake
+- Document management inventory with authorized list/detail APIs, ingestion status, visibility, OCR flags, chunk counts, and chunk preview
 
 ## Recommended Week 1 Commands
 
@@ -97,10 +99,16 @@ docker compose up --build
 ## API Surface
 
 - `GET /health`
+- `GET /api/v1/auth/config`
+- `GET /api/v1/auth/me`
+- `GET /api/v1/documents`
 - `POST /api/v1/documents/ingest`
 - `POST /api/v1/documents/upload`
+- `GET /api/v1/documents/{document_id}`
 - `GET /api/v1/documents/{document_id}/chunks`
 - `POST /api/v1/query`
+
+The document list/detail endpoints power the UI's Document Management panel. They apply the same tenant and RBAC rules as retrieval: users can inspect only documents and chunks their authenticated identity is authorized to see.
 
 The ingestion endpoint accepts a local file path for Week 1 development. Production upload should stream files into MinIO first, then enqueue parsing and chunking workers.
 
@@ -118,6 +126,15 @@ Supported POC intake formats:
 Legacy binary Office formats such as DOC, XLS, and PPT should be converted to DOCX, XLSX, or PPTX before ingestion.
 
 The Dockerized frontend nginx proxy allows uploads up to `2g` via `client_max_body_size`. Production deployments should use direct-to-object-storage multipart/resumable uploads for very large files.
+
+## Document Management UI
+
+After login, the frontend shows:
+
+- A&A and session management panels so the resolved tenant, roles, token expiry, and refresh behavior are visible.
+- Format intake guidance for PDF, DOCX, XLSX, PPTX, text/CSV/markdown, and image OCR uploads.
+- Authorized document inventory with file name, status, visibility, OCR indicator, chunk count, updated time, and detail inspection.
+- Chunk preview for the selected document, using the same RBAC checks as the query/retrieval path.
 
 When running with Docker, the backend cannot read arbitrary Mac paths such as `/Users/name/Documents/file.pdf`. Put local files under `data/ingest/` in this repo, then enter the container path in the UI:
 
