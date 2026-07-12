@@ -54,10 +54,25 @@ docker compose up -d --build
 
 ## API Smoke Test
 
+Every `/api/v1/*` route now requires a valid Keycloak access token; `tenant_id`
+and roles are resolved from that token, not from the request body.
+
+Get a token for a demo user (direct/password grant, enabled on `rag-frontend`
+for exactly this kind of scripted smoke test):
+
+```bash
+TOKEN=$(curl -s -X POST \
+  http://127.0.0.1:8080/realms/rag/protocol/openid-connect/token \
+  -d grant_type=password \
+  -d client_id=rag-frontend \
+  -d username=admin-demo \
+  -d password='Passw0rd!' | python3 -c "import sys,json; print(json.load(sys.stdin)['access_token'])")
+```
+
 Upload a file:
 
 ```bash
-curl -F tenant_id=00000000-0000-4000-8000-000000000001 \
+curl -H "Authorization: Bearer $TOKEN" \
   -F visibility=tenant \
   -F force_ocr=false \
   -F file=@./data/ingest/example.txt \
@@ -68,12 +83,17 @@ Ask a question:
 
 ```bash
 curl -X POST http://127.0.0.1:8000/api/v1/query \
+  -H "Authorization: Bearer $TOKEN" \
   -H "content-type: application/json" \
   -d '{
-    "tenant_id": "00000000-0000-4000-8000-000000000001",
-    "query": "What is knowledge representation?",
-    "role_names": []
+    "query": "What is knowledge representation?"
   }'
+```
+
+Check who a token resolves to (tenant + roles), useful when debugging RBAC:
+
+```bash
+curl -H "Authorization: Bearer $TOKEN" http://127.0.0.1:8000/api/v1/auth/me
 ```
 
 ## Inspect Persisted Data
@@ -106,6 +126,9 @@ limit 10;
 ## Troubleshooting
 
 - If upload returns `413 Request Entity Too Large`, confirm the frontend nginx config includes `client_max_body_size 2g` and rebuild the frontend.
-- If queries return no context, confirm the uploaded chunks are in `document_chunks` and the UI tenant ID is `00000000-0000-4000-8000-000000000001`.
+- If any `/api/v1/*` call returns `401 Unauthorized`, your token is missing, expired, or was issued before `docker compose down -v` reseeded a new realm/tenant -- sign out and back in (or re-fetch a token per the smoke test above).
+- If queries return no context, confirm the uploaded chunks are in `document_chunks` and that you're signed in as a user in the same tenant that uploaded them (the default demo tenant is `00000000-0000-4000-8000-000000000001`).
+- If Keycloak login loops back to the sign-in page or 500s on `/protocol/openid-connect/certs`, rebuild the backend (`docker compose up -d --build backend`) -- an older backend build may not skip Keycloak's non-signing (`use=enc`) JWKS key correctly.
+- If demo users/roles are missing after applying changes, you likely reused an old Postgres/Keycloak volume: run `docker compose down -v` (note the `-v`) before `docker compose up -d --build` so `init.sql` and the realm import both re-run.
 - If DBeaver cannot connect, use port `55432`, not `5432`, when a local Postgres already uses `5432`.
 - If Docker cannot read a host path, use browser upload or configure both `HOST_DOWNLOADS_DIR` and `HOST_MOUNT_SOURCE_PREFIX` in `.env`.

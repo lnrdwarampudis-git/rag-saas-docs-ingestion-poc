@@ -56,9 +56,16 @@ class JWKSCache:
                 kid = raw_key.get("kid")
                 if not kid:
                     continue
+                # Keycloak's JWKS includes both a signing key (use=sig, RS256)
+                # and an encryption key (use=enc, RSA-OAEP) per realm. Only
+                # the signing key can validate a JWS access token; PyJWK
+                # rejects the encryption key's algorithm outright, so skip
+                # anything not explicitly marked for signature use.
+                if raw_key.get("use") not in (None, "sig"):
+                    continue
                 try:
                     keys_by_kid[kid] = PyJWK.from_dict(raw_key)
-                except jwt.InvalidKeyError:
+                except (jwt.InvalidKeyError, jwt.PyJWKError):
                     continue
 
             if not keys_by_kid:

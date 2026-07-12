@@ -135,3 +135,32 @@ def test_require_roles_rejects_missing_role(rsa_keypair):
     client = TestClient(_build_test_app())
     response = client.get("/finance-only", headers={"Authorization": f"Bearer {token}"})
     assert response.status_code == 403
+
+
+def test_jwks_cache_skips_non_signing_keys(rsa_keypair, monkeypatch):
+    """Regression test: Keycloak's realm JWKS includes both an RS256 signing
+    key (use=sig) and an RSA-OAEP encryption key (use=enc). The encryption
+    key must be skipped, not crash the refresh.
+    """
+    private_key, public_key = rsa_keypair
+    sig_jwk = jwt.algorithms.RSAAlgorithm.to_jwk(public_key, as_dict=True)
+    sig_jwk.update({"kid": KID, "use": "sig", "alg": "RS256"})
+
+    other_key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+    enc_jwk = jwt.algorithms.RSAAlgorithm.to_jwk(other_key.public_key(), as_dict=True)
+    enc_jwk.update({"kid": "enc-key-1", "use": "enc", "alg": "RSA-OAEP"})
+
+    class FakeResponse:
+        def raise_for_status(self):
+            pass
+
+        def json(self):
+            return {"keys": [sig_jwk, enc_jwk]}
+
+    monkeypatch.setattr(jwks_module.httpx, "get", lambda *a, **k: FakeResponse())
+
+    cache = jwks_module.JWKSCache("http://fake/certs")
+    key = cache.get_key(KID)
+    assert key is not None
+    with pytest.raises(jwks_module.JWKSFetchError):
+        cache.get_key("enc-key-1")

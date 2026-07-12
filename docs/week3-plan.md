@@ -41,7 +41,7 @@ Complete the UI development milestone so users can ingest documents, set role co
 ## Production Follow-Ups
 
 - Replace local-path ingestion with browser file upload to MinIO.
-- Integrate Keycloak login/logout and JWT propagation.
+- ~~Integrate Keycloak login/logout and JWT propagation.~~ Done -- see [Architecture: Authentication, Authorization And Session Management](architecture.md#authentication-authorization-and-session-management).
 - Add processing job status polling.
 - Add admin screens for users, roles, and tenant configuration.
 - Add Playwright end-to-end tests in Week 4.

@@ -57,7 +57,7 @@ docker compose up --build
 ## Remaining Production Hardening
 
 - Replace local-path ingestion with real multipart uploads to MinIO.
-- Add Keycloak realm import and JWT validation middleware.
+- ~~Add Keycloak realm import and JWT validation middleware.~~ Done -- see [Architecture: Authentication, Authorization And Session Management](architecture.md#authentication-authorization-and-session-management).
 - Persist document chunks and embeddings to PostgreSQL/Qdrant.
 - Add Celery/RQ worker containers for OCR, chunking, and embedding jobs.
 - Add load tests for TTFT, P95 API latency, retrieval latency, and cache hit ratio.

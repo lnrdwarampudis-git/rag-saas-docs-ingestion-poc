@@ -8,6 +8,7 @@ The milestone targets are:
 - Week 2: RAG pipeline creation, Redis query caching, retrieval interface, citation output, and API contracts for the Week 3 UI.
 - Week 3: React/Vite UI for document ingestion, role-aware querying, citations, cache status, and latency metrics.
 - Week 4: Docker containerization plus unit, API E2E, and frontend E2E test coverage.
+- Week 5: Keycloak OIDC login (Authorization Code + PKCE), JWT validation middleware, Postgres-backed RBAC, and stateless-JWT session management.
 
 ## Quick Start
 
