@@ -42,6 +42,7 @@ class RetrievalRequest:
     query: str
     tenant_id: str
     role_names: list[str]
+    requester_subject: str | None = None
     top_k: int = 5
 
 
@@ -59,7 +60,9 @@ class HybridRetriever:
         query_embedding = self.embedding_model.embed(request.query)
         results: list[RetrievalResult] = []
         for chunk in chunks:
-            if not _is_authorized(chunk, request.tenant_id, request.role_names):
+            if not is_chunk_authorized(
+                chunk, request.tenant_id, request.role_names, request.requester_subject
+            ):
                 continue
             vector_score = cosine_similarity(query_embedding, self.embedding_model.embed(chunk.text))
             keyword_score = _keyword_overlap(request.query, chunk.text)
@@ -73,13 +76,25 @@ class HybridRetriever:
         return sorted(results, key=lambda result: result.score, reverse=True)[: request.top_k]
 
 
-def _is_authorized(chunk: ChunkDTO, tenant_id: str, role_names: list[str]) -> bool:
+def is_chunk_authorized(
+    chunk: ChunkDTO,
+    tenant_id: str,
+    role_names: list[str],
+    requester_subject: str | None = None,
+) -> bool:
+    """Single source of truth for chunk-level RBAC: same rule used by retrieval
+    ranking and by direct document/chunk lookups, so authorization can't drift
+    between the two code paths.
+    """
     metadata = chunk.metadata
     if metadata.get("tenant_id") != tenant_id:
         return False
     visibility = metadata.get("visibility", "tenant")
-    if visibility in {"tenant", "private"}:
+    if visibility == "tenant":
         return True
+    if visibility == "private":
+        owner = metadata.get("uploaded_by")
+        return owner is not None and owner == requester_subject
     allowed_roles = set(metadata.get("allowed_role_names", []))
     return bool(allowed_roles.intersection(role_names))
 

@@ -11,6 +11,7 @@ import {
   KeyRound,
   Loader2,
   Lock,
+  LogOut,
   MessageSquareText,
   RefreshCw,
   Search,
@@ -19,6 +20,8 @@ import {
   UserRoundCheck
 } from "lucide-react";
 import "./styles.css";
+import { AuthProvider, useAuth } from "./auth/AuthProvider";
+import { apiFetch, ApiAuthError } from "./api";
 
 type IngestResult = {
   document_id: string;
@@ -48,13 +51,52 @@ type QueryResult = {
   };
 };
 
-const DEFAULT_TENANT_ID = "00000000-0000-4000-8000-000000000001";
 const DEFAULT_INGEST_PATH = "/data/ingest/sample.docx";
 const roleOptions = ["admin", "finance", "engineering", "legal", "support"];
 
-function App() {
-  const [tenantId, setTenantId] = React.useState(DEFAULT_TENANT_ID);
-  const [activeRoles, setActiveRoles] = React.useState<string[]>(["admin"]);
+function LoginScreen() {
+  const { login } = useAuth();
+  const [busy, setBusy] = React.useState(false);
+
+  return (
+    <main className="app-shell login-shell">
+      <section className="panel login-card">
+        <div className="brand">
+          <div className="brand-mark">
+            <Database size={20} />
+          </div>
+          <div>
+            <h1>RAG Console</h1>
+            <span>Sign in required</span>
+          </div>
+        </div>
+        <p>
+          This workspace is authenticated through Keycloak (OIDC / Authorization Code + PKCE).
+          Your tenant and roles are resolved from your account -- there is no manual tenant or
+          role selector.
+        </p>
+        <button
+          className="primary-action"
+          type="button"
+          disabled={busy}
+          onClick={() => {
+            setBusy(true);
+            login();
+          }}
+        >
+          {busy ? <Loader2 className="spin" size={18} /> : <KeyRound size={18} />}
+          Sign in with Keycloak
+        </button>
+      </section>
+    </main>
+  );
+}
+
+function AuthenticatedApp() {
+  const { user, logout } = useAuth();
+  const tenantId = user?.tenant_id ?? "unknown";
+  const memberRoles = user?.realm_access?.roles ?? [];
+
   const [localPath, setLocalPath] = React.useState(DEFAULT_INGEST_PATH);
   const [selectedFile, setSelectedFile] = React.useState<File | null>(null);
   const [visibility, setVisibility] = React.useState("tenant");
@@ -68,10 +110,19 @@ function App() {
   const [busy, setBusy] = React.useState(false);
   const [error, setError] = React.useState("");
 
-  const toggleRole = (role: string, target: "active" | "allowed") => {
-    const setter = target === "active" ? setActiveRoles : setAllowedRoles;
-    const values = target === "active" ? activeRoles : allowedRoles;
-    setter(values.includes(role) ? values.filter((item) => item !== role) : [...values, role]);
+  const toggleAllowedRole = (role: string) => {
+    setAllowedRoles((values) =>
+      values.includes(role) ? values.filter((item) => item !== role) : [...values, role]
+    );
+  };
+
+  const handleAuthError = (caught: unknown) => {
+    if (caught instanceof ApiAuthError) {
+      setError(caught.message);
+      setStatus("Needs attention");
+      return true;
+    }
+    return false;
   };
 
   const ingestDocument = async () => {
@@ -79,11 +130,10 @@ function App() {
     setError("");
     setStatus("Ingesting");
     try {
-      const response = await fetch("/api/v1/documents/ingest", {
+      const response = await apiFetch("/api/v1/documents/ingest", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          tenant_id: tenantId,
           local_path: localPath,
           visibility,
           allowed_role_names: visibility === "role" ? allowedRoles : [],
@@ -97,8 +147,10 @@ function App() {
       setIngests((items) => [payload, ...items]);
       setStatus("Indexed");
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "Document ingest failed");
-      setStatus("Needs attention");
+      if (!handleAuthError(caught)) {
+        setError(caught instanceof Error ? caught.message : "Document ingest failed");
+        setStatus("Needs attention");
+      }
     } finally {
       setBusy(false);
     }
@@ -113,7 +165,6 @@ function App() {
     setStatus("Uploading");
     try {
       const form = new FormData();
-      form.append("tenant_id", tenantId);
       form.append("visibility", visibility);
       if (visibility === "role") {
         allowedRoles.forEach((role) => form.append("allowed_role_names", role));
@@ -121,7 +172,7 @@ function App() {
       form.append("force_ocr", String(forceOcr));
       form.append("file", selectedFile);
 
-      const response = await fetch("/api/v1/documents/upload", {
+      const response = await apiFetch("/api/v1/documents/upload", {
         method: "POST",
         body: form
       });
@@ -132,8 +183,10 @@ function App() {
       setIngests((items) => [payload, ...items]);
       setStatus("Indexed");
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "Document upload failed");
-      setStatus("Needs attention");
+      if (!handleAuthError(caught)) {
+        setError(caught instanceof Error ? caught.message : "Document upload failed");
+        setStatus("Needs attention");
+      }
     } finally {
       setBusy(false);
     }
@@ -144,13 +197,11 @@ function App() {
     setError("");
     setStatus("Retrieving");
     try {
-      const response = await fetch("/api/v1/query", {
+      const response = await apiFetch("/api/v1/query", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          tenant_id: tenantId,
           query,
-          role_names: activeRoles,
           top_k: topK
         })
       });
@@ -161,8 +212,10 @@ function App() {
       setResult(payload);
       setStatus(payload.cached ? "Cache hit" : "Answered");
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "Query failed");
-      setStatus("Needs attention");
+      if (!handleAuthError(caught)) {
+        setError(caught instanceof Error ? caught.message : "Query failed");
+        setStatus("Needs attention");
+      }
     } finally {
       setBusy(false);
     }
@@ -197,6 +250,9 @@ function App() {
             <Gauge size={18} /> Metrics
           </a>
         </nav>
+        <button className="secondary-action logout-button" type="button" onClick={logout}>
+          <LogOut size={16} /> Sign out
+        </button>
         <div className="sidebar-footer">
           <Lock size={16} />
           <span>RBAC enforced before retrieval</span>
@@ -247,10 +303,6 @@ function App() {
             </div>
 
             <label className="field">
-              <span>Tenant ID</span>
-              <input value={tenantId} onChange={(event) => setTenantId(event.target.value)} />
-            </label>
-            <label className="field">
               <span>Local document path</span>
               <input
                 placeholder="/data/ingest/policy.docx"
@@ -294,7 +346,7 @@ function App() {
               <RolePicker
                 title="Allowed roles"
                 values={allowedRoles}
-                onToggle={(role) => toggleRole(role, "allowed")}
+                onToggle={toggleAllowedRole}
               />
             ) : null}
 
@@ -349,11 +401,10 @@ function App() {
               <MessageSquareText size={20} />
             </div>
 
-            <RolePicker
-              title="Current member roles"
-              values={activeRoles}
-              onToggle={(role) => toggleRole(role, "active")}
-            />
+            <div className="status-list">
+              <StatusItem label="Asking as" value={user?.preferred_username ?? "unknown"} />
+              <StatusItem label="Your roles" value={memberRoles.join(", ") || "none"} />
+            </div>
 
             <label className="field">
               <span>Top K contexts: {topK}</span>
@@ -392,7 +443,7 @@ function App() {
               </div>
               <p>
                 {result?.answer ??
-                  "Ingest a document, choose the current member roles, then ask a question."}
+                  "Ingest a document, then ask a question. Your roles decide what you can see."}
               </p>
             </article>
           </section>
@@ -434,11 +485,11 @@ function App() {
               <UserRoundCheck size={20} />
             </div>
             <div className="status-list">
-              <StatusItem label="Identity provider" value="Keycloak OIDC/JWT target" />
+              <StatusItem label="Identity provider" value="Keycloak OIDC/JWT" />
+              <StatusItem label="Signed in as" value={user?.preferred_username ?? "unknown"} />
               <StatusItem label="Tenant isolation" value={tenantId.slice(0, 8) + "..."} />
-              <StatusItem label="Member roles" value={activeRoles.join(", ") || "none"} />
-              <StatusItem label="Chunk authorization" value={`${visibility} visibility`} />
-              <StatusItem label="Enforcement point" value="before retrieval ranking" />
+              <StatusItem label="Member roles" value={memberRoles.join(", ") || "none"} />
+              <StatusItem label="Enforcement point" value="server-side, before retrieval ranking" />
             </div>
           </section>
 
@@ -451,8 +502,8 @@ function App() {
               <Clock3 size={20} />
             </div>
             <div className="status-list">
-              <StatusItem label="Session mode" value="POC local session" />
-              <StatusItem label="Token status" value="JWT validation hook ready" />
+              <StatusItem label="Session mode" value="Stateless JWT (Keycloak-issued)" />
+              <StatusItem label="Token status" value="Valid -- silently refreshed" />
               <StatusItem label="Cache scope" value={result?.cached ? "Redis hit" : "Redis ready"} />
               <StatusItem label="Last workflow status" value={status} />
               <StatusItem label="Audit trail" value="document.ingested events in Postgres" />
@@ -532,8 +583,28 @@ function RolePicker({
   );
 }
 
+function App() {
+  const { status } = useAuth();
+
+  if (status === "loading") {
+    return (
+      <main className="app-shell login-shell">
+        <Loader2 className="spin" size={32} />
+      </main>
+    );
+  }
+
+  if (status === "unauthenticated") {
+    return <LoginScreen />;
+  }
+
+  return <AuthenticatedApp />;
+}
+
 ReactDOM.createRoot(document.getElementById("root")!).render(
   <React.StrictMode>
-    <App />
+    <AuthProvider>
+      <App />
+    </AuthProvider>
   </React.StrictMode>
 );

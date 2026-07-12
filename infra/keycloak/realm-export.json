@@ -1,0 +1,137 @@
+{
+  "realm": "rag",
+  "enabled": true,
+  "sslRequired": "none",
+  "registrationAllowed": false,
+  "roles": {
+    "realm": [
+      { "name": "admin", "description": "Tenant administrator" },
+      { "name": "finance", "description": "Finance team member" },
+      { "name": "engineering", "description": "Engineering team member" },
+      { "name": "legal", "description": "Legal team member" },
+      { "name": "support", "description": "Support team member" }
+    ]
+  },
+  "clients": [
+    {
+      "clientId": "rag-api",
+      "name": "RAG API (resource server)",
+      "protocol": "openid-connect",
+      "bearerOnly": true,
+      "publicClient": false,
+      "standardFlowEnabled": false,
+      "directAccessGrantsEnabled": false,
+      "serviceAccountsEnabled": false
+    },
+    {
+      "clientId": "rag-frontend",
+      "name": "RAG SaaS Console (SPA)",
+      "protocol": "openid-connect",
+      "publicClient": true,
+      "standardFlowEnabled": true,
+      "implicitFlowEnabled": false,
+      "directAccessGrantsEnabled": false,
+      "serviceAccountsEnabled": false,
+      "redirectUris": [
+        "http://localhost:5173/*",
+        "http://127.0.0.1:5173/*"
+      ],
+      "webOrigins": [
+        "http://localhost:5173",
+        "http://127.0.0.1:5173"
+      ],
+      "attributes": {
+        "pkce.code.challenge.method": "S256"
+      },
+      "protocolMappers": [
+        {
+          "name": "audience-rag-api",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-audience-mapper",
+          "consentRequired": false,
+          "config": {
+            "included.client.audience": "rag-api",
+            "id.token.claim": "false",
+            "access.token.claim": "true"
+          }
+        },
+        {
+          "name": "tenant-id",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-usermodel-attribute-mapper",
+          "consentRequired": false,
+          "config": {
+            "user.attribute": "tenant_id",
+            "claim.name": "tenant_id",
+            "jsonType.label": "String",
+            "id.token.claim": "true",
+            "access.token.claim": "true",
+            "userinfo.token.claim": "true"
+          }
+        }
+      ]
+    }
+  ],
+  "users": [
+    {
+      "id": "10000000-0000-4000-8000-000000000001",
+      "username": "admin-demo",
+      "email": "admin-demo@example.test",
+      "enabled": true,
+      "emailVerified": true,
+      "firstName": "Alex",
+      "lastName": "Admin",
+      "attributes": { "tenant_id": ["00000000-0000-4000-8000-000000000001"] },
+      "credentials": [{ "type": "password", "value": "Passw0rd!", "temporary": false }],
+      "realmRoles": ["admin"]
+    },
+    {
+      "id": "10000000-0000-4000-8000-000000000002",
+      "username": "finance-demo",
+      "email": "finance-demo@example.test",
+      "enabled": true,
+      "emailVerified": true,
+      "firstName": "Farah",
+      "lastName": "Finance",
+      "attributes": { "tenant_id": ["00000000-0000-4000-8000-000000000001"] },
+      "credentials": [{ "type": "password", "value": "Passw0rd!", "temporary": false }],
+      "realmRoles": ["finance"]
+    },
+    {
+      "id": "10000000-0000-4000-8000-000000000003",
+      "username": "engineer-demo",
+      "email": "engineer-demo@example.test",
+      "enabled": true,
+      "emailVerified": true,
+      "firstName": "Evan",
+      "lastName": "Engineer",
+      "attributes": { "tenant_id": ["00000000-0000-4000-8000-000000000001"] },
+      "credentials": [{ "type": "password", "value": "Passw0rd!", "temporary": false }],
+      "realmRoles": ["engineering"]
+    },
+    {
+      "id": "10000000-0000-4000-8000-000000000004",
+      "username": "legal-demo",
+      "email": "legal-demo@example.test",
+      "enabled": true,
+      "emailVerified": true,
+      "firstName": "Lena",
+      "lastName": "Legal",
+      "attributes": { "tenant_id": ["00000000-0000-4000-8000-000000000001"] },
+      "credentials": [{ "type": "password", "value": "Passw0rd!", "temporary": false }],
+      "realmRoles": ["legal"]
+    },
+    {
+      "id": "10000000-0000-4000-8000-000000000005",
+      "username": "support-demo",
+      "email": "support-demo@example.test",
+      "enabled": true,
+      "emailVerified": true,
+      "firstName": "Sam",
+      "lastName": "Support",
+      "attributes": { "tenant_id": ["00000000-0000-4000-8000-000000000001"] },
+      "credentials": [{ "type": "password", "value": "Passw0rd!", "temporary": false }],
+      "realmRoles": ["support"]
+    }
+  ]
+}

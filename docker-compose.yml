@@ -10,8 +10,10 @@ services:
       REDIS_URL: redis://redis:6379/0
       MINIO_ENDPOINT: http://minio:9000
       QDRANT_URL: http://qdrant:6333
-      KEYCLOAK_ISSUER: http://keycloak:8080/realms/rag
+      KEYCLOAK_ISSUER: http://localhost:8080/realms/rag
+      KEYCLOAK_INTERNAL_ISSUER: http://keycloak:8080/realms/rag
       KEYCLOAK_AUDIENCE: rag-api
+      KEYCLOAK_CLIENT_ID: rag-frontend
       UPLOAD_DIR: /data/uploads
       ENABLE_DB_PERSISTENCE: "true"
     ports:
@@ -93,7 +95,7 @@ services:
 
   keycloak:
     image: quay.io/keycloak/keycloak:25.0
-    command: start-dev
+    command: start-dev --import-realm
     environment:
       KEYCLOAK_ADMIN: admin
       KEYCLOAK_ADMIN_PASSWORD: admin
@@ -101,6 +103,7 @@ services:
       - "8080:8080"
     volumes:
       - keycloak_data:/opt/keycloak/data
+      - ./infra/keycloak/realm-export.json:/opt/keycloak/data/import/realm-export.json:ro
 
 volumes:
   postgres_data:

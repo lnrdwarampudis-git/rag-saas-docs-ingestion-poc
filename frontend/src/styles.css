@@ -116,6 +116,32 @@ button {
   font-size: 13px;
 }
 
+.login-shell {
+  display: grid;
+  place-items: center;
+  grid-template-columns: 1fr;
+  background: #163a31;
+}
+
+.login-card {
+  display: grid;
+  gap: 18px;
+  max-width: 420px;
+  padding: 32px;
+  text-align: left;
+}
+
+.login-card p {
+  margin: 0;
+  color: #4a5a54;
+  line-height: 1.5;
+}
+
+.logout-button {
+  width: 100%;
+  justify-content: center;
+}
+
 .workspace {
   display: grid;
   gap: 20px;

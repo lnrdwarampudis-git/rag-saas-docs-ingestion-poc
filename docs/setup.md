@@ -68,6 +68,29 @@ The database seed creates a demo tenant used by the UI:
 00000000-0000-4000-8000-000000000001
 ```
 
+## Signing In (Keycloak)
+
+The Keycloak container auto-imports `infra/keycloak/realm-export.json` on first
+start, which creates the `rag` realm, the `rag-frontend` (public, PKCE) and
+`rag-api` (bearer-only) clients, and five demo users -- one per role, all in
+the demo tenant above, all with password `Passw0rd!`:
+
+| Username         | Role        |
+| ----------------- | ----------- |
+| `admin-demo`       | admin       |
+| `finance-demo`     | finance     |
+| `engineer-demo`    | engineering |
+| `legal-demo`       | legal       |
+| `support-demo`     | support     |
+
+Open `http://127.0.0.1:5173`, click **Sign in with Keycloak**, and log in as
+one of the users above. The backend resolves your tenant and roles from
+Postgres (`app_users` / `roles` / `user_roles`, seeded from the same realm
+export); there is no manual tenant ID or role picker in the UI anymore.
+
+To manage users/roles directly, use the Keycloak admin console at
+`http://127.0.0.1:8080` (`admin` / `admin`), realm `rag`.
+
 ## Upload Documents
 
 Preferred local workflow:

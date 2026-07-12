@@ -21,11 +21,10 @@ Open:
 - UI: `http://127.0.0.1:5173`
 - Backend health: `http://127.0.0.1:8000/health`
 
-Use the default tenant ID in the UI:
-
-```text
-00000000-0000-4000-8000-000000000001
-```
+Sign in with a demo user (all use password `Passw0rd!`): `admin-demo`,
+`finance-demo`, `engineer-demo`, `legal-demo`, or `support-demo`. Tenant and
+roles come from Keycloak/Postgres, not a manual UI field. See
+[Setup Guide](docs/setup.md#signing-in-keycloak) for details.
 
 For full setup, execution, test, and GitHub export instructions, see:
 
@@ -53,6 +52,8 @@ For full setup, execution, test, and GitHub export instructions, see:
 - Week 4 backend/frontend Dockerfiles and Compose wiring
 - API E2E and frontend Playwright smoke tests
 - Visible A&A and session management panels for the POC workflow
+- Keycloak OIDC login (Authorization Code + PKCE), JWT validation middleware, and stateless-JWT session management with silent refresh
+- Server-side RBAC resolved from Postgres (`app_users`/`roles`/`user_roles`), with tenant_id/roles always taken from the validated token -- never from request bodies
 - PDF, Word DOCX, Excel XLSX, PowerPoint PPTX, text, CSV/TSV, markdown, and image intake
 
 ## Recommended Week 1 Commands

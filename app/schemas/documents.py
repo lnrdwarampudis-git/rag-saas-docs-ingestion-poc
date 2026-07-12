@@ -4,7 +4,6 @@ from pydantic import BaseModel, Field
 
 
 class IngestRequest(BaseModel):
-    tenant_id: UUID
     local_path: str
     visibility: str = Field(default="tenant", pattern="^(private|tenant|role)$")
     allowed_role_names: list[str] = Field(default_factory=list)

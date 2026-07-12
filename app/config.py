@@ -12,6 +12,9 @@ class Settings(BaseSettings):
     qdrant_url: str = "http://localhost:6333"
     keycloak_issuer: str = "http://localhost:8080/realms/rag"
     keycloak_audience: str = "rag-api"
+    keycloak_client_id: str = "rag-frontend"
+    keycloak_internal_issuer: str = "http://localhost:8080/realms/rag"
+    keycloak_jwks_cache_seconds: int = 300
     chunk_target_tokens: int = 750
     chunk_overlap_tokens: int = 120
     upload_dir: str = "/tmp/rag-uploads"

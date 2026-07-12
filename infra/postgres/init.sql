@@ -117,3 +117,35 @@ VALUES ('00000000-0000-4000-8000-000000000001', 'Demo Tenant', 'demo')
 ON CONFLICT (slug) DO UPDATE SET
   id = EXCLUDED.id,
   name = EXCLUDED.name;
+
+INSERT INTO roles (tenant_id, name, description) VALUES
+  ('00000000-0000-4000-8000-000000000001', 'admin', 'Tenant administrator'),
+  ('00000000-0000-4000-8000-000000000001', 'finance', 'Finance team member'),
+  ('00000000-0000-4000-8000-000000000001', 'engineering', 'Engineering team member'),
+  ('00000000-0000-4000-8000-000000000001', 'legal', 'Legal team member'),
+  ('00000000-0000-4000-8000-000000000001', 'support', 'Support team member')
+ON CONFLICT (tenant_id, name) DO NOTHING;
+
+-- Demo users, keyed by the fixed Keycloak user "id" values from
+-- infra/keycloak/realm-export.json, so a login through Keycloak resolves
+-- straight to the matching tenant/role rows below.
+INSERT INTO app_users (id, tenant_id, keycloak_subject, email, display_name) VALUES
+  ('20000000-0000-4000-8000-000000000001', '00000000-0000-4000-8000-000000000001', '10000000-0000-4000-8000-000000000001', 'admin-demo@example.test', 'Alex Admin'),
+  ('20000000-0000-4000-8000-000000000002', '00000000-0000-4000-8000-000000000001', '10000000-0000-4000-8000-000000000002', 'finance-demo@example.test', 'Farah Finance'),
+  ('20000000-0000-4000-8000-000000000003', '00000000-0000-4000-8000-000000000001', '10000000-0000-4000-8000-000000000003', 'engineer-demo@example.test', 'Evan Engineer'),
+  ('20000000-0000-4000-8000-000000000004', '00000000-0000-4000-8000-000000000001', '10000000-0000-4000-8000-000000000004', 'legal-demo@example.test', 'Lena Legal'),
+  ('20000000-0000-4000-8000-000000000005', '00000000-0000-4000-8000-000000000001', '10000000-0000-4000-8000-000000000005', 'support-demo@example.test', 'Sam Support')
+ON CONFLICT (tenant_id, keycloak_subject) DO NOTHING;
+
+INSERT INTO user_roles (user_id, role_id)
+SELECT u.id, r.id
+FROM app_users u
+JOIN roles r ON r.tenant_id = u.tenant_id
+WHERE (u.display_name, r.name) IN (
+  ('Alex Admin', 'admin'),
+  ('Farah Finance', 'finance'),
+  ('Evan Engineer', 'engineering'),
+  ('Lena Legal', 'legal'),
+  ('Sam Support', 'support')
+)
+ON CONFLICT (user_id, role_id) DO NOTHING;

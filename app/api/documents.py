@@ -3,13 +3,16 @@ import shutil
 from urllib.parse import unquote, urlparse
 from uuid import UUID, uuid4
 
-from fastapi import APIRouter, File, Form, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from pydantic import BaseModel, Field
 
+from app.auth.dependencies import get_current_user
+from app.auth.models import AuthenticatedUser
 from app.config import get_settings
 from app.rag.chunking import ChunkingConfig, chunk_text
 from app.rag.parsers import extract_document_text
 from app.rag.persistence import persist_document_ingestion
+from app.rag.retrieval import is_chunk_authorized
 from app.rag.store import document_store
 from app.schemas.documents import ChunkDTO, DocumentIngestResult, IngestRequest
 
@@ -21,14 +24,18 @@ class DocumentChunksResponse(BaseModel):
 
 
 @router.post("/ingest", response_model=DocumentIngestResult)
-def ingest_document(payload: IngestRequest) -> DocumentIngestResult:
+def ingest_document(
+    payload: IngestRequest,
+    current_user: AuthenticatedUser = Depends(get_current_user),
+) -> DocumentIngestResult:
     path = _resolve_ingest_path(payload.local_path)
     if not path.exists() or not path.is_file():
         raise HTTPException(status_code=404, detail=f"File not found: {payload.local_path}")
 
     return _process_document_path(
         path=path,
-        tenant_id=payload.tenant_id,
+        tenant_id=current_user.tenant_id,
+        uploaded_by=current_user.keycloak_subject,
         visibility=payload.visibility,
         allowed_role_names=payload.allowed_role_names,
         force_ocr=payload.force_ocr,
@@ -37,11 +44,11 @@ def ingest_document(payload: IngestRequest) -> DocumentIngestResult:
 
 @router.post("/upload", response_model=DocumentIngestResult)
 def upload_document(
-    tenant_id: UUID = Form(...),
     visibility: str = Form("tenant"),
     allowed_role_names: list[str] = Form(default=[]),
     force_ocr: bool = Form(False),
     file: UploadFile = File(...),
+    current_user: AuthenticatedUser = Depends(get_current_user),
 ) -> DocumentIngestResult:
     if visibility not in {"private", "tenant", "role"}:
         raise HTTPException(status_code=422, detail="visibility must be private, tenant, or role")
@@ -52,7 +59,8 @@ def upload_document(
     return _process_document_path(
         path=path,
         file_name=original_file_name,
-        tenant_id=tenant_id,
+        tenant_id=current_user.tenant_id,
+        uploaded_by=current_user.keycloak_subject,
         visibility=visibility,
         allowed_role_names=allowed_role_names if visibility == "role" else [],
         force_ocr=force_ocr,
@@ -60,13 +68,32 @@ def upload_document(
 
 
 @router.get("/{document_id}/chunks", response_model=DocumentChunksResponse)
-def get_document_chunks(document_id: UUID) -> DocumentChunksResponse:
-    return DocumentChunksResponse(document_id=document_id, chunks=document_store.get_chunks(document_id))
+def get_document_chunks(
+    document_id: UUID,
+    current_user: AuthenticatedUser = Depends(get_current_user),
+) -> DocumentChunksResponse:
+    all_chunks = document_store.get_chunks(document_id)
+    authorized_chunks = [
+        chunk
+        for chunk in all_chunks
+        if is_chunk_authorized(
+            chunk,
+            str(current_user.tenant_id),
+            current_user.roles,
+            current_user.keycloak_subject,
+        )
+    ]
+    # Don't distinguish "doesn't exist" from "not authorized" -- both 404, so
+    # callers can't probe for the existence of documents in other tenants.
+    if all_chunks and not authorized_chunks:
+        raise HTTPException(status_code=404, detail="Document not found")
+    return DocumentChunksResponse(document_id=document_id, chunks=authorized_chunks)
 
 
 def _process_document_path(
     path: Path,
     tenant_id: UUID,
+    uploaded_by: str,
     visibility: str,
     allowed_role_names: list[str],
     force_ocr: bool,
@@ -88,6 +115,7 @@ def _process_document_path(
             "file_name": file_name or path.name,
             "visibility": visibility,
             "allowed_role_names": allowed_role_names,
+            "uploaded_by": uploaded_by,
             "ocr_used": extraction.ocr_used,
             "mime_type": extraction.mime_type,
         },

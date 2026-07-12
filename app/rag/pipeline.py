@@ -34,6 +34,7 @@ class RagPipeline:
         tenant_id: str,
         role_names: list[str],
         top_k: int = 5,
+        requester_subject: str | None = None,
     ) -> RagAnswer:
         started = time.perf_counter()
         key = cache_key(
@@ -41,6 +42,7 @@ class RagPipeline:
                 "query": query,
                 "tenant_id": tenant_id,
                 "role_names": sorted(role_names),
+                "requester_subject": requester_subject,
                 "top_k": top_k,
             }
         )
@@ -53,7 +55,13 @@ class RagPipeline:
         chunks = _dedupe_chunks([*document_store.all_chunks(), *load_persisted_chunks()])
         results = self.retriever.retrieve(
             chunks,
-            RetrievalRequest(query=query, tenant_id=tenant_id, role_names=role_names, top_k=top_k),
+            RetrievalRequest(
+                query=query,
+                tenant_id=tenant_id,
+                role_names=role_names,
+                requester_subject=requester_subject,
+                top_k=top_k,
+            ),
         )
         retrieval_ms = (time.perf_counter() - retrieval_started) * 1000
         answer = _compose_precise_answer(query, results)
