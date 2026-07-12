@@ -82,9 +82,10 @@ flowchart TD
   redis -- yes --> answer["Return Cached Answer"]
   redis -- no --> chunks["Load Candidate Chunks"]
   chunks --> filter["RBAC Chunk Filter<br/>tenant, role, private owner"]
-  filter --> rank["Hybrid Retrieval + Ranking"]
+  filter --> embed["Embedding Provider<br/>local hashing default"]
+  embed --> rank["Hybrid Retrieval + Ranking"]
   rank --> threshold["Precision Thresholds<br/>min score + keyword overlap"]
-  threshold --> compose["Local Answer Composer<br/>extractive now, Ollama/vLLM later"]
+  threshold --> compose["Answer Provider<br/>extractive default"]
   compose --> saveCache["Store Redis Answer"]
   saveCache --> answer
 ```
@@ -96,7 +97,7 @@ flowchart TD
   dataset["data/eval/retrieval_cases.json"] --> runner["python -m app.eval.run"]
   runner --> retriever["Hybrid Retriever"]
   retriever --> citations["Retrieved document ids + scores"]
-  runner --> answer["Local Answer Composer"]
+  runner --> answer["Extractive Answer Generator"]
   answer --> relevance["Expected answer term checks"]
   citations --> precision["Context Precision"]
   citations --> recall["Context Recall"]
@@ -109,13 +110,19 @@ flowchart TD
 
 ```mermaid
 flowchart LR
-  config["LLM_PROVIDER"] --> local{"local"}
-  local --> extractive["Current extractive composer"]
-  local --> ollama["Future Ollama local LLM"]
-  local --> vllm["Future vLLM local serving"]
-  config --> public{"public provider later"}
+  config["Settings"] --> embeddingProvider["EMBEDDING_PROVIDER"]
+  config --> llmProvider["LLM_PROVIDER"]
+  embeddingProvider --> localEmbedding{"local"}
+  localEmbedding --> hashing["Current hashing embeddings"]
+  localEmbedding --> futureEmbedding["Future Ollama/vLLM or BGE/E5 adapter"]
+  llmProvider --> localLlm{"local"}
+  localLlm --> extractive["Current extractive generator"]
+  localLlm --> futureLlm["Future Ollama/vLLM generator"]
+  llmProvider --> public{"public provider later"}
   public --> gate["PUBLIC_LLM_ENABLED=true required"]
   gate --> tokenApi["Token/API-based LLM provider"]
+  hashing --> cacheKey["Provider/runtime/model names<br/>included in cache key + metrics"]
+  extractive --> cacheKey
 ```
 
 ## RBAC Visibility Rules

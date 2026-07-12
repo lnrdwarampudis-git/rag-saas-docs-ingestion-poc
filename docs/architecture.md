@@ -49,9 +49,10 @@ flowchart TD
   subgraph retrieval["RAG Query Pipeline"]
     query["Authorized Query"]
     cache["Redis Query Cache"]
+    provider["Model Provider<br/>embedding + answer interfaces"]
     retriever["Hybrid Retriever"]
     ranker["Precision Ranking"]
-    answer["Local Answer Composer<br/>extractive now, Ollama/vLLM later"]
+    answer["Answer Generator<br/>extractive default"]
     eval["Offline Eval Runner<br/>precision, recall, relevance"]
   end
 
@@ -104,10 +105,12 @@ flowchart TD
 
   fastapi --> query --> cache
   cache -- hit --> answer
-  cache -- miss --> retriever
+  cache -- miss --> provider
+  provider --> retriever
   retriever --> postgres
   retriever --> qdrant
   retriever --> authz --> ranker --> answer --> cache
+  provider --> answer
   eval -. quality gate .-> retriever
   eval -. quality gate .-> answer
 
@@ -124,7 +127,7 @@ flowchart TD
   classDef ops fill:#f5f3ff,stroke:#7c3aed,color:#111827;
 
   class browser,ui,loginScreen,aaScreen,sessionScreen,formatsScreen,docInventory,jobStatus client;
-  class nginx,fastapi,authApi,docMgmtApi,jobApi,upload,queue,worker,parser,ocr,chunker,embed,query,cache,retriever,ranker,answer,eval service;
+  class nginx,fastapi,authApi,docMgmtApi,jobApi,upload,queue,worker,parser,ocr,chunker,embed,query,cache,provider,retriever,ranker,answer,eval service;
   class postgres,qdrant,minio data;
   class keycloak,demoUsers,jwtValidate,rbacResolve,authz security;
   class docker,tests ops;
@@ -164,7 +167,7 @@ sequenceDiagram
 7. Metadata and chunks are persisted in PostgreSQL. Qdrant is included as the vector search option for scale-oriented retrieval.
 8. The Document Management panel calls list/detail APIs to show only authorized document metadata and chunk previews for the caller's tenant/roles. The UI also polls processing job status until queued uploads complete or fail.
 9. Users ask questions through the query panel; `tenant_id` and roles again come from the resolved identity.
-10. Redis is checked for cached answers (the cache key includes the requester's identity so private-document results never leak across users). On cache miss, retrieval runs against authorized chunks, applies RBAC filters (tenant match, then tenant/role/private-owner visibility), ranks contexts, and composes an answer with citations and latency metrics.
+10. Redis is checked for cached answers (the cache key includes the requester's identity plus provider/runtime/model names so private-document results and model changes never leak across users or runtimes). On cache miss, the model provider supplies the embedding model for retrieval, authorized chunks are filtered by RBAC (tenant match, then tenant/role/private-owner visibility), contexts are ranked, and the provider's answer generator composes an answer with citations, model metadata, and latency metrics.
 11. Access tokens are short-lived and stateless (no server-side session store); the frontend silently refreshes them in the background via Keycloak's refresh-token grant and clears its session if the refresh fails, dropping the user back to the Login Screen.
 
 ## Component Responsibilities

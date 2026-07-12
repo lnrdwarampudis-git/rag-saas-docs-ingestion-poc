@@ -32,6 +32,23 @@ Docker mounts that host folder into the backend as:
 
 With both values set, a path such as `file:///Users/your-name/Downloads/book.pdf` is mapped to `/host-downloads/book.pdf` inside the backend container.
 
+The default model settings are local and deterministic:
+
+```text
+EMBEDDING_PROVIDER=local
+LOCAL_EMBEDDING_RUNTIME=hashing
+LOCAL_EMBEDDING_MODEL_NAME=hashing-384
+EMBEDDING_DIMENSIONS=384
+LOCAL_EMBEDDING_BASE_URL=http://localhost:11434
+LLM_PROVIDER=local
+LOCAL_LLM_RUNTIME=extractive
+LOCAL_LLM_MODEL_NAME=extractive
+LOCAL_LLM_BASE_URL=http://localhost:11434
+PUBLIC_LLM_ENABLED=false
+```
+
+No model download or public LLM token is required for the default stack. See [Model Providers](model-providers.md) before changing these values; Ollama/vLLM values are reserved until their adapters are implemented.
+
 ## Start Full Stack
 
 ```bash

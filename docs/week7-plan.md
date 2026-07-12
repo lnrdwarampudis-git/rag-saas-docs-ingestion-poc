@@ -19,9 +19,15 @@ Make RAG answer quality measurable and improve precision before adding heavier l
    - Citations now include keyword, vector, and early-term score components for debugging.
 
 4. Local-model-first strategy
-   - Added config flags for `LLM_PROVIDER`, `LOCAL_LLM_RUNTIME`, and `PUBLIC_LLM_ENABLED`.
+   - Added config flags for local answer generation, local embeddings, model names, local base URLs, and `PUBLIC_LLM_ENABLED`.
    - Default remains local/offline and deterministic.
    - Public token-based LLMs are documented as a later optional provider path.
+
+5. Local model provider abstraction
+   - Added embedding and answer-generation interfaces in `app/rag/model_providers.py`.
+   - Default provider uses local hashing embeddings and extractive answer generation.
+   - Query metrics and cache keys include provider/runtime/model names to avoid stale answer reuse across provider changes.
+   - Added [Model Providers](model-providers.md) as the configuration and adapter contract.
 
 ## Exit Criteria
 
@@ -34,7 +40,7 @@ Make RAG answer quality measurable and improve precision before adding heavier l
 
 - Add more evaluation cases from uploaded PDFs, DOCX, XLSX, and PPTX files.
 - Persist eval run reports to `outputs/` or Postgres for trend tracking.
+- Implement the reserved Ollama/vLLM adapter paths behind the existing provider interfaces.
 - Add a local open-source embedding service, such as BGE, E5, or Mixedbread.
 - Add a local reranker, such as BGE reranker.
-- Add Ollama or vLLM for local answer generation.
 - Add optional public token-based LLM provider adapters only after local/provider abstraction is stable.

@@ -30,6 +30,43 @@ npm install
 npm run build
 ```
 
+## Model Provider Config Check
+
+The default stack uses deterministic local providers, so this should work without model downloads or public API tokens:
+
+```bash
+python3 -m app.eval.run
+```
+
+Expected result:
+
+```text
+Cases: 3 passed=3 failed=0
+```
+
+Confirm Docker Compose has the same model settings:
+
+```bash
+docker compose config
+```
+
+The `backend` and `worker` environments should include:
+
+```text
+EMBEDDING_PROVIDER=local
+LOCAL_EMBEDDING_RUNTIME=hashing
+LOCAL_EMBEDDING_MODEL_NAME=hashing-384
+EMBEDDING_DIMENSIONS=384
+LOCAL_EMBEDDING_BASE_URL=http://localhost:11434
+LLM_PROVIDER=local
+LOCAL_LLM_RUNTIME=extractive
+LOCAL_LLM_MODEL_NAME=extractive
+LOCAL_LLM_BASE_URL=http://localhost:11434
+PUBLIC_LLM_ENABLED=false
+```
+
+See [Model Providers](model-providers.md) for the full setting list, cache behavior, and adapter contract.
+
 ## Frontend E2E Smoke Test
 
 ```bash
@@ -174,6 +211,7 @@ limit 10;
 - If upload returns `413 Request Entity Too Large`, confirm the frontend nginx config includes `client_max_body_size 2g` and rebuild the frontend.
 - If any `/api/v1/*` call returns `401 Unauthorized`, your token is missing, expired, or was issued before `docker compose down -v` reseeded a new realm/tenant -- sign out and back in (or re-fetch a token per the smoke test above).
 - If queries return no context, confirm the uploaded chunks are in `document_chunks` and that you're signed in as a user in the same tenant that uploaded them (the default demo tenant is `00000000-0000-4000-8000-000000000001`).
+- If query construction fails with `ModelProviderConfigurationError`, check `.env` for unsupported provider values. Today the implemented runtimes are `EMBEDDING_PROVIDER=local`, `LOCAL_EMBEDDING_RUNTIME=hashing`, `LLM_PROVIDER=local`, and `LOCAL_LLM_RUNTIME=extractive`; Ollama/vLLM names are reserved until adapters are added.
 - If Keycloak login loops back to the sign-in page or 500s on `/protocol/openid-connect/certs`, rebuild the backend (`docker compose up -d --build backend`) -- an older backend build may not skip Keycloak's non-signing (`use=enc`) JWKS key correctly.
 - If demo users/roles are missing after applying changes, you likely reused an old Postgres/Keycloak volume: run `docker compose down -v` (note the `-v`) before `docker compose up -d --build` so `init.sql` and the realm import both re-run.
 - If DBeaver cannot connect, use port `55432`, not `5432`, when a local Postgres already uses `5432`.
