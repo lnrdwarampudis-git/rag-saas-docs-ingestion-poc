@@ -171,6 +171,14 @@ type AnalyticsReport = {
     context_recall: number;
     answer_relevance: number;
   };
+  recent_events: Array<{
+    action: string;
+    resource_type: string;
+    resource_id: string | null;
+    actor: string | null;
+    metadata: Record<string, unknown>;
+    created_at: string;
+  }>;
 };
 
 const DEFAULT_INGEST_PATH = "/data/ingest/sample.docx";
@@ -1150,8 +1158,33 @@ function AnalyticsPanel({
           ))}
         </div>
       ) : null}
+
+      <div className="event-list" aria-label="Recent operations">
+        {report?.recent_events.length ? (
+          report.recent_events.map((event) => (
+            <article className="event-item" key={`${event.action}-${event.resource_id}-${event.created_at}`}>
+              <div>
+                <strong>{event.action}</strong>
+                <span>{auditEventSummary(event)}</span>
+              </div>
+              <span>{formatDate(event.created_at)}</span>
+            </article>
+          ))
+        ) : (
+          <div className="empty-state compact-empty">
+            {report ? "No recent operations." : "Operations loading."}
+          </div>
+        )}
+      </div>
     </section>
   );
+}
+
+function auditEventSummary(event: AnalyticsReport["recent_events"][number]) {
+  const fileName = typeof event.metadata.file_name === "string" ? event.metadata.file_name : "";
+  const actor = event.actor ?? "system";
+  const resource = fileName || event.resource_type;
+  return `${resource} / ${actor}`;
 }
 
 function formatDate(value?: string | null) {

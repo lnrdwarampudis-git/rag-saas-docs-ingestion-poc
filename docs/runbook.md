@@ -48,7 +48,8 @@ curl -H "Authorization: Bearer $TOKEN" http://127.0.0.1:8000/api/v1/analytics
 
 When Postgres persistence is enabled, query volume, cache hits, and latency come
 from persisted `query_events`; local non-persistent tests fall back to the
-in-memory query event buffer.
+in-memory query event buffer. The same response includes recent tenant audit
+events from `audit_logs` so the UI can show an operations history.
 
 Expected response sections:
 
@@ -385,7 +386,7 @@ curl -H "Authorization: Bearer $TOKEN" http://127.0.0.1:8000/api/v1/analytics
 6. Use Document Management to refresh the authorized inventory, open the uploaded document, and confirm chunk previews are visible.
 7. Ask a question in the Query panel and confirm citations plus run details appear: cache outcome, contexts used, top score, retrieval/total latency, embedding runtime, answer runtime, and retrieval thresholds.
 8. Confirm the Evaluation panel shows the retrieval quality gate with all cases passing and context precision, context recall, and answer relevance averages.
-9. Confirm the Analytics panel shows document totals, job queue/failure state, query cache hit rate, average latency, and evaluation pass rate.
+9. Confirm the Analytics panel shows document totals, job queue/failure state, query cache hit rate, average latency, recent operations, and evaluation pass rate.
 
 If the query API returns `503 Service Unavailable`, read the `detail` field. Ollama provider errors include the failed operation, configured model, endpoint, and whether the failure was a timeout, HTTP status, invalid JSON response, or transport error.
 

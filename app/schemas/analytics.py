@@ -37,9 +37,18 @@ class EvaluationAnalytics(BaseModel):
     answer_relevance: float = 0.0
 
 
+class AuditEvent(BaseModel):
+    action: str
+    resource_type: str
+    resource_id: str | None = None
+    actor: str | None = None
+    metadata: dict = Field(default_factory=dict)
+    created_at: str
+
+
 class AnalyticsResponse(BaseModel):
     documents: DocumentAnalytics
     jobs: JobAnalytics
     queries: QueryAnalytics
     evaluation: EvaluationAnalytics
-
+    recent_events: list[AuditEvent] = Field(default_factory=list)

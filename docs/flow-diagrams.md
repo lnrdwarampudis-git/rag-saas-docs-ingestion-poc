@@ -123,15 +123,18 @@ flowchart TD
   rbac --> docs["Document Rollup<br/>total, embedded, pending, failed, chunks, OCR"]
   rbac --> jobs["Processing Job Rollup<br/>queued, running, completed, failed"]
   rbac --> queryEvents["Persisted Query Events<br/>cache hits, misses, latency"]
+  rbac --> auditEvents["Recent Audit Events<br/>action, resource, actor, metadata"]
   docs --> db[("PostgreSQL when enabled")]
   jobs --> db
   queryEvents --> db
+  auditEvents --> db
   queryEvents -. fallback .-> cache["Recent query metrics deque"]
   api --> eval["Retrieval Eval Summary"]
   eval --> dataset["data/eval/retrieval_cases.json"]
   docs --> response["Analytics Response"]
   jobs --> response
   cache --> response
+  auditEvents --> response
   eval --> response
   response --> ui
 ```

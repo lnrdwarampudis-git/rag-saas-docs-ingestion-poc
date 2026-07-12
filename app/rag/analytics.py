@@ -1,5 +1,6 @@
 from collections import deque
 from dataclasses import dataclass
+import json
 from statistics import mean
 
 from sqlalchemy import text
@@ -12,6 +13,7 @@ from app.eval.run import run_eval
 from app.rag.store import document_store
 from app.schemas.analytics import (
     AnalyticsResponse,
+    AuditEvent,
     DocumentAnalytics,
     EvaluationAnalytics,
     JobAnalytics,
@@ -69,6 +71,7 @@ def get_analytics(current_user: AuthenticatedUser) -> AnalyticsResponse:
             or _query_analytics(str(current_user.tenant_id))
         ),
         evaluation=_evaluation_analytics(),
+        recent_events=_persistent_audit_events(current_user),
     )
 
 
@@ -239,6 +242,54 @@ def _persistent_query_analytics(current_user: AuthenticatedUser) -> QueryAnalyti
     )
 
 
+def _persistent_audit_events(
+    current_user: AuthenticatedUser,
+    limit: int = 8,
+) -> list[AuditEvent]:
+    if not get_settings().enable_db_persistence:
+        return []
+
+    try:
+        from app.db import engine
+
+        with engine.begin() as connection:
+            rows = connection.execute(
+                text(
+                    """
+                    SELECT
+                      a.action,
+                      a.resource_type,
+                      CAST(a.resource_id AS TEXT) AS resource_id,
+                      a.metadata,
+                      a.created_at,
+                      COALESCE(u.display_name, u.email) AS actor
+                    FROM audit_logs a
+                    LEFT JOIN app_users u ON u.id = a.actor_user_id
+                    WHERE a.tenant_id = :tenant_id
+                    ORDER BY a.created_at DESC
+                    LIMIT :limit
+                    """
+                ),
+                {
+                    "tenant_id": str(current_user.tenant_id),
+                    "limit": max(1, min(limit, 25)),
+                },
+            ).mappings()
+            return [
+                AuditEvent(
+                    action=str(row["action"]),
+                    resource_type=str(row["resource_type"]),
+                    resource_id=str(row["resource_id"]) if row["resource_id"] else None,
+                    actor=str(row["actor"]) if row["actor"] else None,
+                    metadata=_metadata_dict(row["metadata"]),
+                    created_at=_datetime_string(row["created_at"]),
+                )
+                for row in rows
+            ]
+    except SQLAlchemyError:
+        return []
+
+
 def _ensure_query_events_table(connection: Connection) -> None:
     global _query_events_table_ready
     if _query_events_table_ready:
@@ -299,6 +350,24 @@ def _query_analytics(tenant_id: str) -> QueryAnalytics:
         average_retrieval_ms=round(mean(event.retrieval_ms for event in events), 3),
         average_total_ms=round(mean(event.total_ms for event in events), 3),
     )
+
+
+def _metadata_dict(value) -> dict:
+    if isinstance(value, dict):
+        return value
+    if isinstance(value, str):
+        try:
+            parsed = json.loads(value)
+        except json.JSONDecodeError:
+            return {}
+        return parsed if isinstance(parsed, dict) else {}
+    return {}
+
+
+def _datetime_string(value) -> str:
+    if hasattr(value, "isoformat"):
+        return value.isoformat()
+    return str(value)
 
 
 def _evaluation_analytics() -> EvaluationAnalytics:

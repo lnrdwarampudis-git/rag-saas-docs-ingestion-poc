@@ -17,7 +17,7 @@ def test_analytics_endpoint_returns_operational_summary(api_client_as) -> None:
 
     assert response.status_code == 200
     payload = response.json()
-    assert set(payload) == {"documents", "jobs", "queries", "evaluation"}
+    assert set(payload) == {"documents", "jobs", "queries", "evaluation", "recent_events"}
     assert payload["evaluation"]["cases"] == 3
     assert payload["evaluation"]["failed"] == 0
 
@@ -113,3 +113,82 @@ def test_persistent_query_analytics_rolls_up_recent_events(monkeypatch) -> None:
     assert report.cache_hit_rate == 0.5
     assert report.average_retrieval_ms == 7.0
     assert report.average_total_ms == 19.0
+
+
+def test_persistent_audit_events_return_recent_tenant_history(monkeypatch) -> None:
+    tenant_id = UUID("00000000-0000-4000-8000-000000000015")
+    engine = create_engine("sqlite+pysqlite:///:memory:")
+    with engine.begin() as connection:
+        connection.execute(
+            text(
+                """
+                CREATE TABLE app_users (
+                  id TEXT PRIMARY KEY,
+                  display_name TEXT,
+                  email TEXT
+                )
+                """
+            )
+        )
+        connection.execute(
+            text(
+                """
+                CREATE TABLE audit_logs (
+                  tenant_id TEXT NOT NULL,
+                  actor_user_id TEXT,
+                  action TEXT NOT NULL,
+                  resource_type TEXT NOT NULL,
+                  resource_id TEXT,
+                  metadata TEXT,
+                  created_at TEXT NOT NULL
+                )
+                """
+            )
+        )
+        connection.execute(
+            text(
+                """
+                INSERT INTO app_users (id, display_name, email)
+                VALUES ('user-1', 'Alex Admin', 'alex@example.test')
+                """
+            )
+        )
+        connection.execute(
+            text(
+                """
+                INSERT INTO audit_logs (
+                  tenant_id, actor_user_id, action, resource_type, resource_id, metadata, created_at
+                )
+                VALUES
+                  (:tenant_id, 'user-1', 'document.ingested', 'document', 'doc-1',
+                   :metadata, '2026-07-12T10:00:00'),
+                  (:other_tenant_id, 'user-1', 'document.ingested', 'document', 'doc-2',
+                   :other_metadata, '2026-07-12T11:00:00')
+                """
+            ),
+            {
+                "tenant_id": str(tenant_id),
+                "other_tenant_id": "00000000-0000-4000-8000-000000000099",
+                "metadata": '{"file_name":"runbook.pdf","chunks_created":4}',
+                "other_metadata": '{"file_name":"other.pdf"}',
+            },
+        )
+
+    monkeypatch.setattr(analytics.get_settings(), "enable_db_persistence", True)
+    import app.db as db
+
+    monkeypatch.setattr(db, "engine", engine)
+
+    events = analytics._persistent_audit_events(
+        AuthenticatedUser(
+            keycloak_subject="analytics-subject",
+            tenant_id=tenant_id,
+            roles=["admin"],
+        )
+    )
+
+    assert len(events) == 1
+    assert events[0].action == "document.ingested"
+    assert events[0].actor == "Alex Admin"
+    assert events[0].resource_id == "doc-1"
+    assert events[0].metadata["file_name"] == "runbook.pdf"

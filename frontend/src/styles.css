@@ -333,6 +333,39 @@ button {
   gap: 8px;
 }
 
+.event-list {
+  display: grid;
+  gap: 8px;
+}
+
+.event-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-width: 0;
+  padding: 11px;
+  border: 1px solid #e0e8e4;
+  border-radius: 8px;
+  background: #fbfdfc;
+}
+
+.event-item div {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.event-item strong,
+.event-item span {
+  overflow-wrap: anywhere;
+}
+
+.event-item span {
+  color: #66746f;
+  font-size: 12px;
+}
+
 .evaluation-case-list {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -889,6 +922,11 @@ button {
 
   .document-detail-grid {
     grid-template-columns: 1fr;
+  }
+
+  .event-item {
+    align-items: flex-start;
+    flex-direction: column;
   }
 
   .topbar h2 {
