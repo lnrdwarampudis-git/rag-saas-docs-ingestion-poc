@@ -138,6 +138,41 @@ type EvaluationReport = {
   }>;
 };
 
+type AnalyticsReport = {
+  documents: {
+    total: number;
+    embedded: number;
+    pending: number;
+    failed: number;
+    chunks: number;
+    ocr_documents: number;
+  };
+  jobs: {
+    total: number;
+    queued: number;
+    processing: number;
+    completed: number;
+    failed: number;
+    recent_failures: string[];
+  };
+  queries: {
+    total: number;
+    cache_hits: number;
+    cache_misses: number;
+    cache_hit_rate: number;
+    average_retrieval_ms: number;
+    average_total_ms: number;
+  };
+  evaluation: {
+    cases: number;
+    passed: number;
+    failed: number;
+    context_precision: number;
+    context_recall: number;
+    answer_relevance: number;
+  };
+};
+
 const DEFAULT_INGEST_PATH = "/data/ingest/sample.docx";
 const roleOptions = ["admin", "finance", "engineering", "legal", "support"];
 
@@ -197,6 +232,7 @@ function AuthenticatedApp() {
   const [selectedDocument, setSelectedDocument] = React.useState<ManagedDocumentDetail | null>(null);
   const [modelStatus, setModelStatus] = React.useState<ModelStatus | null>(null);
   const [evaluationReport, setEvaluationReport] = React.useState<EvaluationReport | null>(null);
+  const [analyticsReport, setAnalyticsReport] = React.useState<AnalyticsReport | null>(null);
   const [result, setResult] = React.useState<QueryResult | null>(null);
   const [status, setStatus] = React.useState("Idle");
   const [busy, setBusy] = React.useState(false);
@@ -263,6 +299,21 @@ function AuthenticatedApp() {
     }
   }, []);
 
+  const loadAnalyticsReport = React.useCallback(async () => {
+    try {
+      const response = await apiFetch("/api/v1/analytics");
+      if (!response.ok) {
+        throw new Error(await response.text());
+      }
+      const payload = (await response.json()) as AnalyticsReport;
+      setAnalyticsReport(payload);
+    } catch (caught) {
+      if (!handleAuthError(caught)) {
+        setAnalyticsReport(null);
+      }
+    }
+  }, []);
+
   const inspectDocument = async (documentId: string) => {
     setBusy(true);
     setError("");
@@ -287,9 +338,10 @@ function AuthenticatedApp() {
 
   React.useEffect(() => {
     loadDocuments();
+    loadAnalyticsReport();
     loadModelStatus();
     loadEvaluationReport();
-  }, [loadDocuments, loadEvaluationReport, loadModelStatus]);
+  }, [loadAnalyticsReport, loadDocuments, loadEvaluationReport, loadModelStatus]);
 
   const ingestDocument = async () => {
     setBusy(true);
@@ -313,6 +365,7 @@ function AuthenticatedApp() {
       setIngests((items) => [payload, ...items]);
       setStatus("Indexed");
       loadDocuments();
+      loadAnalyticsReport();
     } catch (caught) {
       if (!handleAuthError(caught)) {
         setError(caught instanceof Error ? caught.message : "Document ingest failed");
@@ -350,6 +403,7 @@ function AuthenticatedApp() {
       setIngests((items) => [payload, ...items]);
       setStatus("Indexed");
       loadDocuments();
+      loadAnalyticsReport();
     } catch (caught) {
       if (!handleAuthError(caught)) {
         setError(caught instanceof Error ? caught.message : "Document upload failed");
@@ -417,6 +471,7 @@ function AuthenticatedApp() {
       setProcessingJobs((items) => [payload, ...items]);
       setStatus("Queued");
       loadDocuments();
+      loadAnalyticsReport();
     } catch (caught) {
       if (!handleAuthError(caught)) {
         setError(caught instanceof Error ? caught.message : "Async upload failed");
@@ -446,6 +501,7 @@ function AuthenticatedApp() {
       const payload = (await response.json()) as QueryResult;
       setResult(payload);
       setStatus(payload.cached ? "Cache hit" : "Answered");
+      loadAnalyticsReport();
     } catch (caught) {
       if (!handleAuthError(caught)) {
         setError(caught instanceof Error ? caught.message : "Query failed");
@@ -554,6 +610,8 @@ function AuthenticatedApp() {
         </section>
 
         <EvaluationPanel report={evaluationReport} onRefresh={loadEvaluationReport} />
+
+        <AnalyticsPanel report={analyticsReport} onRefresh={loadAnalyticsReport} />
 
         {error ? <div className="error-banner">{error}</div> : null}
 
@@ -1010,6 +1068,88 @@ function EvaluationPanel({
         ))}
         {!report ? <div className="empty-state compact-empty">Evaluation report loading.</div> : null}
       </div>
+    </section>
+  );
+}
+
+function AnalyticsPanel({
+  report,
+  onRefresh
+}: {
+  report: AnalyticsReport | null;
+  onRefresh: () => void;
+}) {
+  return (
+    <section className="panel analytics-panel" aria-label="Admin analytics">
+      <div className="panel-header">
+        <div>
+          <p className="eyebrow">Analytics</p>
+          <h3>Admin operations summary</h3>
+        </div>
+        <button className="secondary-action compact-action" type="button" onClick={onRefresh}>
+          <RefreshCw size={16} />
+          Refresh
+        </button>
+      </div>
+
+      <div className="analytics-grid">
+        <StatusItem label="Documents" value={report ? String(report.documents.total) : "Loading"} />
+        <StatusItem label="Embedded" value={report ? String(report.documents.embedded) : "Loading"} />
+        <StatusItem label="Chunks" value={report ? String(report.documents.chunks) : "Loading"} />
+        <StatusItem
+          label="OCR docs"
+          value={report ? String(report.documents.ocr_documents) : "Loading"}
+        />
+        <StatusItem label="Jobs failed" value={report ? String(report.jobs.failed) : "Loading"} />
+        <StatusItem label="Queries" value={report ? String(report.queries.total) : "Loading"} />
+        <StatusItem
+          label="Cache hit rate"
+          value={report ? formatPercent(report.queries.cache_hit_rate) : "Loading"}
+        />
+        <StatusItem
+          label="Avg total"
+          value={report ? formatMilliseconds(report.queries.average_total_ms) : "Loading"}
+        />
+      </div>
+
+      <div className="analytics-subgrid">
+        <StatusItem
+          label="Query latency"
+          value={
+            report
+              ? `${formatMilliseconds(report.queries.average_retrieval_ms)} retrieval / ${formatMilliseconds(
+                  report.queries.average_total_ms
+                )} total`
+              : "Loading"
+          }
+        />
+        <StatusItem
+          label="Job queue"
+          value={
+            report
+              ? `${report.jobs.queued} queued / ${report.jobs.processing} running / ${report.jobs.completed} done`
+              : "Loading"
+          }
+        />
+        <StatusItem
+          label="Evaluation"
+          value={
+            report
+              ? `${report.evaluation.passed}/${report.evaluation.cases} cases / ${formatPercent(
+                  report.evaluation.context_precision
+                )} precision`
+              : "Loading"
+          }
+        />
+      </div>
+
+      {report?.jobs.recent_failures.length ? (
+        <div className="failure-list">
+          {report.jobs.recent_failures.map((fileName) => (
+            <Badge key={fileName} label={fileName} />
+          ))}
+        </div>
+      ) : null}
     </section>
   );
 }

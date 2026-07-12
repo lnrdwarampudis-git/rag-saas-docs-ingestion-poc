@@ -2,6 +2,7 @@ from dataclasses import dataclass
 import hashlib
 import time
 
+from app.rag.analytics import record_query_event
 from app.rag.cache import QueryCache, cache_key
 from app.rag.model_providers import ModelProvider, build_model_provider
 from app.rag.persistence import load_persisted_chunks
@@ -57,6 +58,12 @@ class RagPipeline:
         cached = self.cache.get(key)
         if cached is not None:
             cached["cached"] = True
+            record_query_event(
+                tenant_id=tenant_id,
+                cached=True,
+                retrieval_ms=cached.get("metrics", {}).get("retrieval_ms"),
+                total_ms=cached.get("metrics", {}).get("total_ms"),
+            )
             return RagAnswer(**cached)
 
         retrieval_started = time.perf_counter()
@@ -96,6 +103,12 @@ class RagPipeline:
             },
         }
         self.cache.set(key, payload)
+        record_query_event(
+            tenant_id=tenant_id,
+            cached=False,
+            retrieval_ms=payload["metrics"]["retrieval_ms"],
+            total_ms=payload["metrics"]["total_ms"],
+        )
         return RagAnswer(**payload)
 
 

@@ -14,6 +14,7 @@ flowchart TD
     formatsScreen["Format Intake Screen"]
     docInventory["Document Management Panel<br/>inventory, detail, chunk preview"]
     jobStatus["Job Status Cards<br/>queued, processing, failed, completed"]
+    analyticsScreen["Admin Analytics Panel<br/>documents, jobs, query metrics, eval"]
   end
 
   %% Identity
@@ -33,6 +34,7 @@ flowchart TD
     docMgmtApi["Document Management API<br/>list/detail authorized docs"]
     jobApi["Processing Job API<br/>status + local run"]
     modelStatusApi["Model Status API<br/>/api/v1/model-status"]
+    analyticsApi["Analytics API<br/>/api/v1/analytics"]
   end
 
   %% Ingestion pipeline
@@ -70,6 +72,7 @@ flowchart TD
   subgraph ops["Ops And Validation"]
     docker["Docker Compose"]
     tests["Pytest + Playwright"]
+    analyticsRollup["Tenant Analytics Rollup"]
   end
 
   browser --> ui
@@ -79,6 +82,7 @@ flowchart TD
   ui --> formatsScreen
   ui --> docInventory
   ui --> jobStatus
+  ui --> analyticsScreen
   loginScreen <-- PKCE login --> keycloak
   keycloak --- demoUsers
 
@@ -87,6 +91,7 @@ flowchart TD
   fastapi --> docMgmtApi
   fastapi --> jobApi
   fastapi --> modelStatusApi
+  fastapi --> analyticsApi
   fastapi --> jwtValidate
   jwtValidate -. validate via JWKS .-> keycloak
   jwtValidate --> rbacResolve
@@ -100,6 +105,11 @@ flowchart TD
   jobApi --> postgres
   jobApi --> jobStatus
   modelStatusApi --> provider
+  analyticsApi --> analyticsRollup
+  analyticsRollup --> postgres
+  analyticsRollup --> cache
+  analyticsRollup --> eval
+  analyticsApi --> analyticsScreen
 
   fastapi --> upload --> parser
   upload --> queue --> worker --> parser
@@ -133,11 +143,11 @@ flowchart TD
   classDef security fill:#fef2f2,stroke:#dc2626,color:#111827;
   classDef ops fill:#f5f3ff,stroke:#7c3aed,color:#111827;
 
-  class browser,ui,loginScreen,aaScreen,sessionScreen,formatsScreen,docInventory,jobStatus client;
-  class nginx,fastapi,authApi,docMgmtApi,jobApi,modelStatusApi,upload,queue,worker,parser,ocr,chunker,embed,query,cache,provider,hostOllama,composeOllama,retriever,ranker,answer,eval service;
+  class browser,ui,loginScreen,aaScreen,sessionScreen,formatsScreen,docInventory,jobStatus,analyticsScreen client;
+  class nginx,fastapi,authApi,docMgmtApi,jobApi,modelStatusApi,analyticsApi,upload,queue,worker,parser,ocr,chunker,embed,query,cache,provider,hostOllama,composeOllama,retriever,ranker,answer,eval service;
   class postgres,qdrant,minio data;
   class keycloak,demoUsers,jwtValidate,rbacResolve,authz security;
-  class docker,tests ops;
+  class docker,tests,analyticsRollup ops;
 ```
 
 The system diagram above deliberately collapses the login handshake into a single `loginScreen <--> keycloak` edge. Here's that handshake unpacked as its own sequence diagram:
@@ -172,15 +182,15 @@ sequenceDiagram
 5. Synchronous upload/path ingestion can process immediately, while `upload-async` creates a pending document plus `processing_jobs` row and enqueues the job in Redis.
 6. The worker polls Redis, reloads job context from PostgreSQL when needed, extracts text from supported document types, invokes OCR when needed, and chunks the extracted text. Chunks are enriched with tenant, document, visibility, role, owner, and source metadata.
 7. Metadata and chunks are persisted in PostgreSQL. Qdrant is included as the vector search option for scale-oriented retrieval.
-8. The Document Management panel calls list/detail APIs to show only authorized document metadata and chunk previews for the caller's tenant/roles. The UI also polls processing job status until queued uploads complete or fail, and the Evaluation panel calls `/api/v1/evaluation/retrieval` to show the retrieval quality gate.
+8. The Document Management panel calls list/detail APIs to show only authorized document metadata and chunk previews for the caller's tenant/roles. The UI also polls processing job status until queued uploads complete or fail, the Evaluation panel calls `/api/v1/evaluation/retrieval` to show the retrieval quality gate, and the Admin Analytics panel calls `/api/v1/analytics` to show tenant-scoped document, job, query-cache, latency, and evaluation health.
 9. Users ask questions through the query panel; `tenant_id` and roles again come from the resolved identity.
 10. Redis is checked for cached answers (the cache key includes the requester's identity plus provider/runtime/model names so private-document results and model changes never leak across users or runtimes). On cache miss, the model provider supplies the embedding model for retrieval. With `LOCAL_EMBEDDING_RUNTIME=ollama`, backend/worker call either Mac-host Ollama at `http://host.docker.internal:11434` or the optional Compose Ollama service at `http://ollama:11434`. Authorized chunks are filtered by RBAC (tenant match, then tenant/role/private-owner visibility), contexts are ranked, and the provider's answer generator composes an answer with citations, model metadata, and latency metrics. With `LOCAL_LLM_RUNTIME=ollama`, answer generation calls the same configured local Ollama endpoint.
 11. Access tokens are short-lived and stateless (no server-side session store); the frontend silently refreshes them in the background via Keycloak's refresh-token grant and clears its session if the refresh fails, dropping the user back to the Login Screen.
 
 ## Component Responsibilities
 
-- React/Vite UI: PKCE login/logout, document upload, mounted-path ingestion, queued upload status, read-only A&A and session status display, model runtime readiness, evaluation quality gate display, format guidance, document inventory/detail/chunk preview, query form, citations, cache status, and latency display.
-- FastAPI backend: bearer-token validation, RBAC resolution, request validation, ingestion orchestration, processing job APIs, document inventory APIs, model runtime status API, retrieval evaluation API, retrieval orchestration, persistence, and API contracts.
+- React/Vite UI: PKCE login/logout, document upload, mounted-path ingestion, queued upload status, read-only A&A and session status display, model runtime readiness, evaluation quality gate display, admin analytics summary, format guidance, document inventory/detail/chunk preview, query form, citations, cache status, and latency display.
+- FastAPI backend: bearer-token validation, RBAC resolution, request validation, ingestion orchestration, processing job APIs, document inventory APIs, model runtime status API, retrieval evaluation API, admin analytics API, retrieval orchestration, persistence, and API contracts.
 - Keycloak: identity provider for OAuth/OIDC (Authorization Code + PKCE for the SPA), issues and refreshes JWTs, exposes the JWKS used to validate them, and owns realm roles and demo users.
 - PostgreSQL + pgvector: tenant metadata, RBAC tables (`app_users`, `roles`, `user_roles`) as the source of truth for tenant/role resolution, document records, chunk records, and audit logs.
 - Redis: query cache and processing job queue for background ingestion.
@@ -189,6 +199,7 @@ sequenceDiagram
 - Docker Compose: local reproducible stack for the POC, including a `--import-realm` Keycloak boot that seeds the `rag` realm from `infra/keycloak/realm-export.json`.
 - Model provider strategy: local/open-source first (`LLM_PROVIDER=local`, `EMBEDDING_PROVIDER=local`) through `app/rag/model_providers.py`. Defaults use deterministic hashing embeddings (`LOCAL_EMBEDDING_RUNTIME=hashing`) and the extractive answer generator (`LOCAL_LLM_RUNTIME=extractive`). Ollama embeddings and answer generation are available through `LOCAL_EMBEDDING_RUNTIME=ollama` and `LOCAL_LLM_RUNTIME=ollama`; this has been smoke-tested from Docker backend/worker to Mac-host Ollama with `nomic-embed-text:latest` and `llama3.1:8b`. vLLM adapters and reranker services are the next local model upgrades. Public token-based LLM providers should remain disabled until explicitly needed.
 - Model status: `/api/v1/model-status` reports the active embedding and answer runtime, model names, readiness, and Ollama reachability when selected. Hashing/extractive defaults report ready without network calls; Ollama runtimes check `/api/tags` and surface missing models or unreachable services as attention states in the UI.
+- Admin analytics: `/api/v1/analytics` reports tenant-scoped document and job rollups from PostgreSQL when persistence is enabled, falls back to the in-memory document store for local tests, includes recent in-process query/cache/latency metrics, and embeds the retrieval evaluation quality summary.
 
 ## Authentication, Authorization And Session Management
 
@@ -212,6 +223,6 @@ Legacy binary Office formats such as DOC, XLS, and PPT should be converted to DO
 ## Editable Diagram Notes
 
 - GitHub renders Mermaid blocks automatically in Markdown.
-- This file contains the top-down system flowchart and the PKCE login sequence. Focused async ingestion, query, and RBAC visibility diagrams live in [Flow Diagrams](flow-diagrams.md).
+- This file contains the top-down system flowchart and the PKCE login sequence. Focused async ingestion, query, analytics, and RBAC visibility diagrams live in [Flow Diagrams](flow-diagrams.md).
 - Both can be copied into Mermaid Live Editor (https://mermaid.live) or diagrams.net's Mermaid import for visual editing.
 - Keep infrastructure-specific host paths out of this file; use `.env` for local overrides.

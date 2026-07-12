@@ -298,6 +298,10 @@ button {
   gap: 14px;
 }
 
+.analytics-panel {
+  gap: 14px;
+}
+
 .evaluation-actions {
   display: flex;
   flex-wrap: wrap;
@@ -309,6 +313,24 @@ button {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 10px;
+}
+
+.analytics-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.analytics-subgrid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.failure-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
 }
 
 .evaluation-case-list {
@@ -795,6 +817,8 @@ button {
     grid-template-columns: 1fr;
   }
 
+  .analytics-grid,
+  .analytics-subgrid,
   .quality-grid,
   .evaluation-case-list {
     grid-template-columns: 1fr 1fr;
@@ -855,6 +879,8 @@ button {
 
   .metrics-row,
   .content-grid,
+  .analytics-grid,
+  .analytics-subgrid,
   .quality-grid,
   .evaluation-case-list,
   .run-detail-grid {

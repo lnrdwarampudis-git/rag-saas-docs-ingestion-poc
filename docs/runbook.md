@@ -40,6 +40,23 @@ With default local providers, expect ready hashing embeddings and ready extracti
 }
 ```
 
+The authenticated admin analytics check is:
+
+```bash
+curl -H "Authorization: Bearer $TOKEN" http://127.0.0.1:8000/api/v1/analytics
+```
+
+Expected response sections:
+
+```json
+{
+  "documents": {},
+  "jobs": {},
+  "queries": {},
+  "evaluation": {}
+}
+```
+
 ## Backend Tests
 
 ```bash
@@ -348,6 +365,12 @@ Check who a token resolves to (tenant + roles), useful when debugging RBAC:
 curl -H "Authorization: Bearer $TOKEN" http://127.0.0.1:8000/api/v1/auth/me
 ```
 
+Check the tenant-scoped analytics summary:
+
+```bash
+curl -H "Authorization: Bearer $TOKEN" http://127.0.0.1:8000/api/v1/analytics
+```
+
 ## UI Smoke Test
 
 1. Open `http://127.0.0.1:5173`.
@@ -358,6 +381,7 @@ curl -H "Authorization: Bearer $TOKEN" http://127.0.0.1:8000/api/v1/auth/me
 6. Use Document Management to refresh the authorized inventory, open the uploaded document, and confirm chunk previews are visible.
 7. Ask a question in the Query panel and confirm citations plus run details appear: cache outcome, contexts used, top score, retrieval/total latency, embedding runtime, answer runtime, and retrieval thresholds.
 8. Confirm the Evaluation panel shows the retrieval quality gate with all cases passing and context precision, context recall, and answer relevance averages.
+9. Confirm the Analytics panel shows document totals, job queue/failure state, query cache hit rate, average latency, and evaluation pass rate.
 
 If the query API returns `503 Service Unavailable`, read the `detail` field. Ollama provider errors include the failed operation, configured model, endpoint, and whether the failure was a timeout, HTTP status, invalid JSON response, or transport error.
 

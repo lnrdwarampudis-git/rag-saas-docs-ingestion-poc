@@ -112,6 +112,29 @@ flowchart TD
   recall --> report
 ```
 
+## Admin Analytics Flow
+
+```mermaid
+flowchart TD
+  admin["Authenticated Admin Or Tenant Member"] --> ui["Admin Analytics Panel"]
+  ui --> api["GET /api/v1/analytics"]
+  api --> auth["JWT Validation"]
+  auth --> rbac["Tenant + Role Resolution"]
+  rbac --> docs["Document Rollup<br/>total, embedded, pending, failed, chunks, OCR"]
+  rbac --> jobs["Processing Job Rollup<br/>queued, running, completed, failed"]
+  rbac --> queryEvents["In-process Query Events<br/>cache hits, misses, latency"]
+  docs --> db[("PostgreSQL when enabled")]
+  jobs --> db
+  queryEvents --> cache["Recent query metrics deque"]
+  api --> eval["Retrieval Eval Summary"]
+  eval --> dataset["data/eval/retrieval_cases.json"]
+  docs --> response["Analytics Response"]
+  jobs --> response
+  cache --> response
+  eval --> response
+  response --> ui
+```
+
 ## Model Provider Strategy
 
 ```mermaid
