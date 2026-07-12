@@ -105,6 +105,42 @@ class OllamaEmbeddingModel:
         return _normalize_embedding(embedding)
 
 
+class OllamaAnswerGenerator:
+    def __init__(
+        self,
+        base_url: str,
+        model_name: str,
+        timeout_seconds: float = 30.0,
+        client: httpx.Client | None = None,
+    ) -> None:
+        self.model_name = model_name
+        self._client = client or httpx.Client(
+            base_url=base_url.rstrip("/"),
+            timeout=timeout_seconds,
+        )
+
+    def generate(self, query: str, results: list[RetrievalResult]) -> str:
+        if not results:
+            return ExtractiveAnswerGenerator().generate(query, results)
+
+        prompt = _answer_prompt(query, results)
+        try:
+            response = self._client.post(
+                "/api/generate",
+                json={"model": self.model_name, "prompt": prompt, "stream": False},
+            )
+            response.raise_for_status()
+        except httpx.HTTPError as exc:
+            raise ModelProviderRequestError(
+                f"Ollama answer generation request failed for model '{self.model_name}'."
+            ) from exc
+
+        answer = response.json().get("response")
+        if not isinstance(answer, str) or not answer.strip():
+            raise ModelProviderRequestError("Ollama generation response did not include answer text.")
+        return answer.strip()
+
+
 def build_model_provider(settings: Settings | None = None) -> ModelProvider:
     settings = settings or get_settings()
     provider_name = settings.llm_provider.lower()
@@ -158,7 +194,13 @@ def _build_local_answer_generator(settings: Settings) -> AnswerGenerator:
     runtime = settings.local_llm_runtime.lower()
     if runtime == "extractive":
         return ExtractiveAnswerGenerator()
-    if runtime in {"ollama", "vllm"}:
+    if runtime == "ollama":
+        return OllamaAnswerGenerator(
+            base_url=settings.local_llm_base_url,
+            model_name=settings.local_llm_model_name,
+            timeout_seconds=settings.local_model_request_timeout_seconds,
+        )
+    if runtime == "vllm":
         raise ModelProviderConfigurationError(
             f"LOCAL_LLM_RUNTIME '{settings.local_llm_runtime}' is reserved for a future adapter."
         )
@@ -212,3 +254,21 @@ def _normalize_embedding(embedding: list[float]) -> list[float]:
     if norm == 0:
         return embedding
     return [value / norm for value in embedding]
+
+
+def _answer_prompt(query: str, results: list[RetrievalResult]) -> str:
+    context_blocks = []
+    for index, result in enumerate(results, start=1):
+        metadata = result.chunk.metadata
+        source = metadata.get("file_name") or metadata.get("document_id") or "authorized context"
+        context_blocks.append(f"[{index}] Source: {source}\n{result.chunk.text.strip()}")
+
+    context = "\n\n".join(context_blocks)
+    return (
+        "Answer the question using only the authorized context below. "
+        "If the context does not contain enough evidence, say that you do not have enough authorized context. "
+        "Keep the answer concise and do not invent sources.\n\n"
+        f"Question: {query}\n\n"
+        f"Authorized context:\n{context}\n\n"
+        "Answer:"
+    )

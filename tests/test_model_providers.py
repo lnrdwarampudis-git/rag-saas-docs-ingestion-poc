@@ -7,9 +7,12 @@ from app.rag.model_providers import (
     ExtractiveAnswerGenerator,
     ModelProviderConfigurationError,
     ModelProviderRequestError,
+    OllamaAnswerGenerator,
     OllamaEmbeddingModel,
     build_model_provider,
 )
+from app.rag.retrieval import RetrievalResult
+from app.schemas.documents import ChunkDTO
 
 
 def test_default_model_provider_uses_local_hashing_and_extractive_runtime() -> None:
@@ -89,9 +92,106 @@ def test_ollama_embedding_model_rejects_invalid_response_shape() -> None:
         model.embed("Redis vector retrieval")
 
 
-def test_future_local_generation_runtimes_are_reserved_until_adapter_is_implemented() -> None:
-    with pytest.raises(ModelProviderConfigurationError, match="future adapter"):
-        build_model_provider(Settings(local_llm_runtime="ollama"))
+def test_ollama_answer_runtime_is_available() -> None:
+    provider = build_model_provider(
+        Settings(
+            local_llm_runtime="ollama",
+            local_llm_model_name="llama3.1",
+            local_llm_base_url="http://ollama:11434",
+        )
+    )
 
+    assert provider.answer_runtime == "ollama"
+    assert provider.answer_model_name == "llama3.1"
+    assert isinstance(provider.answer_generator, OllamaAnswerGenerator)
+
+
+def test_ollama_answer_generator_posts_authorized_context() -> None:
+    requests: list[httpx.Request] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        requests.append(request)
+        return httpx.Response(200, json={"response": "Redis lowers repeated query latency."})
+
+    client = httpx.Client(
+        base_url="http://ollama.test",
+        transport=httpx.MockTransport(handler),
+    )
+    generator = OllamaAnswerGenerator(
+        base_url="http://ollama.test",
+        model_name="llama3.1",
+        client=client,
+    )
+
+    answer = generator.generate(
+        "How does Redis help?",
+        [
+            RetrievalResult(
+                chunk=ChunkDTO(
+                    chunk_index=0,
+                    text="Redis cache improves repeated RAG query latency.",
+                    token_count=7,
+                    metadata={"file_name": "architecture.md"},
+                ),
+                score=1.0,
+                keyword_score=1.0,
+                vector_score=1.0,
+                early_score=1.0,
+            )
+        ],
+    )
+
+    payload = _request_json(requests[0])
+    assert requests[0].url.path == "/api/generate"
+    assert payload["model"] == "llama3.1"
+    assert payload["stream"] is False
+    assert "How does Redis help?" in payload["prompt"]
+    assert "Redis cache improves repeated RAG query latency." in payload["prompt"]
+    assert answer == "Redis lowers repeated query latency."
+
+
+def test_ollama_answer_generator_rejects_invalid_response_shape() -> None:
+    client = httpx.Client(
+        base_url="http://ollama.test",
+        transport=httpx.MockTransport(lambda request: httpx.Response(200, json={"done": True})),
+    )
+    generator = OllamaAnswerGenerator(
+        base_url="http://ollama.test",
+        model_name="llama3.1",
+        client=client,
+    )
+
+    with pytest.raises(ModelProviderRequestError, match="answer text"):
+        generator.generate(
+            "How does Redis help?",
+            [
+                RetrievalResult(
+                    chunk=ChunkDTO(
+                        chunk_index=0,
+                        text="Redis cache improves repeated RAG query latency.",
+                        token_count=7,
+                        metadata={"file_name": "architecture.md"},
+                    ),
+                    score=1.0,
+                    keyword_score=1.0,
+                    vector_score=1.0,
+                    early_score=1.0,
+                )
+            ],
+        )
+
+
+def test_future_local_embedding_runtimes_are_reserved_until_adapter_is_implemented() -> None:
     with pytest.raises(ModelProviderConfigurationError, match="future adapter"):
         build_model_provider(Settings(local_embedding_runtime="vllm"))
+
+
+def test_future_local_generation_runtimes_are_reserved_until_adapter_is_implemented() -> None:
+    with pytest.raises(ModelProviderConfigurationError, match="future adapter"):
+        build_model_provider(Settings(local_llm_runtime="vllm"))
+
+
+def _request_json(request: httpx.Request) -> dict:
+    import json
+
+    return json.loads(request.read().decode("utf-8"))

@@ -117,13 +117,16 @@ flowchart LR
   localEmbedding --> ollamaEmbedding["Optional Ollama embeddings"]
   localEmbedding --> futureEmbedding["Future vLLM or BGE/E5 adapter"]
   llmProvider --> localLlm{"local"}
-  localLlm --> extractive["Current extractive generator"]
-  localLlm --> futureLlm["Future Ollama/vLLM generator"]
+  localLlm --> extractive["Default extractive generator"]
+  localLlm --> ollamaLlm["Optional Ollama generator"]
+  localLlm --> futureLlm["Future vLLM generator"]
   llmProvider --> public{"public provider later"}
   public --> gate["PUBLIC_LLM_ENABLED=true required"]
   gate --> tokenApi["Token/API-based LLM provider"]
   hashing --> cacheKey["Provider/runtime/model names<br/>included in cache key + metrics"]
   extractive --> cacheKey
+  ollamaEmbedding --> cacheKey
+  ollamaLlm --> cacheKey
 ```
 
 ## RBAC Visibility Rules

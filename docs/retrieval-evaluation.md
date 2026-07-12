@@ -72,7 +72,7 @@ LOCAL_LLM_BASE_URL=http://localhost:11434
 PUBLIC_LLM_ENABLED=false
 ```
 
-The default local runtimes are deterministic so tests and demos run without model downloads. `LOCAL_EMBEDDING_RUNTIME=ollama` can be used for local semantic embeddings when an Ollama embedding model is available. Future local upgrades should add vLLM embeddings, Ollama/vLLM answer generation, and reranker models such as BGE reranker.
+The default local runtimes are deterministic so tests and demos run without model downloads. `LOCAL_EMBEDDING_RUNTIME=ollama` can be used for local semantic embeddings when an Ollama embedding model is available, and `LOCAL_LLM_RUNTIME=ollama` can be used for local answer generation when an Ollama generation model is available. Future local upgrades should add vLLM embeddings/generation and reranker models such as BGE reranker.
 
 Public token-based LLMs should be added later behind explicit config flags only when deployment policy allows external API usage.
 

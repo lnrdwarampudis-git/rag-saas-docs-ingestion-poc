@@ -48,7 +48,7 @@ LOCAL_LLM_BASE_URL=http://localhost:11434
 PUBLIC_LLM_ENABLED=false
 ```
 
-No model download or public LLM token is required for the default stack. See [Model Providers](model-providers.md) before changing these values. `LOCAL_EMBEDDING_RUNTIME=ollama` is supported when Ollama is running locally; vLLM embeddings and Ollama/vLLM answer generation are reserved until their adapters are implemented.
+No model download or public LLM token is required for the default stack. See [Model Providers](model-providers.md) before changing these values. `LOCAL_EMBEDDING_RUNTIME=ollama` and `LOCAL_LLM_RUNTIME=ollama` are supported when Ollama is running locally; vLLM embeddings and generation are reserved until their adapters are implemented.
 
 ## Start Full Stack
 
