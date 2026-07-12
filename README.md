@@ -87,7 +87,7 @@ For full setup, execution, test, and GitHub export instructions, see:
 - Week 7 offline retrieval evaluation dataset and runner with context precision, context recall, and answer relevance checks
 - Authenticated retrieval evaluation API and UI quality gate panel
 - Local/open-source model provider abstraction for deterministic hashing embeddings, optional Ollama embeddings, extractive answer generation, and optional Ollama answer generation, with later adapter paths for vLLM and gated public providers
-- Authenticated admin analytics API and UI summary for document ingestion, processing jobs, query cache/latency, and retrieval evaluation health
+- Authenticated admin analytics API and UI summary for document ingestion, processing jobs, persisted query cache/latency, and retrieval evaluation health
 
 ## Recommended Week 1 Commands
 
@@ -146,7 +146,7 @@ docker compose up --build
 
 The document list/detail endpoints power the UI's Document Management panel. They apply the same tenant and RBAC rules as retrieval: users can inspect only documents and chunks their authenticated identity is authorized to see.
 
-The analytics endpoint powers the UI's Admin operations summary. It returns tenant-scoped document counts, processing job counts and recent failures, in-process query volume/cache/latency metrics, and the current retrieval quality gate summary.
+The analytics endpoint powers the UI's Admin operations summary. It returns tenant-scoped document counts, processing job counts and recent failures, recent persisted query volume/cache/latency metrics, and the current retrieval quality gate summary.
 
 The ingestion endpoint accepts a local file path for Week 1 development. Production upload should stream files into MinIO first, then enqueue parsing and chunking workers.
 

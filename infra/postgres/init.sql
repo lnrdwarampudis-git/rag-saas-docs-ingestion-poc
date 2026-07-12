@@ -112,6 +112,17 @@ CREATE TABLE IF NOT EXISTS audit_logs (
 
 CREATE INDEX IF NOT EXISTS idx_audit_logs_tenant_time ON audit_logs (tenant_id, created_at DESC);
 
+CREATE TABLE IF NOT EXISTS query_events (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  tenant_id UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+  cached BOOLEAN NOT NULL DEFAULT FALSE,
+  retrieval_ms DOUBLE PRECISION NOT NULL DEFAULT 0,
+  total_ms DOUBLE PRECISION NOT NULL DEFAULT 0,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS idx_query_events_tenant_time ON query_events (tenant_id, created_at DESC);
+
 INSERT INTO tenants (id, name, slug)
 VALUES ('00000000-0000-4000-8000-000000000001', 'Demo Tenant', 'demo')
 ON CONFLICT (slug) DO UPDATE SET

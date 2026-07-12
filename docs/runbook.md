@@ -46,6 +46,10 @@ The authenticated admin analytics check is:
 curl -H "Authorization: Bearer $TOKEN" http://127.0.0.1:8000/api/v1/analytics
 ```
 
+When Postgres persistence is enabled, query volume, cache hits, and latency come
+from persisted `query_events`; local non-persistent tests fall back to the
+in-memory query event buffer.
+
 Expected response sections:
 
 ```json
@@ -408,6 +412,11 @@ limit 10;
 
 select action, resource_type, metadata, created_at
 from audit_logs
+order by created_at desc
+limit 10;
+
+select cached, retrieval_ms, total_ms, created_at
+from query_events
 order by created_at desc
 limit 10;
 ```

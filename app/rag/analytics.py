@@ -3,6 +3,7 @@ from dataclasses import dataclass
 from statistics import mean
 
 from sqlalchemy import text
+from sqlalchemy.engine import Connection
 from sqlalchemy.exc import SQLAlchemyError
 
 from app.auth.models import AuthenticatedUser
@@ -27,6 +28,7 @@ class QueryEvent:
 
 
 _query_events: deque[QueryEvent] = deque(maxlen=500)
+_query_events_table_ready = False
 
 
 def record_query_event(
@@ -44,6 +46,12 @@ def record_query_event(
             total_ms=float(total_ms or 0),
         )
     )
+    _record_persistent_query_event(
+        tenant_id=tenant_id,
+        cached=cached,
+        retrieval_ms=float(retrieval_ms or 0),
+        total_ms=float(total_ms or 0),
+    )
 
 
 def get_analytics(current_user: AuthenticatedUser) -> AnalyticsResponse:
@@ -56,9 +64,45 @@ def get_analytics(current_user: AuthenticatedUser) -> AnalyticsResponse:
     return AnalyticsResponse(
         documents=documents,
         jobs=jobs,
-        queries=_query_analytics(str(current_user.tenant_id)),
+        queries=(
+            _persistent_query_analytics(current_user)
+            or _query_analytics(str(current_user.tenant_id))
+        ),
         evaluation=_evaluation_analytics(),
     )
+
+
+def _record_persistent_query_event(
+    *,
+    tenant_id: str,
+    cached: bool,
+    retrieval_ms: float,
+    total_ms: float,
+) -> None:
+    if not get_settings().enable_db_persistence:
+        return
+
+    try:
+        from app.db import engine
+
+        with engine.begin() as connection:
+            _ensure_query_events_table(connection)
+            connection.execute(
+                text(
+                    """
+                    INSERT INTO query_events (tenant_id, cached, retrieval_ms, total_ms)
+                    VALUES (:tenant_id, :cached, :retrieval_ms, :total_ms)
+                    """
+                ),
+                {
+                    "tenant_id": tenant_id,
+                    "cached": cached,
+                    "retrieval_ms": retrieval_ms,
+                    "total_ms": total_ms,
+                },
+            )
+    except SQLAlchemyError:
+        return
 
 
 def _persistent_operational_analytics(
@@ -94,7 +138,7 @@ def _persistent_operational_analytics(
                     ) document_rollup
                     """
                 ),
-                {"tenant_id": current_user.tenant_id},
+                {"tenant_id": str(current_user.tenant_id)},
             ).mappings().one()
             job_row = connection.execute(
                 text(
@@ -109,7 +153,7 @@ def _persistent_operational_analytics(
                     WHERE tenant_id = :tenant_id
                     """
                 ),
-                {"tenant_id": current_user.tenant_id},
+                {"tenant_id": str(current_user.tenant_id)},
             ).mappings().one()
             failure_rows = connection.execute(
                 text(
@@ -122,7 +166,7 @@ def _persistent_operational_analytics(
                     LIMIT 5
                     """
                 ),
-                {"tenant_id": current_user.tenant_id},
+                {"tenant_id": str(current_user.tenant_id)},
             ).mappings()
             recent_failures = [str(row["file_name"]) for row in failure_rows]
 
@@ -146,6 +190,83 @@ def _persistent_operational_analytics(
         )
     except SQLAlchemyError:
         return None, None
+
+
+def _persistent_query_analytics(current_user: AuthenticatedUser) -> QueryAnalytics | None:
+    if not get_settings().enable_db_persistence:
+        return None
+
+    try:
+        from app.db import engine
+
+        with engine.begin() as connection:
+            _ensure_query_events_table(connection)
+            row = connection.execute(
+                text(
+                    """
+                    WITH recent_events AS (
+                      SELECT cached, retrieval_ms, total_ms
+                      FROM query_events
+                      WHERE tenant_id = :tenant_id
+                      ORDER BY created_at DESC
+                      LIMIT 500
+                    )
+                    SELECT
+                      count(*) AS total,
+                      count(*) FILTER (WHERE cached) AS cache_hits,
+                      COALESCE(avg(retrieval_ms), 0) AS average_retrieval_ms,
+                      COALESCE(avg(total_ms), 0) AS average_total_ms
+                    FROM recent_events
+                    """
+                ),
+                {"tenant_id": str(current_user.tenant_id)},
+            ).mappings().one()
+    except SQLAlchemyError:
+        return None
+
+    total = int(row["total"] or 0)
+    if total == 0:
+        return QueryAnalytics()
+
+    cache_hits = int(row["cache_hits"] or 0)
+    return QueryAnalytics(
+        total=total,
+        cache_hits=cache_hits,
+        cache_misses=total - cache_hits,
+        cache_hit_rate=round(cache_hits / total, 4),
+        average_retrieval_ms=round(float(row["average_retrieval_ms"] or 0), 3),
+        average_total_ms=round(float(row["average_total_ms"] or 0), 3),
+    )
+
+
+def _ensure_query_events_table(connection: Connection) -> None:
+    global _query_events_table_ready
+    if _query_events_table_ready:
+        return
+
+    connection.execute(
+        text(
+            """
+            CREATE TABLE IF NOT EXISTS query_events (
+              id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+              tenant_id UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+              cached BOOLEAN NOT NULL DEFAULT FALSE,
+              retrieval_ms DOUBLE PRECISION NOT NULL DEFAULT 0,
+              total_ms DOUBLE PRECISION NOT NULL DEFAULT 0,
+              created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+            )
+            """
+        )
+    )
+    connection.execute(
+        text(
+            """
+            CREATE INDEX IF NOT EXISTS idx_query_events_tenant_time
+            ON query_events (tenant_id, created_at DESC)
+            """
+        )
+    )
+    _query_events_table_ready = True
 
 
 def _in_memory_document_analytics(current_user: AuthenticatedUser) -> DocumentAnalytics:

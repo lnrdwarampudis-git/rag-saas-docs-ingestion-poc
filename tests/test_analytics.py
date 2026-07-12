@@ -1,5 +1,9 @@
 from uuid import UUID, uuid4
 
+from sqlalchemy import create_engine, text
+
+from app.auth.models import AuthenticatedUser
+from app.rag import analytics
 from app.rag.pipeline import RagPipeline
 from app.rag.store import document_store
 from app.schemas.documents import ChunkDTO
@@ -53,3 +57,59 @@ def test_analytics_counts_in_memory_documents_and_query_events(api_client_as) ->
     assert payload["queries"]["total"] >= 2
     assert payload["queries"]["cache_hits"] >= 1
     assert payload["queries"]["cache_hit_rate"] > 0
+
+
+def test_persistent_query_analytics_rolls_up_recent_events(monkeypatch) -> None:
+    tenant_id = UUID("00000000-0000-4000-8000-000000000014")
+    engine = create_engine("sqlite+pysqlite:///:memory:")
+    with engine.begin() as connection:
+        connection.execute(
+            text(
+                """
+                CREATE TABLE query_events (
+                  tenant_id TEXT NOT NULL,
+                  cached BOOLEAN NOT NULL,
+                  retrieval_ms FLOAT NOT NULL,
+                  total_ms FLOAT NOT NULL,
+                  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+                )
+                """
+            )
+        )
+        connection.execute(
+            text(
+                """
+                INSERT INTO query_events (tenant_id, cached, retrieval_ms, total_ms)
+                VALUES
+                  (:tenant_id, 0, 10.0, 30.0),
+                  (:tenant_id, 1, 4.0, 8.0),
+                  (:other_tenant_id, 1, 1.0, 1.0)
+                """
+            ),
+            {
+                "tenant_id": str(tenant_id),
+                "other_tenant_id": "00000000-0000-4000-8000-000000000099",
+            },
+        )
+
+    monkeypatch.setattr(analytics.get_settings(), "enable_db_persistence", True)
+    monkeypatch.setattr(analytics, "_query_events_table_ready", True)
+    import app.db as db
+
+    monkeypatch.setattr(db, "engine", engine)
+
+    report = analytics._persistent_query_analytics(
+        AuthenticatedUser(
+            keycloak_subject="analytics-subject",
+            tenant_id=tenant_id,
+            roles=["admin"],
+        )
+    )
+
+    assert report is not None
+    assert report.total == 2
+    assert report.cache_hits == 1
+    assert report.cache_misses == 1
+    assert report.cache_hit_rate == 0.5
+    assert report.average_retrieval_ms == 7.0
+    assert report.average_total_ms == 19.0
