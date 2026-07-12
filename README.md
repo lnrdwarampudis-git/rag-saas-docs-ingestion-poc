@@ -73,6 +73,7 @@ For full setup, execution, test, and GitHub export instructions, see:
 - Week 2 query pipeline with Redis-backed cache fallback
 - RBAC-aware hybrid retrieval baseline
 - Citation and latency metrics in query responses
+- Per-query UI run details for cache outcome, contexts used, model runtimes, thresholds, and latency
 - Model runtime status endpoint and UI indicator for hashing/extractive versus Ollama readiness
 - Week 3 React/Vite operational UI
 - Week 4 backend/frontend Dockerfiles and Compose wiring

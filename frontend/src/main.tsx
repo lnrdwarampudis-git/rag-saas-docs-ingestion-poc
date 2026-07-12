@@ -49,6 +49,15 @@ type QueryResult = {
     retrieval_ms?: number;
     total_ms?: number;
     contexts_used?: number;
+    top_score?: number;
+    retrieval_min_score?: number;
+    retrieval_min_keyword_overlap?: number;
+    llm_provider?: string;
+    local_llm_runtime?: string;
+    embedding_provider?: string;
+    local_embedding_runtime?: string;
+    embedding_model?: string;
+    answer_model?: string;
   };
 };
 
@@ -393,7 +402,7 @@ function AuthenticatedApp() {
         })
       });
       if (!response.ok) {
-        throw new Error(await response.text());
+        throw new Error(await readApiError(response));
       }
       const payload = (await response.json()) as QueryResult;
       setResult(payload);
@@ -475,27 +484,32 @@ function AuthenticatedApp() {
           <Metric label="TTFT Target" value="<800 ms" icon={<Gauge size={18} />} />
           <Metric
             label="Retrieval"
-            value={`${result?.metrics.retrieval_ms ?? 0} ms`}
+            value={formatMilliseconds(result?.metrics.retrieval_ms)}
             icon={<Search size={18} />}
           />
           <Metric
             label="Total"
-            value={`${result?.metrics.total_ms ?? 0} ms`}
+            value={formatMilliseconds(result?.metrics.total_ms)}
             icon={<Activity size={18} />}
           />
           <Metric
             label="Cache"
-            value={result?.cached ? "Hit" : "Ready"}
+            value={result ? (result.cached ? "Hit" : "Miss") : "Ready"}
             icon={<RefreshCw size={18} />}
           />
           <Metric
+            label="Contexts"
+            value={String(result?.metrics.contexts_used ?? 0)}
+            icon={<FileSearch size={18} />}
+          />
+          <Metric
             label="Embedding"
-            value={formatRuntime(modelStatus?.embedding)}
+            value={formatEmbeddingRuntime(result, modelStatus)}
             icon={<Cpu size={18} />}
           />
           <Metric
             label="Answer Model"
-            value={formatRuntime(modelStatus?.answer)}
+            value={formatAnswerRuntime(result, modelStatus)}
             icon={<MessageSquareText size={18} />}
           />
         </section>
@@ -678,6 +692,8 @@ function AuthenticatedApp() {
                   "Ingest a document, then ask a question. Your roles decide what you can see."}
               </p>
             </article>
+
+            {result ? <QueryRunDetails result={result} modelStatus={modelStatus} /> : null}
           </section>
 
           <section className="panel citations-panel">
@@ -867,6 +883,41 @@ function StatusItem({ label, value }: { label: string; value: string }) {
   );
 }
 
+function QueryRunDetails({
+  result,
+  modelStatus
+}: {
+  result: QueryResult;
+  modelStatus: ModelStatus | null;
+}) {
+  return (
+    <article className="query-run-details" aria-label="Query run details">
+      <div className="run-detail-header">
+        <Gauge size={16} />
+        <strong>Run details</strong>
+      </div>
+      <div className="run-detail-grid">
+        <StatusItem label="Cache" value={result.cached ? "Redis hit" : "Fresh retrieval"} />
+        <StatusItem label="Contexts used" value={String(result.metrics.contexts_used ?? 0)} />
+        <StatusItem label="Top score" value={formatScore(result.metrics.top_score)} />
+        <StatusItem
+          label="Retrieval"
+          value={formatMilliseconds(result.metrics.retrieval_ms)}
+        />
+        <StatusItem label="Total" value={formatMilliseconds(result.metrics.total_ms)} />
+        <StatusItem label="Embedding" value={formatEmbeddingRuntime(result, modelStatus)} />
+        <StatusItem label="Answer" value={formatAnswerRuntime(result, modelStatus)} />
+        <StatusItem
+          label="Thresholds"
+          value={`${formatScore(result.metrics.retrieval_min_score)} score / ${formatScore(
+            result.metrics.retrieval_min_keyword_overlap
+          )} overlap`}
+        />
+      </div>
+    </article>
+  );
+}
+
 function formatDate(value?: string | null) {
   if (!value) {
     return "unknown";
@@ -884,6 +935,48 @@ function formatRuntime(status?: ModelRuntimeStatus) {
     return "Loading";
   }
   return `${status.runtime} / ${status.model_name}`;
+}
+
+function formatEmbeddingRuntime(result?: QueryResult | null, modelStatus?: ModelStatus | null) {
+  const runtime = result?.metrics.local_embedding_runtime ?? modelStatus?.embedding.runtime;
+  const model = result?.metrics.embedding_model ?? modelStatus?.embedding.model_name;
+  return runtime && model ? `${runtime} / ${model}` : "Loading";
+}
+
+function formatAnswerRuntime(result?: QueryResult | null, modelStatus?: ModelStatus | null) {
+  const runtime = result?.metrics.local_llm_runtime ?? modelStatus?.answer.runtime;
+  const model = result?.metrics.answer_model ?? modelStatus?.answer.model_name;
+  return runtime && model ? `${runtime} / ${model}` : "Loading";
+}
+
+function formatMilliseconds(value?: number) {
+  if (typeof value !== "number") {
+    return "0 ms";
+  }
+  return `${Math.round(value)} ms`;
+}
+
+function formatScore(value?: number) {
+  if (typeof value !== "number") {
+    return "0.000";
+  }
+  return value.toFixed(3);
+}
+
+async function readApiError(response: Response) {
+  const text = await response.text();
+  if (!text) {
+    return `Request failed with HTTP ${response.status}`;
+  }
+  try {
+    const parsed = JSON.parse(text) as { detail?: unknown };
+    if (typeof parsed.detail === "string") {
+      return parsed.detail;
+    }
+  } catch {
+    return text;
+  }
+  return text;
 }
 
 function formatRuntimeDetail(status?: ModelRuntimeStatus) {

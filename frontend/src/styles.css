@@ -235,7 +235,7 @@ button {
 
 .metrics-row {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
   gap: 12px;
 }
 
@@ -252,6 +252,7 @@ button {
   grid-template-columns: 36px minmax(0, 1fr);
   gap: 2px 10px;
   padding: 14px;
+  min-width: 0;
 }
 
 .metric div {
@@ -272,7 +273,9 @@ button {
 
 .metric strong {
   color: #17201b;
-  font-size: 18px;
+  font-size: 16px;
+  line-height: 1.25;
+  overflow-wrap: anywhere;
 }
 
 .error-banner {
@@ -553,6 +556,29 @@ button {
   line-height: 1.55;
 }
 
+.query-run-details {
+  display: grid;
+  gap: 12px;
+  padding: 14px;
+  border: 1px solid #d8e3dd;
+  border-radius: 8px;
+  background: #ffffff;
+}
+
+.run-detail-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #255543;
+  font-size: 13px;
+}
+
+.run-detail-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
 .citation-card {
   justify-content: flex-start;
 }
@@ -765,7 +791,8 @@ button {
   }
 
   .metrics-row,
-  .content-grid {
+  .content-grid,
+  .run-detail-grid {
     grid-template-columns: 1fr;
   }
 
