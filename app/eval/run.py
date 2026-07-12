@@ -5,7 +5,7 @@ from pathlib import Path
 import argparse
 import json
 
-from app.rag.pipeline import _compose_precise_answer
+from app.rag.model_providers import ExtractiveAnswerGenerator
 from app.rag.retrieval import HybridRetriever, RetrievalRequest
 from app.schemas.documents import ChunkDTO
 
@@ -13,6 +13,7 @@ DEFAULT_DATASET = Path("data/eval/retrieval_cases.json")
 CONTEXT_PRECISION_TARGET = 0.85
 CONTEXT_RECALL_TARGET = 0.80
 ANSWER_RELEVANCE_TARGET = 0.85
+ANSWER_GENERATOR = ExtractiveAnswerGenerator()
 
 
 @dataclass(frozen=True)
@@ -116,7 +117,7 @@ def _evaluate_case(case: dict) -> EvalCaseResult:
         for result in results
         if result.chunk.metadata.get("document_id")
     ]
-    answer = _compose_precise_answer(case["query"], results).lower()
+    answer = ANSWER_GENERATOR.generate(case["query"], results).lower()
     return EvalCaseResult(
         case_id=case["id"],
         context_precision=_context_precision(retrieved_document_ids, expected_document_ids),

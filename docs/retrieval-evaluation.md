@@ -59,11 +59,15 @@ These guardrails reduce unrelated context, especially when deterministic/hash em
 The POC stays local/open-source first:
 
 ```text
+EMBEDDING_PROVIDER=local
+LOCAL_EMBEDDING_RUNTIME=hashing
+LOCAL_EMBEDDING_MODEL_NAME=hashing-384
 LLM_PROVIDER=local
 LOCAL_LLM_RUNTIME=extractive
+LOCAL_LLM_MODEL_NAME=extractive
 PUBLIC_LLM_ENABLED=false
 ```
 
-The current local runtime is extractive and deterministic so tests and demos run without model downloads. Future local upgrades should add Ollama or vLLM for answer generation, plus open-source embedding/reranker models such as BGE, E5, Mixedbread, or BGE reranker.
+The current local runtimes are deterministic so tests and demos run without model downloads. Future local upgrades should add Ollama or vLLM adapters for answer generation, plus open-source embedding/reranker models such as BGE, E5, Mixedbread, or BGE reranker.
 
 Public token-based LLMs should be added later behind explicit config flags only when deployment policy allows external API usage.

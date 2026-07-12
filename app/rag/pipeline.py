@@ -1,15 +1,12 @@
 from dataclasses import dataclass
 import hashlib
-import re
 import time
 
-from app.config import get_settings
 from app.rag.cache import QueryCache, cache_key
+from app.rag.model_providers import ModelProvider, build_model_provider
 from app.rag.persistence import load_persisted_chunks
-from app.rag.retrieval import HybridRetriever, RetrievalRequest, RetrievalResult, _content_terms
+from app.rag.retrieval import HybridRetriever, RetrievalRequest, RetrievalResult
 from app.rag.store import document_store
-
-SENTENCE_PATTERN = re.compile(r"(?<=[.!?])\s+")
 
 
 @dataclass(frozen=True)
@@ -25,8 +22,12 @@ class RagPipeline:
         self,
         retriever: HybridRetriever | None = None,
         cache: QueryCache | None = None,
+        model_provider: ModelProvider | None = None,
     ) -> None:
-        self.retriever = retriever or HybridRetriever()
+        self.model_provider = model_provider or build_model_provider()
+        self.retriever = retriever or HybridRetriever(
+            embedding_model=self.model_provider.embedding_model
+        )
         self.cache = cache or QueryCache()
 
     def answer(
@@ -45,6 +46,12 @@ class RagPipeline:
                 "role_names": sorted(role_names),
                 "requester_subject": requester_subject,
                 "top_k": top_k,
+                "llm_provider": self.model_provider.provider_name,
+                "local_llm_runtime": self.model_provider.answer_runtime,
+                "answer_model": self.model_provider.answer_model_name,
+                "embedding_provider": self.model_provider.embedding_provider,
+                "local_embedding_runtime": self.model_provider.embedding_runtime,
+                "embedding_model": self.model_provider.embedding_model_name,
             }
         )
         cached = self.cache.get(key)
@@ -65,7 +72,7 @@ class RagPipeline:
             ),
         )
         retrieval_ms = (time.perf_counter() - retrieval_started) * 1000
-        answer = _compose_precise_answer(query, results)
+        answer = self.model_provider.answer_generator.generate(query, results)
         citations = [_citation(result) for result in results]
         total_ms = (time.perf_counter() - started) * 1000
 
@@ -80,43 +87,16 @@ class RagPipeline:
                 "top_score": round(results[0].score, 4) if results else 0,
                 "retrieval_min_score": self.retriever.min_score,
                 "retrieval_min_keyword_overlap": self.retriever.min_keyword_overlap,
-                "llm_provider": get_settings().llm_provider,
-                "local_llm_runtime": get_settings().local_llm_runtime,
+                "llm_provider": self.model_provider.provider_name,
+                "local_llm_runtime": self.model_provider.answer_runtime,
+                "embedding_provider": self.model_provider.embedding_provider,
+                "local_embedding_runtime": self.model_provider.embedding_runtime,
+                "embedding_model": self.model_provider.embedding_model_name,
+                "answer_model": self.model_provider.answer_model_name,
             },
         }
         self.cache.set(key, payload)
         return RagAnswer(**payload)
-
-
-def _compose_precise_answer(query: str, results: list[RetrievalResult]) -> str:
-    if not results:
-        return (
-            "I could not find enough authorized context to answer this precisely. "
-            "Upload relevant documents or check your role access."
-        )
-
-    query_terms = _content_terms(query)
-    matched_sentences: list[str] = []
-    for result in results:
-        sentences = SENTENCE_PATTERN.split(result.chunk.text.strip())
-        for sentence in sentences:
-            sentence_terms = _content_terms(sentence)
-            if query_terms.intersection(sentence_terms):
-                matched_sentences.append(" ".join(sentence.split()))
-            if len(matched_sentences) >= 3:
-                break
-        if len(matched_sentences) >= 3:
-            break
-
-    if not matched_sentences:
-        return (
-            "I found authorized context, but not enough matching evidence to answer precisely. "
-            "Try a more specific question or upload a more relevant document."
-        )
-
-    answer = _clean_answer_text(" ".join(matched_sentences))
-    trimmed = " ".join(answer.split()[:160])
-    return f"Based on matching authorized context for '{query}': {trimmed}"
 
 
 def _dedupe_chunks(chunks: list) -> list:
@@ -127,35 +107,6 @@ def _dedupe_chunks(chunks: list) -> list:
         key = (metadata.get("file_name"), chunk.chunk_index, text_hash)
         deduped[key] = chunk
     return list(deduped.values())
-
-
-def _clean_answer_text(text: str) -> str:
-    cleaned = re.sub(r"[\x00-\x08\x0b-\x1f]", " ", text)
-    replacements = {
-        r"\bkno\s+wledge\b": "knowledge",
-        r"\brepresen\s+tation\b": "representation",
-        r"\brepresen\s+tation's\b": "representation's",
-        r"\bIn\s+tro\s+duction\b": "Introduction",
-        r"\bW\s+e\b": "We",
-        r"\bb\s+est\b": "best",
-        r"\bb\s+e\b": "be",
-        r"\bundersto\s+o\s+d\b": "understood",
-        r"\bfundamen\s+tally\b": "fundamentally",
-        r"\bsubsti-\s*tute\b": "substitute",
-        r"\ben\s+tit\s+y\b": "entity",
-        r"\bb\s+y\b": "by",
-        r"\bab\s+out\b": "about",
-        r"\bw\s+orld\b": "world",
-        r"\bfragmenta\s+ry\b": "fragmentary",
-        r"\btheo\s+ry\b": "theory",
-        r"\bin\s+telligen\s+t\b": "intelligent",
-        r"\bcomp\s+onen\s+ts\b": "components",
-        r"\bpla\s+ys\b": "plays",
-        r"\bv\s+e\b": "five",
-    }
-    for pattern, replacement in replacements.items():
-        cleaned = re.sub(pattern, replacement, cleaned, flags=re.IGNORECASE)
-    return " ".join(cleaned.split())
 
 
 def _citation(result: RetrievalResult) -> dict:

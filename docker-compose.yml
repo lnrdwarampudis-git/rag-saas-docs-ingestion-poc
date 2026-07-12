@@ -20,6 +20,13 @@ services:
       RETRIEVAL_MIN_KEYWORD_OVERLAP: "0.20"
       LLM_PROVIDER: local
       LOCAL_LLM_RUNTIME: extractive
+      LOCAL_LLM_MODEL_NAME: extractive
+      LOCAL_LLM_BASE_URL: http://localhost:11434
+      EMBEDDING_PROVIDER: local
+      LOCAL_EMBEDDING_RUNTIME: hashing
+      LOCAL_EMBEDDING_MODEL_NAME: hashing-384
+      EMBEDDING_DIMENSIONS: "384"
+      LOCAL_EMBEDDING_BASE_URL: http://localhost:11434
       PUBLIC_LLM_ENABLED: "false"
     ports:
       - "8000:8000"
@@ -64,6 +71,13 @@ services:
       RETRIEVAL_MIN_KEYWORD_OVERLAP: "0.20"
       LLM_PROVIDER: local
       LOCAL_LLM_RUNTIME: extractive
+      LOCAL_LLM_MODEL_NAME: extractive
+      LOCAL_LLM_BASE_URL: http://localhost:11434
+      EMBEDDING_PROVIDER: local
+      LOCAL_EMBEDDING_RUNTIME: hashing
+      LOCAL_EMBEDDING_MODEL_NAME: hashing-384
+      EMBEDDING_DIMENSIONS: "384"
+      LOCAL_EMBEDDING_BASE_URL: http://localhost:11434
       PUBLIC_LLM_ENABLED: "false"
     volumes:
       - ./data/ingest:/data/ingest:ro

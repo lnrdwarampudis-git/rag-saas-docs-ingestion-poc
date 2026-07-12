@@ -24,6 +24,13 @@ class Settings(BaseSettings):
     retrieval_min_keyword_overlap: float = 0.20
     llm_provider: str = "local"
     local_llm_runtime: str = "extractive"
+    local_llm_model_name: str = "extractive"
+    local_llm_base_url: str = "http://localhost:11434"
+    embedding_provider: str = "local"
+    local_embedding_runtime: str = "hashing"
+    local_embedding_model_name: str = "hashing-384"
+    embedding_dimensions: int = 384
+    local_embedding_base_url: str = "http://localhost:11434"
     public_llm_enabled: bool = False
 
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8")

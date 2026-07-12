@@ -1,6 +1,6 @@
 from dataclasses import dataclass
 import re
-from typing import Iterable
+from typing import Iterable, Protocol
 
 from app.config import get_settings
 from app.rag.embeddings import HashingEmbeddingModel, cosine_similarity
@@ -38,6 +38,11 @@ STOPWORDS = {
 }
 
 
+class EmbeddingModel(Protocol):
+    def embed(self, text: str) -> list[float]:
+        """Return a vector representation for retrieval ranking."""
+
+
 @dataclass(frozen=True)
 class RetrievalRequest:
     query: str
@@ -59,7 +64,7 @@ class RetrievalResult:
 class HybridRetriever:
     def __init__(
         self,
-        embedding_model: HashingEmbeddingModel | None = None,
+        embedding_model: EmbeddingModel | None = None,
         min_score: float | None = None,
         min_keyword_overlap: float | None = None,
     ) -> None:

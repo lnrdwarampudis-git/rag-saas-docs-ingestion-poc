@@ -35,6 +35,9 @@ def test_pipeline_returns_cached_answer_on_repeat_query() -> None:
     assert second.citations[0]["file_name"] == "architecture.md"
     assert "keyword_score" in second.citations[0]
     assert second.metrics["llm_provider"] == "local"
+    assert second.metrics["local_llm_runtime"] == "extractive"
+    assert second.metrics["embedding_provider"] == "local"
+    assert second.metrics["local_embedding_runtime"] == "hashing"
 
 
 def test_pipeline_extracts_matching_sentence_instead_of_whole_chunk() -> None:

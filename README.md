@@ -176,7 +176,7 @@ Username: rag
 Password: rag
 ```
 
-The query endpoint uses an in-process development store and deterministic local embeddings. Production should persist chunks/embeddings in PostgreSQL/Qdrant and serve open source embedding/LLM models through workers or vLLM.
+The query endpoint uses an in-process development store and the local model provider abstraction. The default configuration keeps demos deterministic with hashing embeddings and extractive answer generation. Production should persist chunks/embeddings in PostgreSQL/Qdrant and serve open source embedding/LLM models through workers, Ollama, or vLLM adapters.
 
 Run the offline retrieval quality gate:
 
@@ -184,7 +184,20 @@ Run the offline retrieval quality gate:
 python -m app.eval.run
 ```
 
-The current model strategy is local/open-source first. The default `LLM_PROVIDER=local` uses the extractive answer composer for the POC; later phases can add Ollama/vLLM-backed generation and, only when required, public token-based LLM providers behind config flags.
+The current model strategy is local/open-source first. Defaults are:
+
+```text
+EMBEDDING_PROVIDER=local
+LOCAL_EMBEDDING_RUNTIME=hashing
+LOCAL_EMBEDDING_MODEL_NAME=hashing-384
+EMBEDDING_DIMENSIONS=384
+LLM_PROVIDER=local
+LOCAL_LLM_RUNTIME=extractive
+LOCAL_LLM_MODEL_NAME=extractive
+PUBLIC_LLM_ENABLED=false
+```
+
+`app/rag/model_providers.py` defines the embedding and answer-generation interfaces. Later phases can add Ollama/vLLM-backed embedding or generation adapters behind `LOCAL_EMBEDDING_RUNTIME` and `LOCAL_LLM_RUNTIME`; public token-based LLM providers remain blocked unless `PUBLIC_LLM_ENABLED=true`.
 
 ## Architecture
 
