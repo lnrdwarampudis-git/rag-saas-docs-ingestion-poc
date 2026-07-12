@@ -2,6 +2,7 @@ from dataclasses import dataclass
 import re
 from typing import Iterable
 
+from app.config import get_settings
 from app.rag.embeddings import HashingEmbeddingModel, cosine_similarity
 from app.schemas.documents import ChunkDTO
 
@@ -50,11 +51,26 @@ class RetrievalRequest:
 class RetrievalResult:
     chunk: ChunkDTO
     score: float
+    keyword_score: float
+    vector_score: float
+    early_score: float
 
 
 class HybridRetriever:
-    def __init__(self, embedding_model: HashingEmbeddingModel | None = None) -> None:
+    def __init__(
+        self,
+        embedding_model: HashingEmbeddingModel | None = None,
+        min_score: float | None = None,
+        min_keyword_overlap: float | None = None,
+    ) -> None:
         self.embedding_model = embedding_model or HashingEmbeddingModel()
+        settings = get_settings()
+        self.min_score = settings.retrieval_min_score if min_score is None else min_score
+        self.min_keyword_overlap = (
+            settings.retrieval_min_keyword_overlap
+            if min_keyword_overlap is None
+            else min_keyword_overlap
+        )
 
     def retrieve(self, chunks: Iterable[ChunkDTO], request: RetrievalRequest) -> list[RetrievalResult]:
         query_embedding = self.embedding_model.embed(request.query)
@@ -66,12 +82,20 @@ class HybridRetriever:
                 continue
             vector_score = cosine_similarity(query_embedding, self.embedding_model.embed(chunk.text))
             keyword_score = _keyword_overlap(request.query, chunk.text)
-            if keyword_score <= 0:
+            if keyword_score < self.min_keyword_overlap:
                 continue
             early_score = _early_term_overlap(request.query, chunk.text)
             score = (0.20 * vector_score) + (0.55 * keyword_score) + (0.25 * early_score)
-            if score >= 0.05:
-                results.append(RetrievalResult(chunk=chunk, score=score))
+            if score >= self.min_score:
+                results.append(
+                    RetrievalResult(
+                        chunk=chunk,
+                        score=score,
+                        keyword_score=keyword_score,
+                        vector_score=vector_score,
+                        early_score=early_score,
+                    )
+                )
 
         return sorted(results, key=lambda result: result.score, reverse=True)[: request.top_k]
 

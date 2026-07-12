@@ -83,9 +83,39 @@ flowchart TD
   redis -- no --> chunks["Load Candidate Chunks"]
   chunks --> filter["RBAC Chunk Filter<br/>tenant, role, private owner"]
   filter --> rank["Hybrid Retrieval + Ranking"]
-  rank --> compose["Answer Composer<br/>citations + latency"]
+  rank --> threshold["Precision Thresholds<br/>min score + keyword overlap"]
+  threshold --> compose["Local Answer Composer<br/>extractive now, Ollama/vLLM later"]
   compose --> saveCache["Store Redis Answer"]
   saveCache --> answer
+```
+
+## Retrieval Evaluation Flow
+
+```mermaid
+flowchart TD
+  dataset["data/eval/retrieval_cases.json"] --> runner["python -m app.eval.run"]
+  runner --> retriever["Hybrid Retriever"]
+  retriever --> citations["Retrieved document ids + scores"]
+  runner --> answer["Local Answer Composer"]
+  answer --> relevance["Expected answer term checks"]
+  citations --> precision["Context Precision"]
+  citations --> recall["Context Recall"]
+  relevance --> report["Eval Report<br/>pass/fail against KPI targets"]
+  precision --> report
+  recall --> report
+```
+
+## Model Provider Strategy
+
+```mermaid
+flowchart LR
+  config["LLM_PROVIDER"] --> local{"local"}
+  local --> extractive["Current extractive composer"]
+  local --> ollama["Future Ollama local LLM"]
+  local --> vllm["Future vLLM local serving"]
+  config --> public{"public provider later"}
+  public --> gate["PUBLIC_LLM_ENABLED=true required"]
+  gate --> tokenApi["Token/API-based LLM provider"]
 ```
 
 ## RBAC Visibility Rules

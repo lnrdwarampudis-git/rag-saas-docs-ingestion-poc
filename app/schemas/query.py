@@ -10,4 +10,4 @@ class QueryResponse(BaseModel):
     answer: str
     cached: bool
     citations: list[dict]
-    metrics: dict[str, float | int]
+    metrics: dict[str, float | int | str]

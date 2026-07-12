@@ -16,6 +16,11 @@ services:
       KEYCLOAK_CLIENT_ID: rag-frontend
       UPLOAD_DIR: /data/uploads
       ENABLE_DB_PERSISTENCE: "true"
+      RETRIEVAL_MIN_SCORE: "0.12"
+      RETRIEVAL_MIN_KEYWORD_OVERLAP: "0.20"
+      LLM_PROVIDER: local
+      LOCAL_LLM_RUNTIME: extractive
+      PUBLIC_LLM_ENABLED: "false"
     ports:
       - "8000:8000"
     volumes:
@@ -55,6 +60,11 @@ services:
       KEYCLOAK_CLIENT_ID: rag-frontend
       UPLOAD_DIR: /data/uploads
       ENABLE_DB_PERSISTENCE: "true"
+      RETRIEVAL_MIN_SCORE: "0.12"
+      RETRIEVAL_MIN_KEYWORD_OVERLAP: "0.20"
+      LLM_PROVIDER: local
+      LOCAL_LLM_RUNTIME: extractive
+      PUBLIC_LLM_ENABLED: "false"
     volumes:
       - ./data/ingest:/data/ingest:ro
       - ./data/uploads:/data/uploads

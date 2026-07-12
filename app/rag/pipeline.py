@@ -3,6 +3,7 @@ import hashlib
 import re
 import time
 
+from app.config import get_settings
 from app.rag.cache import QueryCache, cache_key
 from app.rag.persistence import load_persisted_chunks
 from app.rag.retrieval import HybridRetriever, RetrievalRequest, RetrievalResult, _content_terms
@@ -16,7 +17,7 @@ class RagAnswer:
     answer: str
     cached: bool
     citations: list[dict]
-    metrics: dict[str, float | int]
+    metrics: dict[str, float | int | str]
 
 
 class RagPipeline:
@@ -76,6 +77,11 @@ class RagPipeline:
                 "retrieval_ms": round(retrieval_ms, 3),
                 "total_ms": round(total_ms, 3),
                 "contexts_used": len(results),
+                "top_score": round(results[0].score, 4) if results else 0,
+                "retrieval_min_score": self.retriever.min_score,
+                "retrieval_min_keyword_overlap": self.retriever.min_keyword_overlap,
+                "llm_provider": get_settings().llm_provider,
+                "local_llm_runtime": get_settings().local_llm_runtime,
             },
         }
         self.cache.set(key, payload)
@@ -160,5 +166,8 @@ def _citation(result: RetrievalResult) -> dict:
         "section_title": metadata.get("section_title"),
         "chunk_index": result.chunk.chunk_index,
         "score": round(result.score, 4),
+        "keyword_score": round(result.keyword_score, 4),
+        "vector_score": round(result.vector_score, 4),
+        "early_score": round(result.early_score, 4),
         "ocr_used": metadata.get("ocr_used", False),
     }

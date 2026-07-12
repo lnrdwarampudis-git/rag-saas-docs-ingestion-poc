@@ -14,6 +14,12 @@
 - Context Recall: target `> 80%`
 - Answer Relevance: target `> 85%`
 
+The offline quality gate can be run with:
+
+```bash
+python -m app.eval.run
+```
+
 ## Processing and Cost KPIs
 
 - Document Processing Time: target `< 15 seconds` for normal-sized documents
@@ -29,4 +35,5 @@
 - Audit event for document upload, extraction, chunking, query, and answer generation
 - Metrics timers for extraction, OCR, chunking, embedding, retrieval, reranking, generation, and cache lookup
 - Worker metrics for queue depth, queued-to-start latency, processing duration, attempts, failures, and completed jobs per hour
+- Evaluation reports for context precision, context recall, answer relevance, retrieved document ids, and expected document ids
 - Token counters for prompt, completion, and context chunks

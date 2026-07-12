@@ -5,7 +5,9 @@ __pycache__/
 .ruff_cache/
 .env
 *.pyc
-data/
+data/*
+!data/eval/
+!data/eval/retrieval_cases.json
 dist/
 build/
 frontend/node_modules/

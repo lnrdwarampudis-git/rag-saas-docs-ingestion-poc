@@ -1,0 +1,75 @@
+[
+  {
+    "id": "knowledge-representation",
+    "query": "What is knowledge representation?",
+    "tenant_id": "00000000-0000-4000-8000-000000000101",
+    "role_names": ["engineering"],
+    "top_k": 3,
+    "expected_document_ids": ["ai-kr"],
+    "expected_answer_terms": ["knowledge representation", "encode facts", "reasoning"],
+    "chunks": [
+      {
+        "document_id": "ai-kr",
+        "file_name": "ai-foundations.txt",
+        "chunk_index": 0,
+        "text": "Knowledge representation is the study of how to encode facts about the world so an intelligent system can support reasoning.",
+        "visibility": "tenant",
+        "allowed_role_names": []
+      },
+      {
+        "document_id": "ml-scaler",
+        "file_name": "ml-notebook.txt",
+        "chunk_index": 0,
+        "text": "The MinMaxScaler prints per-feature minimum and maximum values after scaling a test set.",
+        "visibility": "tenant",
+        "allowed_role_names": []
+      }
+    ]
+  },
+  {
+    "id": "redis-cache",
+    "query": "How does Redis help the RAG pipeline?",
+    "tenant_id": "00000000-0000-4000-8000-000000000102",
+    "role_names": ["admin"],
+    "top_k": 3,
+    "expected_document_ids": ["rag-architecture"],
+    "expected_answer_terms": ["redis cache", "repeated rag query latency"],
+    "chunks": [
+      {
+        "document_id": "rag-architecture",
+        "file_name": "architecture.md",
+        "chunk_index": 0,
+        "text": "Redis cache improves repeated RAG query latency by storing authorized answers for equivalent requests.",
+        "visibility": "tenant",
+        "allowed_role_names": []
+      },
+      {
+        "document_id": "hr-benefits",
+        "file_name": "benefits.txt",
+        "chunk_index": 0,
+        "text": "Benefits enrollment windows and payroll deadlines are published every quarter.",
+        "visibility": "tenant",
+        "allowed_role_names": []
+      }
+    ]
+  },
+  {
+    "id": "role-filter",
+    "query": "Who can review settlement terms?",
+    "tenant_id": "00000000-0000-4000-8000-000000000103",
+    "role_names": ["support"],
+    "top_k": 3,
+    "expected_document_ids": [],
+    "expected_answer_terms": ["could not find enough authorized context"],
+    "chunks": [
+      {
+        "document_id": "legal-settlement",
+        "file_name": "legal.txt",
+        "chunk_index": 0,
+        "text": "Legal members can review settlement terms before negotiation.",
+        "visibility": "role",
+        "allowed_role_names": ["legal"]
+      }
+    ]
+  }
+]

@@ -51,7 +51,8 @@ flowchart TD
     cache["Redis Query Cache"]
     retriever["Hybrid Retriever"]
     ranker["Precision Ranking"]
-    answer["Answer Composer<br/>citations, latency"]
+    answer["Local Answer Composer<br/>extractive now, Ollama/vLLM later"]
+    eval["Offline Eval Runner<br/>precision, recall, relevance"]
   end
 
   %% Data plane
@@ -107,6 +108,8 @@ flowchart TD
   retriever --> postgres
   retriever --> qdrant
   retriever --> authz --> ranker --> answer --> cache
+  eval -. quality gate .-> retriever
+  eval -. quality gate .-> answer
 
   docker -.-> fastapi
   docker -.-> worker
@@ -121,7 +124,7 @@ flowchart TD
   classDef ops fill:#f5f3ff,stroke:#7c3aed,color:#111827;
 
   class browser,ui,loginScreen,aaScreen,sessionScreen,formatsScreen,docInventory,jobStatus client;
-  class nginx,fastapi,authApi,docMgmtApi,jobApi,upload,queue,worker,parser,ocr,chunker,embed,query,cache,retriever,ranker,answer service;
+  class nginx,fastapi,authApi,docMgmtApi,jobApi,upload,queue,worker,parser,ocr,chunker,embed,query,cache,retriever,ranker,answer,eval service;
   class postgres,qdrant,minio data;
   class keycloak,demoUsers,jwtValidate,rbacResolve,authz security;
   class docker,tests ops;
@@ -167,13 +170,14 @@ sequenceDiagram
 ## Component Responsibilities
 
 - React/Vite UI: PKCE login/logout, document upload, mounted-path ingestion, queued upload status, read-only A&A and session status display, format guidance, document inventory/detail/chunk preview, query form, citations, cache status, and latency display.
-- FastAPI backend: bearer-token validation, RBAC resolution, request validation, ingestion orchestration, processing job APIs, document inventory APIs, retrieval orchestration, persistence, and API contracts.
+- FastAPI backend: bearer-token validation, RBAC resolution, request validation, ingestion orchestration, processing job APIs, document inventory APIs, retrieval orchestration, retrieval evaluation, persistence, and API contracts.
 - Keycloak: identity provider for OAuth/OIDC (Authorization Code + PKCE for the SPA), issues and refreshes JWTs, exposes the JWKS used to validate them, and owns realm roles and demo users.
 - PostgreSQL + pgvector: tenant metadata, RBAC tables (`app_users`, `roles`, `user_roles`) as the source of truth for tenant/role resolution, document records, chunk records, and audit logs.
 - Redis: query cache and processing job queue for background ingestion.
 - MinIO: target object storage for original files and extracted text.
 - Qdrant: optional vector index for higher-scale retrieval experiments.
 - Docker Compose: local reproducible stack for the POC, including a `--import-realm` Keycloak boot that seeds the `rag` realm from `infra/keycloak/realm-export.json`.
+- Model provider strategy: local/open-source first (`LLM_PROVIDER=local`) using deterministic local embeddings and the current extractive answer composer. Ollama/vLLM and open-source embedding/reranker services are the next local model upgrades; public token-based LLM providers should remain disabled until explicitly needed.
 
 ## Authentication, Authorization And Session Management
 

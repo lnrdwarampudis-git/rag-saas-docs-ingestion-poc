@@ -1,0 +1,69 @@
+# Retrieval Evaluation
+
+Week 7 adds an offline quality gate for the RAG pipeline. The goal is to measure whether retrieval returns the right authorized chunks before adding heavier local LLMs, rerankers, or public token-based providers.
+
+## Run
+
+```bash
+python -m app.eval.run
+```
+
+For machine-readable output:
+
+```bash
+python -m app.eval.run --json
+```
+
+## Dataset
+
+Evaluation cases live in:
+
+```text
+data/eval/retrieval_cases.json
+```
+
+Each case defines:
+
+- `query`
+- `tenant_id`
+- `role_names`
+- test `chunks`
+- expected source document ids
+- expected answer terms
+
+## Metrics
+
+- Context Precision: percentage of retrieved documents that are expected.
+- Context Recall: percentage of expected documents retrieved.
+- Answer Relevance: percentage of expected answer terms present in the generated/extractive answer.
+
+Current targets:
+
+- Context Precision >= 0.85
+- Context Recall >= 0.80
+- Answer Relevance >= 0.85
+
+## Precision Guardrails
+
+The retriever now exposes configurable thresholds:
+
+```text
+RETRIEVAL_MIN_SCORE=0.12
+RETRIEVAL_MIN_KEYWORD_OVERLAP=0.20
+```
+
+These guardrails reduce unrelated context, especially when deterministic/hash embeddings produce weak semantic similarity. This directly protects questions such as "What is knowledge representation?" from being answered with unrelated machine-learning scaler text.
+
+## Model Strategy
+
+The POC stays local/open-source first:
+
+```text
+LLM_PROVIDER=local
+LOCAL_LLM_RUNTIME=extractive
+PUBLIC_LLM_ENABLED=false
+```
+
+The current local runtime is extractive and deterministic so tests and demos run without model downloads. Future local upgrades should add Ollama or vLLM for answer generation, plus open-source embedding/reranker models such as BGE, E5, Mixedbread, or BGE reranker.
+
+Public token-based LLMs should be added later behind explicit config flags only when deployment policy allows external API usage.

@@ -10,6 +10,7 @@ The milestone targets are:
 - Week 4: Docker containerization plus unit, API E2E, and frontend E2E test coverage.
 - Week 5: Keycloak OIDC login (Authorization Code + PKCE), JWT validation middleware, Postgres-backed RBAC, and stateless-JWT session management.
 - Week 6: background document ingestion with queued upload, Redis worker polling, processing job status APIs, and UI job status polling.
+- Week 7: retrieval evaluation, precision thresholds, and local/open-source model strategy.
 
 ## Quick Start
 
@@ -33,9 +34,11 @@ For full setup, execution, test, and GitHub export instructions, see:
 - [Setup Guide](docs/setup.md)
 - [Architecture Diagram](docs/architecture.md)
 - [Flow Diagrams](docs/flow-diagrams.md)
+- [Retrieval Evaluation](docs/retrieval-evaluation.md)
 - [Execution Runbook](docs/runbook.md)
 - [GitHub Export Guide](docs/github-export.md)
 - [Week 6 Suggested Target Plan](docs/week6-plan.md)
+- [Week 7 Suggested Target Plan](docs/week7-plan.md)
 
 ## Scope Delivered
 
@@ -61,6 +64,8 @@ For full setup, execution, test, and GitHub export instructions, see:
 - PDF, Word DOCX, Excel XLSX, PowerPoint PPTX, text, CSV/TSV, markdown, and image intake
 - Document management inventory with authorized list/detail APIs, ingestion status, visibility, OCR flags, chunk counts, and chunk preview
 - Week 6 background ingestion path with queued upload, Redis-backed worker polling, processing job status API, and UI job polling
+- Week 7 offline retrieval evaluation dataset and runner with context precision, context recall, and answer relevance checks
+- Local/open-source model-first configuration (`LLM_PROVIDER=local`) with a later opt-in path for public token-based LLM providers
 
 ## Recommended Week 1 Commands
 
@@ -172,6 +177,14 @@ Password: rag
 ```
 
 The query endpoint uses an in-process development store and deterministic local embeddings. Production should persist chunks/embeddings in PostgreSQL/Qdrant and serve open source embedding/LLM models through workers or vLLM.
+
+Run the offline retrieval quality gate:
+
+```bash
+python -m app.eval.run
+```
+
+The current model strategy is local/open-source first. The default `LLM_PROVIDER=local` uses the extractive answer composer for the POC; later phases can add Ollama/vLLM-backed generation and, only when required, public token-based LLM providers behind config flags.
 
 ## Architecture
 

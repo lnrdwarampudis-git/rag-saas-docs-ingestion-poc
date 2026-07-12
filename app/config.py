@@ -20,6 +20,11 @@ class Settings(BaseSettings):
     upload_dir: str = "/tmp/rag-uploads"
     enable_db_persistence: bool = False
     host_mount_source_prefix: str = ""
+    retrieval_min_score: float = 0.12
+    retrieval_min_keyword_overlap: float = 0.20
+    llm_provider: str = "local"
+    local_llm_runtime: str = "extractive"
+    public_llm_enabled: bool = False
 
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8")
 
