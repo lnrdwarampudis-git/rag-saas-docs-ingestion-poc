@@ -30,6 +30,7 @@ Use the default tenant ID in the UI:
 For full setup, execution, test, and GitHub export instructions, see:
 
 - [Setup Guide](docs/setup.md)
+- [Architecture Diagram](docs/architecture.md)
 - [Execution Runbook](docs/runbook.md)
 - [GitHub Export Guide](docs/github-export.md)
 
@@ -133,16 +134,7 @@ The query endpoint uses an in-process development store and deterministic local 
 
 ## Architecture
 
-```text
-React/Vite UI
-  -> FastAPI backend
-  -> Keycloak JWT auth
-  -> PostgreSQL metadata + RBAC + audit
-  -> MinIO original files/extracted text
-  -> Workers for parsing/OCR/chunking/embedding
-  -> Qdrant or pgvector vector retrieval
-  -> Redis cache/queue/rate limits
-```
+The editable architecture diagram is maintained in [docs/architecture.md](docs/architecture.md). It renders directly in GitHub and can be edited as Mermaid text.
 
 ## Week 1 Acceptance Criteria
 
