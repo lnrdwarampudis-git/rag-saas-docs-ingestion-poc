@@ -66,7 +66,7 @@ For full setup, execution, test, and GitHub export instructions, see:
 - Document management inventory with authorized list/detail APIs, ingestion status, visibility, OCR flags, chunk counts, and chunk preview
 - Week 6 background ingestion path with queued upload, Redis-backed worker polling, processing job status API, and UI job polling
 - Week 7 offline retrieval evaluation dataset and runner with context precision, context recall, and answer relevance checks
-- Local/open-source model provider abstraction for deterministic hashing embeddings and extractive answer generation, with later adapter paths for Ollama/vLLM and gated public providers
+- Local/open-source model provider abstraction for deterministic hashing embeddings, optional Ollama embeddings, and extractive answer generation, with later adapter paths for vLLM/local generation and gated public providers
 
 ## Recommended Week 1 Commands
 
@@ -177,7 +177,7 @@ Username: rag
 Password: rag
 ```
 
-The query endpoint uses an in-process development store and the local model provider abstraction. The default configuration keeps demos deterministic with hashing embeddings and extractive answer generation. Production should persist chunks/embeddings in PostgreSQL/Qdrant and serve open source embedding/LLM models through workers, Ollama, or vLLM adapters.
+The query endpoint uses an in-process development store and the local model provider abstraction. The default configuration keeps demos deterministic with hashing embeddings and extractive answer generation. For local semantic embeddings, set `LOCAL_EMBEDDING_RUNTIME=ollama` with a running Ollama service. Production should persist chunks/embeddings in PostgreSQL/Qdrant and serve open source embedding/LLM models through workers, Ollama, or vLLM adapters.
 
 Run the offline retrieval quality gate:
 
@@ -193,6 +193,7 @@ LOCAL_EMBEDDING_RUNTIME=hashing
 LOCAL_EMBEDDING_MODEL_NAME=hashing-384
 EMBEDDING_DIMENSIONS=384
 LOCAL_EMBEDDING_BASE_URL=http://localhost:11434
+LOCAL_MODEL_REQUEST_TIMEOUT_SECONDS=30
 LLM_PROVIDER=local
 LOCAL_LLM_RUNTIME=extractive
 LOCAL_LLM_MODEL_NAME=extractive
@@ -200,7 +201,7 @@ LOCAL_LLM_BASE_URL=http://localhost:11434
 PUBLIC_LLM_ENABLED=false
 ```
 
-`app/rag/model_providers.py` defines the embedding and answer-generation interfaces. Later phases can add Ollama/vLLM-backed embedding or generation adapters behind `LOCAL_EMBEDDING_RUNTIME` and `LOCAL_LLM_RUNTIME`; public token-based LLM providers remain blocked unless `PUBLIC_LLM_ENABLED=true`. See [Model Providers](docs/model-providers.md) for the full configuration reference and adapter contract.
+`app/rag/model_providers.py` defines the embedding and answer-generation interfaces. `LOCAL_EMBEDDING_RUNTIME=ollama` is available for local Ollama embeddings; later phases can add vLLM-backed embeddings or Ollama/vLLM answer generation behind `LOCAL_EMBEDDING_RUNTIME` and `LOCAL_LLM_RUNTIME`. Public token-based LLM providers remain blocked unless `PUBLIC_LLM_ENABLED=true`. See [Model Providers](docs/model-providers.md) for the full configuration reference and adapter contract.
 
 ## Architecture
 

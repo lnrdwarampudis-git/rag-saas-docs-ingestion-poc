@@ -17,6 +17,7 @@ LOCAL_EMBEDDING_RUNTIME=hashing
 LOCAL_EMBEDDING_MODEL_NAME=hashing-384
 EMBEDDING_DIMENSIONS=384
 LOCAL_EMBEDDING_BASE_URL=http://localhost:11434
+LOCAL_MODEL_REQUEST_TIMEOUT_SECONDS=30
 LLM_PROVIDER=local
 LOCAL_LLM_RUNTIME=extractive
 LOCAL_LLM_MODEL_NAME=extractive
@@ -24,22 +25,45 @@ LOCAL_LLM_BASE_URL=http://localhost:11434
 PUBLIC_LLM_ENABLED=false
 ```
 
-`LOCAL_*_BASE_URL` values are present now so later Ollama/vLLM adapters can use the same configuration shape. The default hashing and extractive runtimes do not call those URLs.
+`LOCAL_EMBEDDING_BASE_URL` is used when `LOCAL_EMBEDDING_RUNTIME=ollama`. The default hashing and extractive runtimes do not call local model URLs.
 
 ## Supported Values Today
 
 | Setting | Supported now | Reserved for later | Notes |
 | --- | --- | --- | --- |
 | `EMBEDDING_PROVIDER` | `local` | public/provider-specific services | Non-local values fail fast today. |
-| `LOCAL_EMBEDDING_RUNTIME` | `hashing` | `ollama`, `vllm` | `hashing` uses the deterministic in-process embedding baseline. |
-| `LOCAL_EMBEDDING_MODEL_NAME` | `hashing-384` | BGE, E5, Mixedbread, or adapter model names | Informational for the hashing runtime and included in metrics/cache keys. |
+| `LOCAL_EMBEDDING_RUNTIME` | `hashing`, `ollama` | `vllm` | `hashing` uses the deterministic in-process baseline; `ollama` calls `/api/embed` on `LOCAL_EMBEDDING_BASE_URL`. |
+| `LOCAL_EMBEDDING_MODEL_NAME` | `hashing-384`, any installed Ollama embedding model | BGE, E5, Mixedbread, or adapter model names | Informational for hashing; sent as `model` for Ollama; included in metrics/cache keys. |
 | `EMBEDDING_DIMENSIONS` | integer dimension count practical for local ranking | adapter-specific dimensions | Default is `384`; keep it greater than zero for hashing embeddings. |
+| `LOCAL_MODEL_REQUEST_TIMEOUT_SECONDS` | positive number | adapter-specific timeouts | Used by the Ollama embedding HTTP client. |
 | `LLM_PROVIDER` | `local` | public token-based providers | Public providers require `PUBLIC_LLM_ENABLED=true` and adapter code. |
 | `LOCAL_LLM_RUNTIME` | `extractive` | `ollama`, `vllm` | `extractive` selects sentences from authorized retrieved chunks. |
 | `LOCAL_LLM_MODEL_NAME` | `extractive` | local model names | Included in metrics/cache keys. |
 | `PUBLIC_LLM_ENABLED` | `false` | `true` after policy approval and adapter implementation | Keeps external API usage opt-in. |
 
-If `LOCAL_EMBEDDING_RUNTIME=ollama`, `LOCAL_EMBEDDING_RUNTIME=vllm`, `LOCAL_LLM_RUNTIME=ollama`, or `LOCAL_LLM_RUNTIME=vllm` is set before the adapters exist, startup/query construction raises `ModelProviderConfigurationError`. That failure is deliberate: it prevents silently falling back to a different model path.
+If `LOCAL_EMBEDDING_RUNTIME=vllm`, `LOCAL_LLM_RUNTIME=ollama`, or `LOCAL_LLM_RUNTIME=vllm` is set before those adapters exist, startup/query construction raises `ModelProviderConfigurationError`. That failure is deliberate: it prevents silently falling back to a different model path.
+
+## Ollama Embeddings
+
+To use Ollama embeddings locally:
+
+1. Start Ollama on `http://localhost:11434`.
+2. Pull an embedding model, for example `nomic-embed-text`.
+3. Set:
+
+```text
+LOCAL_EMBEDDING_RUNTIME=ollama
+LOCAL_EMBEDDING_MODEL_NAME=nomic-embed-text
+LOCAL_EMBEDDING_BASE_URL=http://localhost:11434
+```
+
+When the backend runs inside Docker Compose and Ollama runs on the host machine, use:
+
+```text
+LOCAL_EMBEDDING_BASE_URL=http://host.docker.internal:11434
+```
+
+The adapter calls `POST /api/embed` with the configured model and input text. Returned vectors are normalized before retrieval scoring so existing cosine ranking behavior remains consistent with the hashing baseline.
 
 ## Query And Cache Behavior
 
@@ -66,7 +90,7 @@ The Redis query cache key also includes provider, runtime, and model names. Chan
 
 ## Adding A Future Local Adapter
 
-When adding Ollama or vLLM support:
+When adding more local model support:
 
 1. Implement an `EmbeddingModel`, an `AnswerGenerator`, or both in `app/rag/model_providers.py` or a focused submodule.
 2. Use `LOCAL_EMBEDDING_BASE_URL` and `LOCAL_LLM_BASE_URL` for local service endpoints.

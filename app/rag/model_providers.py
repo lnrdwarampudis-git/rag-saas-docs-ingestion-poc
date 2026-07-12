@@ -1,6 +1,9 @@
 from dataclasses import dataclass
+import math
 import re
 from typing import Protocol
+
+import httpx
 
 from app.config import Settings, get_settings
 from app.rag.embeddings import EmbeddingConfig, HashingEmbeddingModel
@@ -36,6 +39,10 @@ class ModelProviderConfigurationError(ValueError):
     """Raised when model provider settings request an unsupported runtime."""
 
 
+class ModelProviderRequestError(RuntimeError):
+    """Raised when a configured model provider cannot return a valid response."""
+
+
 class ExtractiveAnswerGenerator:
     def generate(self, query: str, results: list[RetrievalResult]) -> str:
         if not results:
@@ -66,6 +73,36 @@ class ExtractiveAnswerGenerator:
         answer = _clean_answer_text(" ".join(matched_sentences))
         trimmed = " ".join(answer.split()[:160])
         return f"Based on matching authorized context for '{query}': {trimmed}"
+
+
+class OllamaEmbeddingModel:
+    def __init__(
+        self,
+        base_url: str,
+        model_name: str,
+        timeout_seconds: float = 30.0,
+        client: httpx.Client | None = None,
+    ) -> None:
+        self.model_name = model_name
+        self._client = client or httpx.Client(
+            base_url=base_url.rstrip("/"),
+            timeout=timeout_seconds,
+        )
+
+    def embed(self, text: str) -> list[float]:
+        try:
+            response = self._client.post(
+                "/api/embed",
+                json={"model": self.model_name, "input": text},
+            )
+            response.raise_for_status()
+        except httpx.HTTPError as exc:
+            raise ModelProviderRequestError(
+                f"Ollama embedding request failed for model '{self.model_name}'."
+            ) from exc
+
+        embedding = _ollama_embedding_from_response(response.json())
+        return _normalize_embedding(embedding)
 
 
 def build_model_provider(settings: Settings | None = None) -> ModelProvider:
@@ -102,7 +139,13 @@ def _build_local_embedding_model(settings: Settings) -> EmbeddingModel:
     runtime = settings.local_embedding_runtime.lower()
     if runtime == "hashing":
         return HashingEmbeddingModel(EmbeddingConfig(dimensions=settings.embedding_dimensions))
-    if runtime in {"ollama", "vllm"}:
+    if runtime == "ollama":
+        return OllamaEmbeddingModel(
+            base_url=settings.local_embedding_base_url,
+            model_name=settings.local_embedding_model_name,
+            timeout_seconds=settings.local_model_request_timeout_seconds,
+        )
+    if runtime == "vllm":
         raise ModelProviderConfigurationError(
             f"LOCAL_EMBEDDING_RUNTIME '{settings.local_embedding_runtime}' is reserved for a future adapter."
         )
@@ -151,3 +194,21 @@ def _clean_answer_text(text: str) -> str:
     for pattern, replacement in replacements.items():
         cleaned = re.sub(pattern, replacement, cleaned, flags=re.IGNORECASE)
     return " ".join(cleaned.split())
+
+
+def _ollama_embedding_from_response(data: dict) -> list[float]:
+    if isinstance(data.get("embeddings"), list) and data["embeddings"]:
+        embedding = data["embeddings"][0]
+    else:
+        embedding = data.get("embedding")
+
+    if not isinstance(embedding, list) or not all(isinstance(value, (int, float)) for value in embedding):
+        raise ModelProviderRequestError("Ollama embedding response did not include a numeric vector.")
+    return [float(value) for value in embedding]
+
+
+def _normalize_embedding(embedding: list[float]) -> list[float]:
+    norm = math.sqrt(sum(value * value for value in embedding))
+    if norm == 0:
+        return embedding
+    return [value / norm for value in embedding]

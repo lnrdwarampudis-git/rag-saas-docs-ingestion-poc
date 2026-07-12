@@ -31,6 +31,7 @@ class Settings(BaseSettings):
     local_embedding_model_name: str = "hashing-384"
     embedding_dimensions: int = 384
     local_embedding_base_url: str = "http://localhost:11434"
+    local_model_request_timeout_seconds: float = 30.0
     public_llm_enabled: bool = False
 
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8")

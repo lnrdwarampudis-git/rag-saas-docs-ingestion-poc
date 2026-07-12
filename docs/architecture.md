@@ -180,7 +180,7 @@ sequenceDiagram
 - MinIO: target object storage for original files and extracted text.
 - Qdrant: optional vector index for higher-scale retrieval experiments.
 - Docker Compose: local reproducible stack for the POC, including a `--import-realm` Keycloak boot that seeds the `rag` realm from `infra/keycloak/realm-export.json`.
-- Model provider strategy: local/open-source first (`LLM_PROVIDER=local`, `EMBEDDING_PROVIDER=local`) through `app/rag/model_providers.py`. Defaults use deterministic hashing embeddings (`LOCAL_EMBEDDING_RUNTIME=hashing`) and the extractive answer generator (`LOCAL_LLM_RUNTIME=extractive`). Ollama/vLLM and open-source embedding/reranker services are the next local model upgrades; public token-based LLM providers should remain disabled until explicitly needed.
+- Model provider strategy: local/open-source first (`LLM_PROVIDER=local`, `EMBEDDING_PROVIDER=local`) through `app/rag/model_providers.py`. Defaults use deterministic hashing embeddings (`LOCAL_EMBEDDING_RUNTIME=hashing`) and the extractive answer generator (`LOCAL_LLM_RUNTIME=extractive`). Ollama embeddings are available through `LOCAL_EMBEDDING_RUNTIME=ollama`; vLLM embeddings, local answer-generation adapters, and reranker services are the next local model upgrades. Public token-based LLM providers should remain disabled until explicitly needed.
 
 ## Authentication, Authorization And Session Management
 

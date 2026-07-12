@@ -1,10 +1,13 @@
 import pytest
+import httpx
 
 from app.config import Settings
 from app.rag.embeddings import HashingEmbeddingModel
 from app.rag.model_providers import (
     ExtractiveAnswerGenerator,
     ModelProviderConfigurationError,
+    ModelProviderRequestError,
+    OllamaEmbeddingModel,
     build_model_provider,
 )
 
@@ -31,7 +34,62 @@ def test_public_llm_provider_requires_explicit_enablement() -> None:
         build_model_provider(Settings(llm_provider="openai", public_llm_enabled=False))
 
 
-def test_future_local_runtimes_are_reserved_until_adapter_is_implemented() -> None:
+def test_ollama_embedding_runtime_is_available() -> None:
+    provider = build_model_provider(
+        Settings(
+            local_embedding_runtime="ollama",
+            local_embedding_model_name="nomic-embed-text",
+            local_embedding_base_url="http://ollama:11434",
+        )
+    )
+
+    assert provider.embedding_runtime == "ollama"
+    assert provider.embedding_model_name == "nomic-embed-text"
+    assert isinstance(provider.embedding_model, OllamaEmbeddingModel)
+
+
+def test_ollama_embedding_model_posts_to_local_embed_endpoint() -> None:
+    requests: list[httpx.Request] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        requests.append(request)
+        return httpx.Response(200, json={"embeddings": [[3, 4]]})
+
+    client = httpx.Client(
+        base_url="http://ollama.test",
+        transport=httpx.MockTransport(handler),
+    )
+    model = OllamaEmbeddingModel(
+        base_url="http://ollama.test",
+        model_name="nomic-embed-text",
+        client=client,
+    )
+
+    embedding = model.embed("Redis vector retrieval")
+
+    assert requests[0].url.path == "/api/embed"
+    assert requests[0].read() == (
+        b'{"model":"nomic-embed-text","input":"Redis vector retrieval"}'
+    )
+    assert embedding == [0.6, 0.8]
+
+
+def test_ollama_embedding_model_rejects_invalid_response_shape() -> None:
+    client = httpx.Client(
+        base_url="http://ollama.test",
+        transport=httpx.MockTransport(lambda request: httpx.Response(200, json={"done": True})),
+    )
+    model = OllamaEmbeddingModel(
+        base_url="http://ollama.test",
+        model_name="nomic-embed-text",
+        client=client,
+    )
+
+    with pytest.raises(ModelProviderRequestError, match="numeric vector"):
+        model.embed("Redis vector retrieval")
+
+
+def test_future_local_generation_runtimes_are_reserved_until_adapter_is_implemented() -> None:
     with pytest.raises(ModelProviderConfigurationError, match="future adapter"):
         build_model_provider(Settings(local_llm_runtime="ollama"))
 

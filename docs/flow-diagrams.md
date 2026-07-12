@@ -113,8 +113,9 @@ flowchart LR
   config["Settings"] --> embeddingProvider["EMBEDDING_PROVIDER"]
   config --> llmProvider["LLM_PROVIDER"]
   embeddingProvider --> localEmbedding{"local"}
-  localEmbedding --> hashing["Current hashing embeddings"]
-  localEmbedding --> futureEmbedding["Future Ollama/vLLM or BGE/E5 adapter"]
+  localEmbedding --> hashing["Default hashing embeddings"]
+  localEmbedding --> ollamaEmbedding["Optional Ollama embeddings"]
+  localEmbedding --> futureEmbedding["Future vLLM or BGE/E5 adapter"]
   llmProvider --> localLlm{"local"}
   localLlm --> extractive["Current extractive generator"]
   localLlm --> futureLlm["Future Ollama/vLLM generator"]

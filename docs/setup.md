@@ -40,6 +40,7 @@ LOCAL_EMBEDDING_RUNTIME=hashing
 LOCAL_EMBEDDING_MODEL_NAME=hashing-384
 EMBEDDING_DIMENSIONS=384
 LOCAL_EMBEDDING_BASE_URL=http://localhost:11434
+LOCAL_MODEL_REQUEST_TIMEOUT_SECONDS=30
 LLM_PROVIDER=local
 LOCAL_LLM_RUNTIME=extractive
 LOCAL_LLM_MODEL_NAME=extractive
@@ -47,7 +48,7 @@ LOCAL_LLM_BASE_URL=http://localhost:11434
 PUBLIC_LLM_ENABLED=false
 ```
 
-No model download or public LLM token is required for the default stack. See [Model Providers](model-providers.md) before changing these values; Ollama/vLLM values are reserved until their adapters are implemented.
+No model download or public LLM token is required for the default stack. See [Model Providers](model-providers.md) before changing these values. `LOCAL_EMBEDDING_RUNTIME=ollama` is supported when Ollama is running locally; vLLM embeddings and Ollama/vLLM answer generation are reserved until their adapters are implemented.
 
 ## Start Full Stack
 

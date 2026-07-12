@@ -64,6 +64,7 @@ LOCAL_EMBEDDING_RUNTIME=hashing
 LOCAL_EMBEDDING_MODEL_NAME=hashing-384
 EMBEDDING_DIMENSIONS=384
 LOCAL_EMBEDDING_BASE_URL=http://localhost:11434
+LOCAL_MODEL_REQUEST_TIMEOUT_SECONDS=30
 LLM_PROVIDER=local
 LOCAL_LLM_RUNTIME=extractive
 LOCAL_LLM_MODEL_NAME=extractive
@@ -71,7 +72,7 @@ LOCAL_LLM_BASE_URL=http://localhost:11434
 PUBLIC_LLM_ENABLED=false
 ```
 
-The current local runtimes are deterministic so tests and demos run without model downloads. Future local upgrades should add Ollama or vLLM adapters for answer generation, plus open-source embedding/reranker models such as BGE, E5, Mixedbread, or BGE reranker.
+The default local runtimes are deterministic so tests and demos run without model downloads. `LOCAL_EMBEDDING_RUNTIME=ollama` can be used for local semantic embeddings when an Ollama embedding model is available. Future local upgrades should add vLLM embeddings, Ollama/vLLM answer generation, and reranker models such as BGE reranker.
 
 Public token-based LLMs should be added later behind explicit config flags only when deployment policy allows external API usage.
 
