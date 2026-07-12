@@ -9,6 +9,7 @@ The milestone targets are:
 - Week 3: React/Vite UI for document ingestion, role-aware querying, citations, cache status, and latency metrics.
 - Week 4: Docker containerization plus unit, API E2E, and frontend E2E test coverage.
 - Week 5: Keycloak OIDC login (Authorization Code + PKCE), JWT validation middleware, Postgres-backed RBAC, and stateless-JWT session management.
+- Week 6: background document ingestion with queued upload, Redis worker polling, processing job status APIs, and UI job status polling.
 
 ## Quick Start
 
@@ -31,6 +32,7 @@ For full setup, execution, test, and GitHub export instructions, see:
 
 - [Setup Guide](docs/setup.md)
 - [Architecture Diagram](docs/architecture.md)
+- [Flow Diagrams](docs/flow-diagrams.md)
 - [Execution Runbook](docs/runbook.md)
 - [GitHub Export Guide](docs/github-export.md)
 - [Week 6 Suggested Target Plan](docs/week6-plan.md)
@@ -173,7 +175,7 @@ The query endpoint uses an in-process development store and deterministic local 
 
 ## Architecture
 
-The editable architecture diagram is maintained in [docs/architecture.md](docs/architecture.md). It renders directly in GitHub and can be edited as Mermaid text.
+The editable architecture diagram is maintained in [docs/architecture.md](docs/architecture.md). Detailed auth, async ingestion, query, and RBAC flow diagrams are maintained in [docs/flow-diagrams.md](docs/flow-diagrams.md). Both render directly in GitHub and can be edited as Mermaid text.
 
 ## Week 1 Acceptance Criteria
 

@@ -42,6 +42,7 @@ Services:
 
 - Frontend: `http://127.0.0.1:5173`
 - Backend: `http://127.0.0.1:8000`
+- Worker: `python -m app.worker` inside Docker Compose, polling Redis for queued ingestion jobs
 - Postgres: `127.0.0.1:55432`
 - Redis: `127.0.0.1:6379`
 - MinIO: `http://127.0.0.1:9001`
@@ -100,6 +101,8 @@ Preferred local workflow:
 3. Keep visibility as `tenant` unless testing role-restricted chunks.
 4. Ask a question in the query panel.
 
+For larger documents or a more production-like workflow, use **Upload to queue**. The backend returns a processing job immediately, the `worker` service picks it up from Redis, and the UI polls until the job reaches `completed` or `failed`.
+
 Supported POC intake formats:
 
 - PDF
@@ -119,6 +122,19 @@ Alternative mounted-path workflow:
 ```text
 /data/ingest/example.pdf
 ```
+
+## Verify Background Worker
+
+```bash
+docker compose ps backend worker frontend postgres redis
+docker compose logs --tail=50 worker
+```
+
+Expected result:
+
+- `backend` is healthy.
+- `worker` is up and logs `Starting RAG document processing worker`.
+- Queued uploads appear in the UI as job cards, then transition to `completed` after the worker processes them.
 
 ## Stop Stack
 

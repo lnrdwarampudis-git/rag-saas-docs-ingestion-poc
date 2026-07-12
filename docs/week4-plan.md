@@ -51,6 +51,7 @@ docker compose up --build
 - Frontend dependency audit reports no moderate-or-higher vulnerabilities.
 - Playwright UI smoke tests pass.
 - `docker compose up --build` starts frontend, backend, PostgreSQL, Redis, MinIO, Qdrant, and Keycloak.
+- Week 6 extends Compose with a `worker` service for background ingestion jobs.
 - Frontend is reachable at `http://127.0.0.1:5173`.
 - Backend health endpoint is reachable at `http://127.0.0.1:8000/health`.
 
@@ -59,5 +60,5 @@ docker compose up --build
 - Replace local-path ingestion with real multipart uploads to MinIO.
 - ~~Add Keycloak realm import and JWT validation middleware.~~ Done -- see [Architecture: Authentication, Authorization And Session Management](architecture.md#authentication-authorization-and-session-management).
 - Persist document chunks and embeddings to PostgreSQL/Qdrant.
-- Add Celery/RQ worker containers for OCR, chunking, and embedding jobs.
+- ~~Add a worker container for OCR/chunking/embedding-style ingestion jobs.~~ Done as a Redis-polled POC worker -- see [Week 6 Suggested Target Plan](week6-plan.md).
 - Add load tests for TTFT, P95 API latency, retrieval latency, and cache hit ratio.

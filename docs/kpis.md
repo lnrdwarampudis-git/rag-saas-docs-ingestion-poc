@@ -17,6 +17,8 @@
 ## Processing and Cost KPIs
 
 - Document Processing Time: target `< 15 seconds` for normal-sized documents
+- Queue Wait Time: target `< 5 seconds` for normal-sized documents during local/demo load
+- Processing Job Failure Rate: target `< 2%` after supported file-type validation
 - Cache Hit Ratio: target `> 20%`
 - Storage Cost per GB: target `< $0.15 / month`
 
@@ -26,4 +28,5 @@
 - Structured JSON logs
 - Audit event for document upload, extraction, chunking, query, and answer generation
 - Metrics timers for extraction, OCR, chunking, embedding, retrieval, reranking, generation, and cache lookup
+- Worker metrics for queue depth, queued-to-start latency, processing duration, attempts, failures, and completed jobs per hour
 - Token counters for prompt, completion, and context chunks

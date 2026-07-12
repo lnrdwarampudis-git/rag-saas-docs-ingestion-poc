@@ -44,13 +44,13 @@ git push -u origin main
 ## 4. Recommended Repository Description
 
 ```text
-Open-source SaaS RAG document ingestion POC with FastAPI, React/Vite, PostgreSQL, Redis, Qdrant, MinIO, Keycloak, OCR-ready parsing, RBAC metadata, and Docker Compose.
+Open-source SaaS RAG document ingestion POC with FastAPI, React/Vite, PostgreSQL/pgvector, Redis queue/cache, Qdrant, MinIO, Keycloak OIDC/RBAC, OCR-ready parsing, background worker ingestion, and Docker Compose.
 ```
 
 ## 5. Suggested GitHub Topics
 
 ```text
-rag, fastapi, react, vite, postgres, pgvector, redis, qdrant, minio, keycloak, ocr, document-ingestion, open-source
+rag, fastapi, react, vite, postgres, pgvector, redis, qdrant, minio, keycloak, ocr, document-ingestion, background-jobs, open-source
 ```
 
 ## 6. Verify After Clone
@@ -63,4 +63,5 @@ cd <your-repo>
 cp .env.example .env
 docker compose up -d --build
 curl http://127.0.0.1:8000/health
+docker compose ps backend worker frontend postgres redis
 ```

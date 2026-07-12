@@ -1,6 +1,6 @@
 # Architecture
 
-This architecture diagram is editable Mermaid text and renders directly in GitHub. Update the diagram by editing the Mermaid block below.
+This architecture diagram is editable Mermaid text and renders directly in GitHub. Update the diagram by editing the Mermaid block below. For focused sequence/activity diagrams, see [Flow Diagrams](flow-diagrams.md).
 
 ```mermaid
 flowchart TD
@@ -197,6 +197,6 @@ Legacy binary Office formats such as DOC, XLS, and PPT should be converted to DO
 ## Editable Diagram Notes
 
 - GitHub renders Mermaid blocks automatically in Markdown.
-- There are two diagrams: a top-down system flowchart, and a sequence diagram for the PKCE login handshake specifically (a flowchart gets messy for back-and-forth handshakes; a sequence diagram is the right tool for that).
+- This file contains the top-down system flowchart and the PKCE login sequence. Focused async ingestion, query, and RBAC visibility diagrams live in [Flow Diagrams](flow-diagrams.md).
 - Both can be copied into Mermaid Live Editor (https://mermaid.live) or diagrams.net's Mermaid import for visual editing.
 - Keep infrastructure-specific host paths out of this file; use `.env` for local overrides.
