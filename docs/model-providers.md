@@ -190,6 +190,18 @@ Query responses include model metadata in `metrics`:
 
 The Redis query cache key also includes provider, runtime, and model names. Changing model settings therefore creates a new cache entry instead of reusing an answer generated under a previous runtime.
 
+## Runtime Status
+
+Authenticated users can inspect the active model configuration through:
+
+```text
+GET /api/v1/model-status
+```
+
+The response reports the configured embedding and answer providers, runtimes, model names, readiness, and Ollama base URLs when an Ollama runtime is active. Hashing embeddings and extractive answer generation report ready without network calls. Ollama runtimes perform a lightweight `GET /api/tags` readiness check and mark the component not ready when Ollama is unreachable or the configured model has not been pulled.
+
+The React console uses this endpoint to show the model readiness pill and the active embedding/answer runtime cards.
+
 ## Evaluation Behavior
 
 `python -m app.eval.run` still uses the same extractive answer generator as the default local provider. This keeps the retrieval quality gate aligned with the production query path while avoiding network calls or model downloads.

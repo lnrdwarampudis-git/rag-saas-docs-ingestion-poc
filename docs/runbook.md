@@ -13,6 +13,33 @@ Expected health response:
 {"status":"ok","service":"rag-saas-docs-ingestion-poc"}
 ```
 
+The authenticated model runtime check is:
+
+```bash
+curl -H "Authorization: Bearer $TOKEN" http://127.0.0.1:8000/api/v1/model-status
+```
+
+With default local providers, expect ready hashing embeddings and ready extractive answer generation:
+
+```json
+{
+  "llm_provider": "local",
+  "embedding_provider": "local",
+  "embedding": {
+    "provider": "local",
+    "runtime": "hashing",
+    "model_name": "hashing-384",
+    "ready": true
+  },
+  "answer": {
+    "provider": "local",
+    "runtime": "extractive",
+    "model_name": "extractive",
+    "ready": true
+  }
+}
+```
+
 ## Backend Tests
 
 ```bash
@@ -152,6 +179,8 @@ LOCAL_LLM_RUNTIME=ollama
 LOCAL_LLM_MODEL_NAME=llama3.1:8b
 LOCAL_LLM_BASE_URL=http://host.docker.internal:11434
 ```
+
+After signing in through the UI, the topbar model pill should show `Models ready`. The query metrics row should show `ollama / nomic-embed-text:latest` for embeddings and `ollama / llama3.1:8b` for answer generation.
 
 Run a small authenticated API smoke from inside the backend container:
 

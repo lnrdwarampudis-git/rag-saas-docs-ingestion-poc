@@ -4,6 +4,7 @@ import {
   Activity,
   BadgeCheck,
   Clock3,
+  Cpu,
   Database,
   FileType2,
   FileSearch,
@@ -90,6 +91,22 @@ type ProcessingJobStatus = {
   finished_at?: string | null;
 };
 
+type ModelRuntimeStatus = {
+  provider: string;
+  runtime: string;
+  model_name: string;
+  ready: boolean;
+  message: string;
+  base_url?: string | null;
+};
+
+type ModelStatus = {
+  llm_provider: string;
+  embedding_provider: string;
+  embedding: ModelRuntimeStatus;
+  answer: ModelRuntimeStatus;
+};
+
 const DEFAULT_INGEST_PATH = "/data/ingest/sample.docx";
 const roleOptions = ["admin", "finance", "engineering", "legal", "support"];
 
@@ -147,6 +164,7 @@ function AuthenticatedApp() {
   const [processingJobs, setProcessingJobs] = React.useState<ProcessingJobStatus[]>([]);
   const [documents, setDocuments] = React.useState<ManagedDocument[]>([]);
   const [selectedDocument, setSelectedDocument] = React.useState<ManagedDocumentDetail | null>(null);
+  const [modelStatus, setModelStatus] = React.useState<ModelStatus | null>(null);
   const [result, setResult] = React.useState<QueryResult | null>(null);
   const [status, setStatus] = React.useState("Idle");
   const [busy, setBusy] = React.useState(false);
@@ -183,6 +201,21 @@ function AuthenticatedApp() {
     }
   }, []);
 
+  const loadModelStatus = React.useCallback(async () => {
+    try {
+      const response = await apiFetch("/api/v1/model-status");
+      if (!response.ok) {
+        throw new Error(await response.text());
+      }
+      const payload = (await response.json()) as ModelStatus;
+      setModelStatus(payload);
+    } catch (caught) {
+      if (!handleAuthError(caught)) {
+        setModelStatus(null);
+      }
+    }
+  }, []);
+
   const inspectDocument = async (documentId: string) => {
     setBusy(true);
     setError("");
@@ -207,7 +240,8 @@ function AuthenticatedApp() {
 
   React.useEffect(() => {
     loadDocuments();
-  }, [loadDocuments]);
+    loadModelStatus();
+  }, [loadDocuments, loadModelStatus]);
 
   const ingestDocument = async () => {
     setBusy(true);
@@ -374,6 +408,8 @@ function AuthenticatedApp() {
     }
   };
 
+  const modelReady = Boolean(modelStatus?.embedding.ready && modelStatus.answer.ready);
+
   return (
     <main className="app-shell">
       <aside className="sidebar">
@@ -418,9 +454,20 @@ function AuthenticatedApp() {
             <p className="eyebrow">SaaS RAG Operations</p>
             <h2>Document ingestion and precision query workspace</h2>
           </div>
-          <div className={`status-pill ${status === "Needs attention" ? "danger" : ""}`}>
-            {busy ? <Loader2 className="spin" size={16} /> : <Activity size={16} />}
-            <span>{status}</span>
+          <div className="topbar-actions">
+            <div
+              className={`model-pill ${
+                modelStatus ? (modelReady ? "ready" : "danger") : "pending"
+              }`}
+              title={modelStatus ? modelStatus.embedding.message : "Model status loading"}
+            >
+              <Cpu size={16} />
+              <span>{modelStatus ? (modelReady ? "Models ready" : "Model attention") : "Models"}</span>
+            </div>
+            <div className={`status-pill ${status === "Needs attention" ? "danger" : ""}`}>
+              {busy ? <Loader2 className="spin" size={16} /> : <Activity size={16} />}
+              <span>{status}</span>
+            </div>
           </div>
         </header>
 
@@ -440,6 +487,16 @@ function AuthenticatedApp() {
             label="Cache"
             value={result?.cached ? "Hit" : "Ready"}
             icon={<RefreshCw size={18} />}
+          />
+          <Metric
+            label="Embedding"
+            value={formatRuntime(modelStatus?.embedding)}
+            icon={<Cpu size={18} />}
+          />
+          <Metric
+            label="Answer Model"
+            value={formatRuntime(modelStatus?.answer)}
+            icon={<MessageSquareText size={18} />}
           />
         </section>
 
@@ -740,6 +797,11 @@ function AuthenticatedApp() {
               <StatusItem label="Tenant isolation" value={tenantId.slice(0, 8) + "..."} />
               <StatusItem label="Member roles" value={memberRoles.join(", ") || "none"} />
               <StatusItem label="Enforcement point" value="server-side, before retrieval ranking" />
+              <StatusItem
+                label="Embedding runtime"
+                value={formatRuntimeDetail(modelStatus?.embedding)}
+              />
+              <StatusItem label="Answer runtime" value={formatRuntimeDetail(modelStatus?.answer)} />
             </div>
           </section>
 
@@ -815,6 +877,21 @@ function formatDate(value?: string | null) {
     hour: "numeric",
     minute: "2-digit"
   }).format(new Date(value));
+}
+
+function formatRuntime(status?: ModelRuntimeStatus) {
+  if (!status) {
+    return "Loading";
+  }
+  return `${status.runtime} / ${status.model_name}`;
+}
+
+function formatRuntimeDetail(status?: ModelRuntimeStatus) {
+  if (!status) {
+    return "Loading";
+  }
+  const readiness = status.ready ? "ready" : "attention";
+  return `${status.runtime} / ${status.model_name} / ${readiness}`;
 }
 
 function RolePicker({

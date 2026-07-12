@@ -32,6 +32,7 @@ flowchart TD
     authz["RBAC Filter<br/>tenant, visibility, role"]
     docMgmtApi["Document Management API<br/>list/detail authorized docs"]
     jobApi["Processing Job API<br/>status + local run"]
+    modelStatusApi["Model Status API<br/>/api/v1/model-status"]
   end
 
   %% Ingestion pipeline
@@ -85,6 +86,7 @@ flowchart TD
   fastapi --> authApi
   fastapi --> docMgmtApi
   fastapi --> jobApi
+  fastapi --> modelStatusApi
   fastapi --> jwtValidate
   jwtValidate -. validate via JWKS .-> keycloak
   jwtValidate --> rbacResolve
@@ -97,6 +99,7 @@ flowchart TD
   jobApi --> authz
   jobApi --> postgres
   jobApi --> jobStatus
+  modelStatusApi --> provider
 
   fastapi --> upload --> parser
   upload --> queue --> worker --> parser
@@ -131,7 +134,7 @@ flowchart TD
   classDef ops fill:#f5f3ff,stroke:#7c3aed,color:#111827;
 
   class browser,ui,loginScreen,aaScreen,sessionScreen,formatsScreen,docInventory,jobStatus client;
-  class nginx,fastapi,authApi,docMgmtApi,jobApi,upload,queue,worker,parser,ocr,chunker,embed,query,cache,provider,hostOllama,composeOllama,retriever,ranker,answer,eval service;
+  class nginx,fastapi,authApi,docMgmtApi,jobApi,modelStatusApi,upload,queue,worker,parser,ocr,chunker,embed,query,cache,provider,hostOllama,composeOllama,retriever,ranker,answer,eval service;
   class postgres,qdrant,minio data;
   class keycloak,demoUsers,jwtValidate,rbacResolve,authz security;
   class docker,tests ops;
@@ -176,8 +179,8 @@ sequenceDiagram
 
 ## Component Responsibilities
 
-- React/Vite UI: PKCE login/logout, document upload, mounted-path ingestion, queued upload status, read-only A&A and session status display, format guidance, document inventory/detail/chunk preview, query form, citations, cache status, and latency display.
-- FastAPI backend: bearer-token validation, RBAC resolution, request validation, ingestion orchestration, processing job APIs, document inventory APIs, retrieval orchestration, retrieval evaluation, persistence, and API contracts.
+- React/Vite UI: PKCE login/logout, document upload, mounted-path ingestion, queued upload status, read-only A&A and session status display, model runtime readiness, format guidance, document inventory/detail/chunk preview, query form, citations, cache status, and latency display.
+- FastAPI backend: bearer-token validation, RBAC resolution, request validation, ingestion orchestration, processing job APIs, document inventory APIs, model runtime status API, retrieval orchestration, retrieval evaluation, persistence, and API contracts.
 - Keycloak: identity provider for OAuth/OIDC (Authorization Code + PKCE for the SPA), issues and refreshes JWTs, exposes the JWKS used to validate them, and owns realm roles and demo users.
 - PostgreSQL + pgvector: tenant metadata, RBAC tables (`app_users`, `roles`, `user_roles`) as the source of truth for tenant/role resolution, document records, chunk records, and audit logs.
 - Redis: query cache and processing job queue for background ingestion.
@@ -185,6 +188,7 @@ sequenceDiagram
 - Qdrant: optional vector index for higher-scale retrieval experiments.
 - Docker Compose: local reproducible stack for the POC, including a `--import-realm` Keycloak boot that seeds the `rag` realm from `infra/keycloak/realm-export.json`.
 - Model provider strategy: local/open-source first (`LLM_PROVIDER=local`, `EMBEDDING_PROVIDER=local`) through `app/rag/model_providers.py`. Defaults use deterministic hashing embeddings (`LOCAL_EMBEDDING_RUNTIME=hashing`) and the extractive answer generator (`LOCAL_LLM_RUNTIME=extractive`). Ollama embeddings and answer generation are available through `LOCAL_EMBEDDING_RUNTIME=ollama` and `LOCAL_LLM_RUNTIME=ollama`; this has been smoke-tested from Docker backend/worker to Mac-host Ollama with `nomic-embed-text:latest` and `llama3.1:8b`. vLLM adapters and reranker services are the next local model upgrades. Public token-based LLM providers should remain disabled until explicitly needed.
+- Model status: `/api/v1/model-status` reports the active embedding and answer runtime, model names, readiness, and Ollama reachability when selected. Hashing/extractive defaults report ready without network calls; Ollama runtimes check `/api/tags` and surface missing models or unreachable services as attention states in the UI.
 
 ## Authentication, Authorization And Session Management
 

@@ -135,6 +135,23 @@ flowchart LR
   ollamaLlm --> cacheKey
 ```
 
+## Model Status Flow
+
+```mermaid
+flowchart LR
+  ui["React Console"] --> statusApi["GET /api/v1/model-status"]
+  statusApi --> auth["JWT Validation"]
+  auth --> settings["Model Settings"]
+  settings --> hashing["hashing / extractive<br/>ready without network call"]
+  settings --> ollama["ollama runtime<br/>GET /api/tags"]
+  ollama --> modelCheck{"Configured model installed?"}
+  modelCheck -- yes --> ready["Ready status"]
+  modelCheck -- no --> attention["Attention status"]
+  hashing --> ready
+  ready --> pill["Topbar model pill + runtime cards"]
+  attention --> pill
+```
+
 ## Local Ollama Connectivity
 
 ```mermaid

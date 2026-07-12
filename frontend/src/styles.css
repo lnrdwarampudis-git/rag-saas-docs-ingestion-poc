@@ -156,6 +156,13 @@ button {
   gap: 18px;
 }
 
+.topbar-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
 .eyebrow {
   margin: 0 0 6px;
   color: #61746c;
@@ -172,6 +179,7 @@ button {
 }
 
 .status-pill,
+.model-pill,
 .badge,
 .primary-action,
 .secondary-action,
@@ -191,6 +199,28 @@ button {
   color: #174235;
   background: #ffffff;
   white-space: nowrap;
+}
+
+.model-pill {
+  gap: 8px;
+  min-height: 40px;
+  padding: 0 12px;
+  border: 1px solid #bdd8cc;
+  border-radius: 8px;
+  color: #174235;
+  background: #f0fbf4;
+  white-space: nowrap;
+}
+
+.model-pill.pending {
+  color: #51635c;
+  background: #ffffff;
+}
+
+.model-pill.danger {
+  color: #8a2424;
+  border-color: #edb6b6;
+  background: #fff5f5;
 }
 
 .status-pill.danger {
@@ -713,6 +743,14 @@ button {
 
   .topbar {
     display: grid;
+  }
+
+  .topbar-actions {
+    justify-content: stretch;
+  }
+
+  .topbar-actions > * {
+    justify-content: center;
   }
 
   .metrics-row {
