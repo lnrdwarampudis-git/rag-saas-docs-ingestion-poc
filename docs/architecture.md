@@ -179,7 +179,7 @@ sequenceDiagram
 3. The RBAC Resolver looks up the caller's `tenant_id` and roles from PostgreSQL (`app_users` / `roles` / `user_roles`, keyed by the token's `sub`), falling back to a `tenant_id` token claim and `realm_access.roles` only if the database is unreachable. Request bodies can no longer supply their own `tenant_id` or roles.
 4. Users upload documents or provide a mounted path through the React/Vite UI; `tenant_id` and the uploader's identity are taken from the resolved identity, not the request.
 5. Synchronous upload/path ingestion can process immediately, while `upload-async` creates a pending document plus `processing_jobs` row and enqueues the job in Redis. Browser uploads are checked against configurable extension and byte-size limits before ingestion. Failed jobs can be reset to queued and re-enqueued through the retry API/UI action.
-6. The worker polls Redis, reloads job context from PostgreSQL when needed, extracts text from supported document types, invokes OCR when needed, and chunks the extracted text. Chunks are enriched with tenant, document, visibility, role, owner, and source metadata.
+6. The worker polls Redis, reloads job context from PostgreSQL when needed, extracts text from supported document types, invokes OCR when needed, and chunks the extracted text. Image OCR calls Tesseract directly; scanned/image-backed PDF OCR renders pages with PyMuPDF before sending them to Tesseract. Chunks are enriched with tenant, document, visibility, role, owner, and source metadata.
 7. Metadata and chunks are persisted in PostgreSQL. Qdrant is included as the vector search option for scale-oriented retrieval.
 8. The Document Management panel calls list/detail APIs to show only authorized document metadata and chunk previews for the caller's tenant/roles. The UI also polls processing job status until queued uploads complete or fail, the Evaluation panel calls `/api/v1/evaluation/retrieval` to show the retrieval quality gate, and the Admin Analytics panel calls `/api/v1/analytics` to show tenant-scoped document, job, persisted query-cache, audit-event, latency, and evaluation health.
 9. Users ask questions through the query panel; `tenant_id` and roles again come from the resolved identity.
@@ -211,7 +211,7 @@ sequenceDiagram
 
 ## Supported Document Formats
 
-- PDF: native text extraction with OCR fallback path for scanned/image-backed documents.
+- PDF: native text extraction with OCR fallback path for scanned/image-backed documents. PDF OCR renders pages to images, honors `OCR_PDF_DPI` and `OCR_MAX_PDF_PAGES`, and uses `OCR_LANGUAGE` for Tesseract.
 - Microsoft Word: DOCX extraction.
 - Microsoft Excel: XLSX sheet/cell extraction.
 - Microsoft PowerPoint: PPTX slide text extraction.

@@ -17,6 +17,9 @@ services:
       UPLOAD_DIR: /data/uploads
       MAX_UPLOAD_BYTES: ${MAX_UPLOAD_BYTES:-536870912}
       ALLOWED_UPLOAD_EXTENSIONS: ${ALLOWED_UPLOAD_EXTENSIONS:-.pdf,.txt,.md,.csv,.tsv,.docx,.xlsx,.pptx,.png,.jpg,.jpeg,.tiff,.bmp}
+      OCR_LANGUAGE: ${OCR_LANGUAGE:-eng}
+      OCR_PDF_DPI: ${OCR_PDF_DPI:-200}
+      OCR_MAX_PDF_PAGES: ${OCR_MAX_PDF_PAGES:-20}
       ENABLE_DB_PERSISTENCE: "true"
       RETRIEVAL_MIN_SCORE: "0.12"
       RETRIEVAL_MIN_KEYWORD_OVERLAP: "0.20"
@@ -71,6 +74,9 @@ services:
       UPLOAD_DIR: /data/uploads
       MAX_UPLOAD_BYTES: ${MAX_UPLOAD_BYTES:-536870912}
       ALLOWED_UPLOAD_EXTENSIONS: ${ALLOWED_UPLOAD_EXTENSIONS:-.pdf,.txt,.md,.csv,.tsv,.docx,.xlsx,.pptx,.png,.jpg,.jpeg,.tiff,.bmp}
+      OCR_LANGUAGE: ${OCR_LANGUAGE:-eng}
+      OCR_PDF_DPI: ${OCR_PDF_DPI:-200}
+      OCR_MAX_PDF_PAGES: ${OCR_MAX_PDF_PAGES:-20}
       ENABLE_DB_PERSISTENCE: "true"
       RETRIEVAL_MIN_SCORE: "0.12"
       RETRIEVAL_MIN_KEYWORD_OVERLAP: "0.20"

@@ -52,3 +52,30 @@ def test_pptx_extraction(tmp_path: Path) -> None:
     result = extract_document_text(source)
 
     assert "Slide 1: RAG architecture Session management" in result.text
+
+
+def test_scanned_pdf_uses_rendered_page_ocr(tmp_path: Path, monkeypatch) -> None:
+    fitz = pytest.importorskip("fitz")
+    pytesseract = pytest.importorskip("pytesseract")
+    pytest.importorskip("PIL.Image")
+    calls: list[str | None] = []
+
+    source = tmp_path / "scanned.pdf"
+    document = fitz.open()
+    document.new_page(width=200, height=100)
+    document.save(source)
+    document.close()
+
+    def fake_image_to_string(image, lang=None):
+        calls.append(lang)
+        assert image.width > 0
+        assert image.height > 0
+        return "SCANNED POLICY\nUse OCR for image-backed PDFs."
+
+    monkeypatch.setattr(pytesseract, "image_to_string", fake_image_to_string)
+
+    result = extract_document_text(source)
+
+    assert result.ocr_used is True
+    assert "SCANNED POLICY" in result.text
+    assert calls == ["eng"]

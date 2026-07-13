@@ -191,6 +191,16 @@ ALLOWED_UPLOAD_EXTENSIONS=.pdf,.txt,.md,.csv,.tsv,.docx,.xlsx,.pptx,.png,.jpg,.j
 
 The frontend mirrors the 512 MiB default for immediate feedback. The API remains the source of truth and returns `415` for unsupported extensions or `413` when the upload exceeds `MAX_UPLOAD_BYTES`.
 
+OCR defaults:
+
+```text
+OCR_LANGUAGE=eng
+OCR_PDF_DPI=200
+OCR_MAX_PDF_PAGES=20
+```
+
+The backend Docker image includes Tesseract plus the Python parsing libraries needed for image OCR and scanned-PDF OCR. Scanned PDFs are rendered page-by-page before OCR. Increase `OCR_MAX_PDF_PAGES` for longer scanned documents, or lower `OCR_PDF_DPI` if OCR jobs need less memory.
+
 Supported POC intake formats:
 
 - PDF

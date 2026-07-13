@@ -129,6 +129,30 @@ PUBLIC_LLM_ENABLED=false
 
 See [Model Providers](model-providers.md) for the full setting list, cache behavior, and adapter contract.
 
+## OCR Runtime Check
+
+The backend image includes Tesseract for image OCR and scanned-PDF OCR. Confirm it is available:
+
+```bash
+docker compose exec backend tesseract --version
+```
+
+Confirm OCR settings inside the backend container:
+
+```bash
+docker compose exec backend python -c "import os; keys=['OCR_LANGUAGE','OCR_PDF_DPI','OCR_MAX_PDF_PAGES']; print({k: os.environ.get(k) for k in keys})"
+```
+
+Expected defaults:
+
+```text
+OCR_LANGUAGE=eng
+OCR_PDF_DPI=200
+OCR_MAX_PDF_PAGES=20
+```
+
+Scanned PDFs are rendered page-by-page with PyMuPDF before Tesseract OCR. Increase `OCR_MAX_PDF_PAGES` for longer scanned documents, and tune `OCR_PDF_DPI` when OCR quality or memory usage needs adjustment.
+
 ## Ollama Container Check
 
 Start the optional Ollama service:

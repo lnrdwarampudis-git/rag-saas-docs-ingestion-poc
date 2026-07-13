@@ -82,7 +82,7 @@ For full setup, execution, test, and GitHub export instructions, see:
 - Visible A&A and session management panels for the POC workflow
 - Keycloak OIDC login (Authorization Code + PKCE), JWT validation middleware, and stateless-JWT session management with silent refresh
 - Server-side RBAC resolved from Postgres (`app_users`/`roles`/`user_roles`), with tenant_id/roles always taken from the validated token -- never from request bodies
-- PDF, Word DOCX, Excel XLSX, PowerPoint PPTX, text, CSV/TSV, markdown, and image intake
+- PDF, Word DOCX, Excel XLSX, PowerPoint PPTX, text, CSV/TSV, markdown, image intake, and scanned-PDF OCR
 - Document management inventory with authorized list/detail APIs, ingestion status, visibility, OCR flags, chunk counts, and chunk preview
 - Week 6 background ingestion path with queued upload, Redis-backed worker polling, processing job status/retry APIs, and UI job polling
 - Week 7 offline retrieval evaluation dataset and runner with context precision, context recall, and answer relevance checks
@@ -168,6 +168,7 @@ Supported POC intake formats:
 - PowerPoint PPTX
 - TXT, Markdown, CSV, TSV
 - PNG, JPG/JPEG, TIFF, BMP through OCR
+- Scanned/image-backed PDFs through PyMuPDF page rendering plus Tesseract OCR
 
 Legacy binary Office formats such as DOC, XLS, and PPT should be converted to DOCX, XLSX, or PPTX before ingestion.
 

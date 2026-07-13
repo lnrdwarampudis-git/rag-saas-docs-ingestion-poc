@@ -1,8 +1,11 @@
 from dataclasses import dataclass, field
+from io import BytesIO
 from pathlib import Path
 import xml.etree.ElementTree as ET
 import zipfile
 import mimetypes
+
+from app.config import get_settings
 
 
 @dataclass(frozen=True)
@@ -123,11 +126,50 @@ def _extract_with_ocr(path: Path, warnings: list[str]) -> str:
         warnings.append("OCR dependencies are not installed; returning empty OCR result.")
         return ""
 
-    if path.suffix.lower() in {".png", ".jpg", ".jpeg", ".tiff", ".bmp"}:
-        return pytesseract.image_to_string(Image.open(path))
+    settings = get_settings()
+    language = settings.ocr_language.strip() or None
 
-    warnings.append("OCR for PDFs requires a PDF-to-image renderer in the worker image.")
+    if path.suffix.lower() in {".png", ".jpg", ".jpeg", ".tiff", ".bmp"}:
+        with Image.open(path) as image:
+            return pytesseract.image_to_string(image, lang=language)
+
+    if path.suffix.lower() == ".pdf":
+        return _extract_pdf_with_ocr(path, warnings, pytesseract, Image)
+
+    warnings.append(f"OCR is not configured for {path.suffix.lower() or 'files without extension'}.")
     return ""
+
+
+def _extract_pdf_with_ocr(path: Path, warnings: list[str], pytesseract, Image) -> str:
+    try:
+        import fitz  # type: ignore
+    except ImportError:
+        warnings.append("PyMuPDF is not installed; returning empty PDF OCR result.")
+        return ""
+
+    settings = get_settings()
+    language = settings.ocr_language.strip() or None
+    max_pages = max(settings.ocr_max_pdf_pages, 1)
+    dpi = max(settings.ocr_pdf_dpi, 72)
+    matrix = fitz.Matrix(dpi / 72, dpi / 72)
+    pages: list[str] = []
+
+    with fitz.open(path) as document:
+        for page_index, page in enumerate(document):
+            if page_index >= max_pages:
+                warnings.append(
+                    f"PDF OCR stopped after {max_pages} pages; increase OCR_MAX_PDF_PAGES to scan more."
+                )
+                break
+            pixmap = page.get_pixmap(matrix=matrix, alpha=False)
+            with Image.open(BytesIO(pixmap.tobytes("png"))) as image:
+                page_text = pytesseract.image_to_string(image, lang=language).strip()
+            if page_text:
+                pages.append(page_text)
+
+    if not pages:
+        warnings.append("PDF OCR produced no text.")
+    return "\n\n".join(pages)
 
 
 def _looks_like_scanned_document(text: str) -> bool:

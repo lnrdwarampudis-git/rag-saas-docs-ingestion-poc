@@ -15,12 +15,13 @@ This page is the short handoff for what the POC supports today, how to run it, a
 - Admin analytics for documents, jobs, query volume/cache/latency, audit operations, and evaluation health.
 - Local/open-source model abstraction with deterministic hashing embeddings and extractive answer generation as defaults.
 - Optional Ollama embeddings and answer generation for local models, including tested Mac-host Ollama access from Docker through `host.docker.internal`.
+- Container-packaged OCR for images and scanned/image-backed PDFs using Tesseract plus PyMuPDF page rendering.
 
 ## Supported Document Intake Today
 
 | Format | Status | Notes |
 | --- | --- | --- |
-| PDF | Supported | Native text extraction first; OCR fallback when extracted text is empty or `force_ocr=true`. |
+| PDF | Supported | Native text extraction first; OCR fallback renders scanned/image-backed pages and sends them to Tesseract. |
 | DOCX | Supported | Extracts paragraphs from modern Word documents. |
 | XLSX | Supported | Extracts sheet names and cell values with formulas resolved to stored values. |
 | PPTX | Supported | Extracts slide text from modern PowerPoint files. |
@@ -29,7 +30,7 @@ This page is the short handoff for what the POC supports today, how to run it, a
 | PNG, JPG/JPEG, TIFF, BMP | Supported with OCR | Uses Tesseract through `pytesseract`; local machines/containers must have the Tesseract binary available for real OCR. |
 | DOC, XLS, PPT | Not supported directly | Convert legacy binary Office files to DOCX, XLSX, or PPTX first. |
 
-OCR is wired in the parser layer and can be forced from the API/UI with `force_ocr`. If Tesseract is not installed, OCR extraction records a warning and returns empty OCR text rather than crashing the whole app path.
+OCR is wired in the parser layer and can be forced from the API/UI with `force_ocr`. The backend Docker image includes Tesseract, PyMuPDF, and Pillow so image OCR and scanned-PDF OCR work in containers. If OCR dependencies are missing in a local non-Docker environment, extraction records a warning and returns empty OCR text rather than crashing the whole app path.
 
 ## Default Execution Path
 
@@ -45,6 +46,9 @@ Browser uploads are capped at 512 MiB by default. Tune these values in `.env` wh
 ```text
 MAX_UPLOAD_BYTES=536870912
 ALLOWED_UPLOAD_EXTENSIONS=.pdf,.txt,.md,.csv,.tsv,.docx,.xlsx,.pptx,.png,.jpg,.jpeg,.tiff,.bmp
+OCR_LANGUAGE=eng
+OCR_PDF_DPI=200
+OCR_MAX_PDF_PAGES=20
 ```
 
 Demo users all use password `Passw0rd!`:
@@ -108,7 +112,7 @@ git diff --check
 Recommended next implementation slices:
 
 1. Harden ingestion for large files: direct-to-object-storage multipart uploads, upload progress, resumable upload behavior, and object-storage lifecycle cleanup. Basic API/UI size and extension limits are now in place.
-2. Add production-grade parser/OCR packaging: container-level Tesseract installation, OCR language configuration, stronger scanned-PDF handling, and parser warnings surfaced in the UI.
+2. Add richer parser/OCR operations: parser warnings surfaced in the UI, OCR duration metrics, language pack documentation, and dedicated OCR-heavy worker queues. Container Tesseract packaging, OCR language configuration, and scanned-PDF OCR are now in place.
 3. Persist vector retrieval beyond the current POC baseline: pgvector/Qdrant write/read integration for embeddings, migration checks, and tenant-safe vector filtering.
 4. Add reranking and stronger local model options: local cross-encoder or reranker adapter, vLLM adapter path, model health dashboards, and performance thresholds.
 5. Improve operations controls: job cancel/retry history, dead-letter queue, worker concurrency controls, and richer audit event filtering.

@@ -20,6 +20,9 @@ class Settings(BaseSettings):
     upload_dir: str = "/tmp/rag-uploads"
     max_upload_bytes: int = 536_870_912
     allowed_upload_extensions: str = ".pdf,.txt,.md,.csv,.tsv,.docx,.xlsx,.pptx,.png,.jpg,.jpeg,.tiff,.bmp"
+    ocr_language: str = "eng"
+    ocr_pdf_dpi: int = 200
+    ocr_max_pdf_pages: int = 20
     enable_db_persistence: bool = False
     host_mount_source_prefix: str = ""
     retrieval_min_score: float = 0.12
