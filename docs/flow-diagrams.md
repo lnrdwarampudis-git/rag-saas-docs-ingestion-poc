@@ -65,6 +65,11 @@ sequenceDiagram
   UI->>API: Poll job status
   API->>DB: Read processing_jobs for caller tenant
   API-->>UI: completed or failed
+  Member->>UI: Retry failed job
+  UI->>API: POST /api/v1/processing-jobs/{job_id}/retry
+  API->>DB: Reset failed job to queued
+  API->>Redis: RPUSH rag:processing-jobs job_id
+  API-->>UI: queued
   UI->>API: GET /api/v1/documents/{document_id}
   API-->>UI: Authorized document detail + chunk preview
 ```

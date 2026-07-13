@@ -6,7 +6,7 @@ from app.auth.models import AuthenticatedUser
 from app.rag import analytics
 from app.rag.pipeline import RagPipeline
 from app.rag.store import document_store
-from app.schemas.documents import ChunkDTO
+from app.schemas.documents import ChunkDTO, ProcessingJobStatus
 
 
 def test_analytics_endpoint_returns_operational_summary(api_client_as) -> None:
@@ -252,3 +252,66 @@ def test_query_audit_event_persists_safe_metadata(monkeypatch) -> None:
     assert metadata["contexts_used"] == 2
     assert metadata["citation_document_ids"] == ["doc-1", "doc-2"]
     assert "sensitive roadmap" not in row["metadata"]
+
+
+def test_job_retry_audit_event_persists_retry_metadata(monkeypatch) -> None:
+    tenant_id = UUID("00000000-0000-4000-8000-000000000017")
+    actor_id = UUID("10000000-0000-4000-8000-000000000017")
+    job_id = UUID("20000000-0000-4000-8000-000000000017")
+    document_id = UUID("30000000-0000-4000-8000-000000000017")
+    engine = create_engine("sqlite+pysqlite:///:memory:")
+    with engine.begin() as connection:
+        connection.execute(
+            text(
+                """
+                CREATE TABLE audit_logs (
+                  tenant_id TEXT NOT NULL,
+                  actor_user_id TEXT,
+                  action TEXT NOT NULL,
+                  resource_type TEXT NOT NULL,
+                  resource_id TEXT,
+                  metadata TEXT NOT NULL
+                )
+                """
+            )
+        )
+
+    monkeypatch.setattr(analytics.get_settings(), "enable_db_persistence", True)
+    import app.db as db
+
+    monkeypatch.setattr(db, "engine", engine)
+
+    analytics.record_job_retry_audit_event(
+        current_user=AuthenticatedUser(
+            keycloak_subject="analytics-subject",
+            tenant_id=tenant_id,
+            roles=["admin"],
+            app_user_id=actor_id,
+        ),
+        job_status=ProcessingJobStatus(
+            job_id=job_id,
+            document_id=document_id,
+            file_name="retry-me.pdf",
+            status="queued",
+            stage="upload",
+            attempts=1,
+        ),
+    )
+
+    with engine.begin() as connection:
+        row = connection.execute(text("SELECT * FROM audit_logs")).mappings().one()
+
+    metadata = analytics._metadata_dict(row["metadata"])
+    assert row["tenant_id"] == str(tenant_id)
+    assert row["actor_user_id"] == str(actor_id)
+    assert row["action"] == "processing_job.retried"
+    assert row["resource_type"] == "processing_job"
+    assert row["resource_id"] == str(job_id)
+    assert metadata == {
+        "job_id": str(job_id),
+        "document_id": str(document_id),
+        "file_name": "retry-me.pdf",
+        "attempts": 1,
+        "status": "queued",
+        "stage": "upload",
+    }

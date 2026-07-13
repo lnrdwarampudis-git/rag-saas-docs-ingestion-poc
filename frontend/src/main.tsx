@@ -15,6 +15,7 @@ import {
   LogOut,
   MessageSquareText,
   RefreshCw,
+  RotateCcw,
   Search,
   ShieldCheck,
   UploadCloud,
@@ -435,6 +436,31 @@ function AuthenticatedApp() {
     return payload;
   }, [loadDocuments]);
 
+  const retryJob = async (jobId: string) => {
+    setBusy(true);
+    setError("");
+    setStatus("Retrying job");
+    try {
+      const response = await apiFetch(`/api/v1/processing-jobs/${jobId}/retry`, {
+        method: "POST"
+      });
+      if (!response.ok) {
+        throw new Error(await response.text());
+      }
+      const payload = (await response.json()) as ProcessingJobStatus;
+      setProcessingJobs((items) => items.map((item) => (item.job_id === jobId ? payload : item)));
+      setStatus("Queued for retry");
+      loadAnalyticsReport();
+    } catch (caught) {
+      if (!handleAuthError(caught)) {
+        setError(caught instanceof Error ? caught.message : "Job retry failed");
+        setStatus("Needs attention");
+      }
+    } finally {
+      setBusy(false);
+    }
+  };
+
   React.useEffect(() => {
     const activeJobs = processingJobs.filter((job) => !["completed", "failed"].includes(job.status));
     if (!activeJobs.length) {
@@ -730,7 +756,20 @@ function AuthenticatedApp() {
                     </span>
                     {job.error_message ? <small>{job.error_message}</small> : null}
                   </div>
-                  <Badge label={job.status} />
+                  <div className="job-actions">
+                    {job.status === "failed" ? (
+                      <button
+                        className="icon-action"
+                        type="button"
+                        disabled={busy}
+                        onClick={() => retryJob(job.job_id)}
+                        title="Retry failed job"
+                      >
+                        <RotateCcw size={16} />
+                      </button>
+                    ) : null}
+                    <Badge label={job.status} />
+                  </div>
                 </article>
               ))}
               {ingests.map((item) => (

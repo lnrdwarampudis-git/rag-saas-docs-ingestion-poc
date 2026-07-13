@@ -83,7 +83,7 @@ For full setup, execution, test, and GitHub export instructions, see:
 - Server-side RBAC resolved from Postgres (`app_users`/`roles`/`user_roles`), with tenant_id/roles always taken from the validated token -- never from request bodies
 - PDF, Word DOCX, Excel XLSX, PowerPoint PPTX, text, CSV/TSV, markdown, and image intake
 - Document management inventory with authorized list/detail APIs, ingestion status, visibility, OCR flags, chunk counts, and chunk preview
-- Week 6 background ingestion path with queued upload, Redis-backed worker polling, processing job status API, and UI job polling
+- Week 6 background ingestion path with queued upload, Redis-backed worker polling, processing job status/retry APIs, and UI job polling
 - Week 7 offline retrieval evaluation dataset and runner with context precision, context recall, and answer relevance checks
 - Authenticated retrieval evaluation API and UI quality gate panel
 - Local/open-source model provider abstraction for deterministic hashing embeddings, optional Ollama embeddings, extractive answer generation, and optional Ollama answer generation, with later adapter paths for vLLM and gated public providers
@@ -139,6 +139,7 @@ docker compose up --build
 - `GET /api/v1/documents/{document_id}/chunks`
 - `GET /api/v1/processing-jobs/{job_id}`
 - `POST /api/v1/processing-jobs/{job_id}/run`
+- `POST /api/v1/processing-jobs/{job_id}/retry`
 - `GET /api/v1/evaluation/retrieval`
 - `GET /api/v1/model-status`
 - `GET /api/v1/analytics`
@@ -154,7 +155,7 @@ The ingestion endpoint accepts a local file path for Week 1 development. Product
 
 The upload endpoint accepts multipart browser uploads and is the preferred local SaaS-style flow because it does not require Docker path mapping.
 
-The async upload endpoint returns `202 Accepted` with a `job_id` and `document_id`. Docker Compose includes a `worker` service that polls Redis, processes queued files, updates `processing_jobs`, and transitions documents from `pending` to `embedded` or `failed`.
+The async upload endpoint returns `202 Accepted` with a `job_id` and `document_id`. Docker Compose includes a `worker` service that polls Redis, processes queued files, updates `processing_jobs`, and transitions documents from `pending` to `embedded` or `failed`. Failed jobs can be retried through the processing job retry API or the UI retry action.
 
 Supported POC intake formats:
 
@@ -178,6 +179,7 @@ After login, the frontend shows:
 - Authorized document inventory with file name, status, visibility, OCR indicator, chunk count, updated time, and detail inspection.
 - Chunk preview for the selected document, using the same RBAC checks as the query/retrieval path.
 - Queued upload status for background ingestion jobs, with automatic polling until completion or failure.
+- Retry action for failed background ingestion jobs.
 - Admin operations summary for ingestion totals, job queue state, failed jobs, query cache hit rate, query latency, recent audit operations, and retrieval evaluation pass rate.
 
 When running with Docker, the backend cannot read arbitrary Mac paths such as `/Users/name/Documents/file.pdf`. Put local files under `data/ingest/` in this repo, then enter the container path in the UI:

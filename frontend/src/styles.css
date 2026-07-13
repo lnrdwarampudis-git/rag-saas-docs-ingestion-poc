@@ -578,6 +578,22 @@ button {
   font-size: 13px;
 }
 
+.icon-action {
+  display: inline-grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  border: 1px solid #b9ccc3;
+  border-radius: 8px;
+  color: #174235;
+  background: #ffffff;
+}
+
+.icon-action:disabled {
+  cursor: not-allowed;
+  opacity: 0.52;
+}
+
 .file-field input {
   padding: 8px;
 }
@@ -631,6 +647,13 @@ button {
   color: #8a2424;
   font-size: 12px;
   overflow-wrap: anywhere;
+}
+
+.document-card .job-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
 }
 
 .badge {

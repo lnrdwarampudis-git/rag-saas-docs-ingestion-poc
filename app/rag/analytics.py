@@ -110,6 +110,52 @@ def record_query_audit_event(
         return
 
 
+def record_job_retry_audit_event(
+    *,
+    current_user: AuthenticatedUser,
+    job_status,
+) -> None:
+    if not get_settings().enable_db_persistence:
+        return
+
+    metadata = {
+        "job_id": str(job_status.job_id),
+        "document_id": str(job_status.document_id),
+        "file_name": job_status.file_name,
+        "attempts": job_status.attempts,
+        "status": job_status.status,
+        "stage": job_status.stage,
+    }
+
+    try:
+        from app.db import engine
+
+        with engine.begin() as connection:
+            connection.execute(
+                text(
+                    f"""
+                    INSERT INTO audit_logs (
+                      tenant_id, actor_user_id, action, resource_type, resource_id, metadata
+                    )
+                    VALUES (
+                      :tenant_id, :actor_user_id, 'processing_job.retried',
+                      'processing_job', :resource_id, {_metadata_sql_expression(connection)}
+                    )
+                    """
+                ),
+                {
+                    "tenant_id": str(current_user.tenant_id),
+                    "actor_user_id": (
+                        str(current_user.app_user_id) if current_user.app_user_id else None
+                    ),
+                    "resource_id": str(job_status.job_id),
+                    "metadata": json.dumps(metadata),
+                },
+            )
+    except SQLAlchemyError:
+        return
+
+
 def get_analytics(current_user: AuthenticatedUser) -> AnalyticsResponse:
     documents, jobs = _persistent_operational_analytics(current_user)
     if documents is None:

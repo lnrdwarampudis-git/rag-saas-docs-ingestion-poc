@@ -121,6 +121,24 @@ def get_processing_job(job_id: UUID, current_user: AuthenticatedUser) -> Process
     return job.to_status()
 
 
+def retry_processing_job(job_id: UUID, current_user: AuthenticatedUser) -> ProcessingJobStatus | None:
+    job = _load_job(job_id)
+    if job is None or job.tenant_id != current_user.tenant_id:
+        return None
+    if job.status != "failed":
+        return job.to_status()
+
+    job.status = "queued"
+    job.stage = "upload"
+    job.error_message = None
+    job.started_at = None
+    job.finished_at = None
+    _jobs[job.job_id] = job
+    persist_processing_job_update(job)
+    enqueue_processing_job(job.job_id)
+    return job.to_status()
+
+
 def process_processing_job(job_id: UUID) -> ProcessingJobStatus | None:
     job = _load_job(job_id)
     if job is None:

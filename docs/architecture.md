@@ -13,7 +13,7 @@ flowchart TD
     sessionScreen["Session Panel<br/>stateless JWT, silent refresh"]
     formatsScreen["Format Intake Screen"]
     docInventory["Document Management Panel<br/>inventory, detail, chunk preview"]
-    jobStatus["Job Status Cards<br/>queued, processing, failed, completed"]
+    jobStatus["Job Status Cards<br/>queued, processing, failed, retry, completed"]
     analyticsScreen["Admin Analytics Panel<br/>documents, jobs, query metrics, audit events, eval"]
   end
 
@@ -178,7 +178,7 @@ sequenceDiagram
 2. Every subsequent API call attaches the access token as `Authorization: Bearer <token>`. FastAPI's `get_current_user` dependency validates the token's signature (against Keycloak's cached JWKS), issuer, audience, and expiry before any route body runs.
 3. The RBAC Resolver looks up the caller's `tenant_id` and roles from PostgreSQL (`app_users` / `roles` / `user_roles`, keyed by the token's `sub`), falling back to a `tenant_id` token claim and `realm_access.roles` only if the database is unreachable. Request bodies can no longer supply their own `tenant_id` or roles.
 4. Users upload documents or provide a mounted path through the React/Vite UI; `tenant_id` and the uploader's identity are taken from the resolved identity, not the request.
-5. Synchronous upload/path ingestion can process immediately, while `upload-async` creates a pending document plus `processing_jobs` row and enqueues the job in Redis.
+5. Synchronous upload/path ingestion can process immediately, while `upload-async` creates a pending document plus `processing_jobs` row and enqueues the job in Redis. Failed jobs can be reset to queued and re-enqueued through the retry API/UI action.
 6. The worker polls Redis, reloads job context from PostgreSQL when needed, extracts text from supported document types, invokes OCR when needed, and chunks the extracted text. Chunks are enriched with tenant, document, visibility, role, owner, and source metadata.
 7. Metadata and chunks are persisted in PostgreSQL. Qdrant is included as the vector search option for scale-oriented retrieval.
 8. The Document Management panel calls list/detail APIs to show only authorized document metadata and chunk previews for the caller's tenant/roles. The UI also polls processing job status until queued uploads complete or fail, the Evaluation panel calls `/api/v1/evaluation/retrieval` to show the retrieval quality gate, and the Admin Analytics panel calls `/api/v1/analytics` to show tenant-scoped document, job, persisted query-cache, audit-event, latency, and evaluation health.
@@ -189,8 +189,8 @@ sequenceDiagram
 
 ## Component Responsibilities
 
-- React/Vite UI: PKCE login/logout, document upload, mounted-path ingestion, queued upload status, read-only A&A and session status display, model runtime readiness, evaluation quality gate display, admin analytics and recent operations summary, format guidance, document inventory/detail/chunk preview, query form, citations, cache status, and latency display.
-- FastAPI backend: bearer-token validation, RBAC resolution, request validation, ingestion orchestration, processing job APIs, document inventory APIs, model runtime status API, retrieval evaluation API, admin analytics/audit API, retrieval orchestration, persistence, and API contracts.
+- React/Vite UI: PKCE login/logout, document upload, mounted-path ingestion, queued upload status and failed-job retry, read-only A&A and session status display, model runtime readiness, evaluation quality gate display, admin analytics and recent operations summary, format guidance, document inventory/detail/chunk preview, query form, citations, cache status, and latency display.
+- FastAPI backend: bearer-token validation, RBAC resolution, request validation, ingestion orchestration, processing job status/run/retry APIs, document inventory APIs, model runtime status API, retrieval evaluation API, admin analytics/audit API, retrieval orchestration, persistence, and API contracts.
 - Keycloak: identity provider for OAuth/OIDC (Authorization Code + PKCE for the SPA), issues and refreshes JWTs, exposes the JWKS used to validate them, and owns realm roles and demo users.
 - PostgreSQL + pgvector: tenant metadata, RBAC tables (`app_users`, `roles`, `user_roles`) as the source of truth for tenant/role resolution, document records, chunk records, and audit logs.
 - Redis: query cache and processing job queue for background ingestion.

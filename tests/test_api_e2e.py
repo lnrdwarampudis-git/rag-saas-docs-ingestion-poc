@@ -220,6 +220,59 @@ def test_processing_job_status_is_tenant_scoped(api_client_as) -> None:
     assert other_tenant_client.get(f"/api/v1/processing-jobs/{job_id}").status_code == 404
 
 
+def test_failed_processing_job_can_be_retried(api_client_as, monkeypatch) -> None:
+    tenant_id = "00000000-0000-4000-8000-000000000017"
+    client = api_client_as(tenant_id, ["admin"], "retry-admin")
+    upload_response = client.post(
+        "/api/v1/documents/upload-async",
+        data={"visibility": "tenant", "force_ocr": "false"},
+        files={"file": ("retry-job.txt", b"Retry this ingestion job.", "text/plain")},
+    )
+    assert upload_response.status_code == 202
+    job_id = upload_response.json()["job_id"]
+
+    import app.rag.jobs as jobs
+
+    def fail_processing(*args, **kwargs):
+        raise RuntimeError("temporary parser outage")
+
+    monkeypatch.setattr(jobs, "process_document_path", fail_processing)
+
+    run_response = client.post(f"/api/v1/processing-jobs/{job_id}/run")
+    assert run_response.status_code == 200
+    failed_job = run_response.json()
+    assert failed_job["status"] == "failed"
+    assert failed_job["attempts"] == 1
+    assert failed_job["error_message"] == "temporary parser outage"
+
+    retry_response = client.post(f"/api/v1/processing-jobs/{job_id}/retry")
+
+    assert retry_response.status_code == 200
+    retried_job = retry_response.json()
+    assert retried_job["status"] == "queued"
+    assert retried_job["stage"] == "upload"
+    assert retried_job["attempts"] == 1
+    assert retried_job["error_message"] is None
+    assert retried_job["started_at"] is None
+    assert retried_job["finished_at"] is None
+
+
+def test_processing_job_retry_requires_failed_status(api_client_as) -> None:
+    tenant_id = "00000000-0000-4000-8000-000000000018"
+    client = api_client_as(tenant_id, ["admin"], "retry-admin")
+    upload_response = client.post(
+        "/api/v1/documents/upload-async",
+        data={"visibility": "tenant", "force_ocr": "false"},
+        files={"file": ("queued-job.txt", b"Queued job should not retry yet.", "text/plain")},
+    )
+    assert upload_response.status_code == 202
+    job_id = upload_response.json()["job_id"]
+
+    retry_response = client.post(f"/api/v1/processing-jobs/{job_id}/retry")
+
+    assert retry_response.status_code == 409
+
+
 def test_document_management_lists_and_details_authorized_documents(tmp_path: Path, api_client_as) -> None:
     tenant_id = "00000000-0000-4000-8000-000000000004"
     client = api_client_as(tenant_id, ["finance"], "finance-subject")

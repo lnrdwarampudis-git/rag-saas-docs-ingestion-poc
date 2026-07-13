@@ -353,6 +353,13 @@ curl -X POST -H "Authorization: Bearer $TOKEN" \
   http://127.0.0.1:8000/api/v1/processing-jobs/$JOB_ID/run
 ```
 
+Retry a failed background job:
+
+```bash
+curl -X POST -H "Authorization: Bearer $TOKEN" \
+  http://127.0.0.1:8000/api/v1/processing-jobs/$JOB_ID/retry
+```
+
 Ask a question:
 
 ```bash
@@ -382,7 +389,7 @@ curl -H "Authorization: Bearer $TOKEN" http://127.0.0.1:8000/api/v1/analytics
 2. Sign in with `admin-demo` / `Passw0rd!`.
 3. Confirm the A&A panel shows the resolved tenant and roles, and the Session panel shows token expiry/refresh state.
 4. Upload a PDF, DOCX, XLSX, PPTX, text/CSV/markdown, or image file from the Upload panel.
-5. Use "Upload to queue" to exercise the background processing path; the UI polls job status until the worker completes or fails it.
+5. Use "Upload to queue" to exercise the background processing path; the UI polls job status until the worker completes or fails it. If a job fails, use the retry action on the job card to requeue it.
 6. Use Document Management to refresh the authorized inventory, open the uploaded document, and confirm chunk previews are visible.
 7. Ask a question in the Query panel and confirm citations plus run details appear: cache outcome, contexts used, top score, retrieval/total latency, embedding runtime, answer runtime, and retrieval thresholds.
 8. Confirm the Evaluation panel shows the retrieval quality gate with all cases passing and context precision, context recall, and answer relevance averages.
