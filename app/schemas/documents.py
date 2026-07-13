@@ -24,6 +24,9 @@ class DocumentIngestResult(BaseModel):
     chunks_created: int
     ocr_used: bool
     extraction_warnings: list[str] = Field(default_factory=list)
+    extraction_ms: float = 0.0
+    ocr_ms: float = 0.0
+    ocr_pages: int = 0
 
 
 class DocumentSummary(BaseModel):
@@ -39,6 +42,9 @@ class DocumentSummary(BaseModel):
     mime_type: str | None = None
     uploaded_by: str | None = None
     extraction_warnings: list[str] = Field(default_factory=list)
+    extraction_ms: float = 0.0
+    ocr_ms: float = 0.0
+    ocr_pages: int = 0
     created_at: datetime | None = None
     updated_at: datetime | None = None
     latest_audit_action: str | None = None

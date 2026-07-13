@@ -27,6 +27,9 @@ def persist_document_ingestion(
     force_ocr: bool,
     ocr_used: bool,
     extraction_warnings: list[str],
+    extraction_ms: float,
+    ocr_ms: float,
+    ocr_pages: int,
     chunks: list[ChunkDTO],
     uploaded_by_user_id: UUID | None = None,
 ) -> None:
@@ -41,6 +44,9 @@ def persist_document_ingestion(
         "chunk_count": len(chunks),
         "ocr_used": ocr_used,
         "extraction_warnings": extraction_warnings,
+        "extraction_ms": extraction_ms,
+        "ocr_ms": ocr_ms,
+        "ocr_pages": ocr_pages,
         "source": "upload_or_mounted_path",
     }
 
@@ -146,6 +152,9 @@ def persist_document_ingestion(
                             "chunks_created": len(chunks),
                             "ocr_used": ocr_used,
                             "warning_count": len(extraction_warnings),
+                            "extraction_ms": extraction_ms,
+                            "ocr_ms": ocr_ms,
+                            "ocr_pages": ocr_pages,
                         }
                     ),
                 },
@@ -547,6 +556,9 @@ def _summary_from_row(row) -> DocumentSummary:
         mime_type=row["mime_type"],
         uploaded_by=row["uploaded_by_subject"],
         extraction_warnings=_extraction_warnings(metadata),
+        extraction_ms=_metadata_float(metadata, "extraction_ms"),
+        ocr_ms=_metadata_float(metadata, "ocr_ms"),
+        ocr_pages=_metadata_int(metadata, "ocr_pages"),
         created_at=row["created_at"],
         updated_at=row["updated_at"],
         latest_audit_action=row["latest_audit_action"],
@@ -558,6 +570,20 @@ def _extraction_warnings(metadata: dict) -> list[str]:
     if not isinstance(raw_warnings, list):
         return []
     return [str(warning) for warning in raw_warnings if str(warning).strip()]
+
+
+def _metadata_float(metadata: dict, key: str) -> float:
+    try:
+        return float(metadata.get(key) or 0)
+    except (TypeError, ValueError):
+        return 0.0
+
+
+def _metadata_int(metadata: dict, key: str) -> int:
+    try:
+        return int(metadata.get(key) or 0)
+    except (TypeError, ValueError):
+        return 0
 
 
 def _chunk_from_row(row) -> ChunkDTO:

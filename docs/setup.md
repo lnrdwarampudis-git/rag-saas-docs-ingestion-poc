@@ -201,7 +201,7 @@ OCR_MAX_PDF_PAGES=20
 
 The backend Docker image includes Tesseract plus the Python parsing libraries needed for image OCR and scanned-PDF OCR. Scanned PDFs are rendered page-by-page before OCR. Increase `OCR_MAX_PDF_PAGES` for longer scanned documents, or lower `OCR_PDF_DPI` if OCR jobs need less memory.
 
-Parser and OCR warnings are returned from ingest responses, persisted in document metadata, and shown in the document inventory/detail UI.
+Parser and OCR warnings are returned from ingest responses, persisted in document metadata, and shown in the document inventory/detail UI. Extraction duration, OCR duration, and OCR page counts are also persisted and shown in document details.
 
 Supported POC intake formats:
 

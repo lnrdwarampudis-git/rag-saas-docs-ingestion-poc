@@ -24,6 +24,9 @@ class InMemoryDocumentStore:
         mime_type: str | None = None,
         uploaded_by: str | None = None,
         extraction_warnings: list[str] | None = None,
+        extraction_ms: float = 0.0,
+        ocr_ms: float = 0.0,
+        ocr_pages: int = 0,
     ) -> None:
         self._chunks_by_document[document_id] = chunks
         now = datetime.now(timezone.utc)
@@ -43,6 +46,9 @@ class InMemoryDocumentStore:
             mime_type=mime_type,
             uploaded_by=uploaded_by,
             extraction_warnings=extraction_warnings or [],
+            extraction_ms=extraction_ms,
+            ocr_ms=ocr_ms,
+            ocr_pages=ocr_pages,
             created_at=existing.created_at if existing else now,
             updated_at=now,
             latest_audit_action="document.ingested",

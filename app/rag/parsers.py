@@ -1,6 +1,7 @@
 from dataclasses import dataclass, field
 from io import BytesIO
 from pathlib import Path
+import time
 import xml.etree.ElementTree as ET
 import zipfile
 import mimetypes
@@ -14,38 +15,108 @@ class ExtractionResult:
     mime_type: str | None
     ocr_used: bool = False
     warnings: list[str] = field(default_factory=list)
+    extraction_ms: float = 0.0
+    ocr_ms: float = 0.0
+    ocr_pages: int = 0
+
+
+@dataclass(frozen=True)
+class OcrResult:
+    text: str
+    duration_ms: float
+    pages_processed: int = 0
 
 
 def extract_document_text(path: Path, force_ocr: bool = False) -> ExtractionResult:
+    started_at = time.perf_counter()
     mime_type, _ = mimetypes.guess_type(path.name)
     suffix = path.suffix.lower()
     warnings: list[str] = []
 
     if force_ocr:
-        text = _extract_with_ocr(path, warnings)
-        return ExtractionResult(text=text, mime_type=mime_type, ocr_used=True, warnings=warnings)
+        ocr = _extract_with_ocr(path, warnings)
+        return _result(
+            text=ocr.text,
+            mime_type=mime_type,
+            ocr_used=True,
+            warnings=warnings,
+            started_at=started_at,
+            ocr=ocr,
+        )
 
     if suffix in {".txt", ".md", ".csv", ".tsv"}:
-        return ExtractionResult(text=path.read_text(encoding="utf-8", errors="ignore"), mime_type=mime_type)
+        return _result(
+            text=path.read_text(encoding="utf-8", errors="ignore"),
+            mime_type=mime_type,
+            warnings=warnings,
+            started_at=started_at,
+        )
 
     if suffix == ".pdf":
         text = _extract_pdf_text(path, warnings)
         if _looks_like_scanned_document(text):
-            text = _extract_with_ocr(path, warnings)
-            return ExtractionResult(text=text, mime_type=mime_type, ocr_used=True, warnings=warnings)
-        return ExtractionResult(text=text, mime_type=mime_type, warnings=warnings)
+            ocr = _extract_with_ocr(path, warnings)
+            return _result(
+                text=ocr.text,
+                mime_type=mime_type,
+                ocr_used=True,
+                warnings=warnings,
+                started_at=started_at,
+                ocr=ocr,
+            )
+        return _result(text=text, mime_type=mime_type, warnings=warnings, started_at=started_at)
 
     if suffix == ".docx":
-        return ExtractionResult(text=_extract_docx_text(path, warnings), mime_type=mime_type, warnings=warnings)
+        return _result(
+            text=_extract_docx_text(path, warnings),
+            mime_type=mime_type,
+            warnings=warnings,
+            started_at=started_at,
+        )
 
     if suffix == ".xlsx":
-        return ExtractionResult(text=_extract_xlsx_text(path, warnings), mime_type=mime_type, warnings=warnings)
+        return _result(
+            text=_extract_xlsx_text(path, warnings),
+            mime_type=mime_type,
+            warnings=warnings,
+            started_at=started_at,
+        )
 
     if suffix == ".pptx":
-        return ExtractionResult(text=_extract_pptx_text(path, warnings), mime_type=mime_type, warnings=warnings)
+        return _result(
+            text=_extract_pptx_text(path, warnings),
+            mime_type=mime_type,
+            warnings=warnings,
+            started_at=started_at,
+        )
 
     warnings.append(f"No parser configured for {suffix}; attempted utf-8 text fallback.")
-    return ExtractionResult(text=path.read_text(encoding="utf-8", errors="ignore"), mime_type=mime_type, warnings=warnings)
+    return _result(
+        text=path.read_text(encoding="utf-8", errors="ignore"),
+        mime_type=mime_type,
+        warnings=warnings,
+        started_at=started_at,
+    )
+
+
+def _result(
+    *,
+    text: str,
+    mime_type: str | None,
+    warnings: list[str],
+    started_at: float,
+    ocr_used: bool = False,
+    ocr: OcrResult | None = None,
+) -> ExtractionResult:
+    return ExtractionResult(
+        text=text,
+        mime_type=mime_type,
+        ocr_used=ocr_used,
+        warnings=warnings,
+        extraction_ms=_elapsed_ms(started_at),
+        ocr_ms=ocr.duration_ms if ocr else 0.0,
+        ocr_pages=ocr.pages_processed if ocr else 0,
+    )
 
 
 def _extract_pdf_text(path: Path, warnings: list[str]) -> str:
@@ -118,34 +189,41 @@ def _extract_pptx_text(path: Path, warnings: list[str]) -> str:
         return path.read_text(encoding="utf-8", errors="ignore")
 
 
-def _extract_with_ocr(path: Path, warnings: list[str]) -> str:
+def _extract_with_ocr(path: Path, warnings: list[str]) -> OcrResult:
+    started_at = time.perf_counter()
     try:
         import pytesseract  # type: ignore
         from PIL import Image  # type: ignore
     except ImportError:
         warnings.append("OCR dependencies are not installed; returning empty OCR result.")
-        return ""
+        return OcrResult(text="", duration_ms=_elapsed_ms(started_at))
 
     settings = get_settings()
     language = settings.ocr_language.strip() or None
 
     if path.suffix.lower() in {".png", ".jpg", ".jpeg", ".tiff", ".bmp"}:
         with Image.open(path) as image:
-            return pytesseract.image_to_string(image, lang=language)
+            text = pytesseract.image_to_string(image, lang=language)
+        return OcrResult(text=text, duration_ms=_elapsed_ms(started_at), pages_processed=1)
 
     if path.suffix.lower() == ".pdf":
-        return _extract_pdf_with_ocr(path, warnings, pytesseract, Image)
+        text, pages_processed = _extract_pdf_with_ocr(path, warnings, pytesseract, Image)
+        return OcrResult(
+            text=text,
+            duration_ms=_elapsed_ms(started_at),
+            pages_processed=pages_processed,
+        )
 
     warnings.append(f"OCR is not configured for {path.suffix.lower() or 'files without extension'}.")
-    return ""
+    return OcrResult(text="", duration_ms=_elapsed_ms(started_at))
 
 
-def _extract_pdf_with_ocr(path: Path, warnings: list[str], pytesseract, Image) -> str:
+def _extract_pdf_with_ocr(path: Path, warnings: list[str], pytesseract, Image) -> tuple[str, int]:
     try:
         import fitz  # type: ignore
     except ImportError:
         warnings.append("PyMuPDF is not installed; returning empty PDF OCR result.")
-        return ""
+        return "", 0
 
     settings = get_settings()
     language = settings.ocr_language.strip() or None
@@ -153,6 +231,7 @@ def _extract_pdf_with_ocr(path: Path, warnings: list[str], pytesseract, Image) -
     dpi = max(settings.ocr_pdf_dpi, 72)
     matrix = fitz.Matrix(dpi / 72, dpi / 72)
     pages: list[str] = []
+    pages_processed = 0
 
     with fitz.open(path) as document:
         for page_index, page in enumerate(document):
@@ -162,6 +241,7 @@ def _extract_pdf_with_ocr(path: Path, warnings: list[str], pytesseract, Image) -
                 )
                 break
             pixmap = page.get_pixmap(matrix=matrix, alpha=False)
+            pages_processed += 1
             with Image.open(BytesIO(pixmap.tobytes("png"))) as image:
                 page_text = pytesseract.image_to_string(image, lang=language).strip()
             if page_text:
@@ -169,8 +249,12 @@ def _extract_pdf_with_ocr(path: Path, warnings: list[str], pytesseract, Image) -
 
     if not pages:
         warnings.append("PDF OCR produced no text.")
-    return "\n\n".join(pages)
+    return "\n\n".join(pages), pages_processed
 
 
 def _looks_like_scanned_document(text: str) -> bool:
     return len(text.strip()) < 100
+
+
+def _elapsed_ms(started_at: float) -> float:
+    return round((time.perf_counter() - started_at) * 1000, 3)

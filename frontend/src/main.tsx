@@ -49,6 +49,9 @@ type IngestResult = {
   chunks_created: number;
   ocr_used: boolean;
   extraction_warnings?: string[];
+  extraction_ms?: number;
+  ocr_ms?: number;
+  ocr_pages?: number;
 };
 
 type Citation = {
@@ -93,6 +96,9 @@ type ManagedDocument = {
   mime_type?: string | null;
   uploaded_by?: string | null;
   extraction_warnings: string[];
+  extraction_ms?: number;
+  ocr_ms?: number;
+  ocr_pages?: number;
   created_at?: string | null;
   updated_at?: string | null;
   latest_audit_action?: string | null;
@@ -826,6 +832,11 @@ function AuthenticatedApp() {
                     {extractionWarnings(item).length ? (
                       <small>{extractionWarnings(item).length} extraction warning(s)</small>
                     ) : null}
+                    {item.ocr_used ? (
+                      <small>
+                        OCR {formatMilliseconds(item.ocr_ms)} / {item.ocr_pages ?? 0} page(s)
+                      </small>
+                    ) : null}
                   </div>
                   <div className="job-actions">
                     {extractionWarnings(item).length ? (
@@ -987,6 +998,11 @@ function AuthenticatedApp() {
                 />
                 <StatusItem label="Audit" value={selectedDocument.latest_audit_action ?? "none"} />
                 <StatusItem label="MIME" value={selectedDocument.mime_type ?? "unknown"} />
+                <StatusItem
+                  label="Extraction"
+                  value={formatMilliseconds(selectedDocument.extraction_ms)}
+                />
+                <StatusItem label="OCR" value={formatOcrMetrics(selectedDocument)} />
               </div>
               {extractionWarnings(selectedDocument).length ? (
                 <div className="warning-panel" role="status" aria-label="Extraction warnings">
@@ -1341,6 +1357,13 @@ function formatMilliseconds(value?: number) {
     return "0 ms";
   }
   return `${Math.round(value)} ms`;
+}
+
+function formatOcrMetrics(document: { ocr_used?: boolean; ocr_ms?: number; ocr_pages?: number }) {
+  if (!document.ocr_used) {
+    return "Not used";
+  }
+  return `${formatMilliseconds(document.ocr_ms)} / ${document.ocr_pages ?? 0} page(s)`;
 }
 
 function formatScore(value?: number) {

@@ -66,6 +66,9 @@ def process_document_path(
         mime_type=extraction.mime_type,
         uploaded_by=uploaded_by,
         extraction_warnings=extraction.warnings,
+        extraction_ms=extraction.extraction_ms,
+        ocr_ms=extraction.ocr_ms,
+        ocr_pages=extraction.ocr_pages,
     )
     persist_document_ingestion(
         document_id=resolved_document_id,
@@ -78,6 +81,9 @@ def process_document_path(
         force_ocr=force_ocr,
         ocr_used=extraction.ocr_used,
         extraction_warnings=extraction.warnings,
+        extraction_ms=extraction.extraction_ms,
+        ocr_ms=extraction.ocr_ms,
+        ocr_pages=extraction.ocr_pages,
         chunks=chunk_dtos,
         uploaded_by_user_id=uploaded_by_user_id,
     )
@@ -88,4 +94,7 @@ def process_document_path(
         chunks_created=len(chunk_dtos),
         ocr_used=extraction.ocr_used,
         extraction_warnings=extraction.warnings,
+        extraction_ms=extraction.extraction_ms,
+        ocr_ms=extraction.ocr_ms,
+        ocr_pages=extraction.ocr_pages,
     )

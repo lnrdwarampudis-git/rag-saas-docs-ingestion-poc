@@ -14,6 +14,9 @@ def test_plain_text_extraction(tmp_path: Path) -> None:
 
     assert "Quarterly revenue policy" in result.text
     assert result.ocr_used is False
+    assert result.extraction_ms >= 0
+    assert result.ocr_ms == 0
+    assert result.ocr_pages == 0
 
 
 def test_xlsx_extraction(tmp_path: Path) -> None:
@@ -79,3 +82,6 @@ def test_scanned_pdf_uses_rendered_page_ocr(tmp_path: Path, monkeypatch) -> None
     assert result.ocr_used is True
     assert "SCANNED POLICY" in result.text
     assert calls == ["eng"]
+    assert result.extraction_ms >= result.ocr_ms
+    assert result.ocr_ms >= 0
+    assert result.ocr_pages == 1

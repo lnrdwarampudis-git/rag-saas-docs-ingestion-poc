@@ -70,6 +70,9 @@ def test_document_extraction_warnings_are_returned_in_inventory_and_detail(
     assert ingest_payload["extraction_warnings"] == [
         "No parser configured for .bin; attempted utf-8 text fallback."
     ]
+    assert ingest_payload["extraction_ms"] >= 0
+    assert ingest_payload["ocr_ms"] == 0
+    assert ingest_payload["ocr_pages"] == 0
 
     list_response = client.get("/api/v1/documents")
     assert list_response.status_code == 200
@@ -80,10 +83,17 @@ def test_document_extraction_warnings_are_returned_in_inventory_and_detail(
     ]
     assert matching
     assert matching[0]["extraction_warnings"] == ingest_payload["extraction_warnings"]
+    assert matching[0]["extraction_ms"] >= 0
+    assert matching[0]["ocr_ms"] == 0
+    assert matching[0]["ocr_pages"] == 0
 
     detail_response = client.get(f"/api/v1/documents/{document_id}")
     assert detail_response.status_code == 200
-    assert detail_response.json()["extraction_warnings"] == ingest_payload["extraction_warnings"]
+    detail_payload = detail_response.json()
+    assert detail_payload["extraction_warnings"] == ingest_payload["extraction_warnings"]
+    assert detail_payload["extraction_ms"] >= 0
+    assert detail_payload["ocr_ms"] == 0
+    assert detail_payload["ocr_pages"] == 0
 
 
 def test_query_returns_service_unavailable_when_model_provider_fails(

@@ -17,6 +17,7 @@ This page is the short handoff for what the POC supports today, how to run it, a
 - Optional Ollama embeddings and answer generation for local models, including tested Mac-host Ollama access from Docker through `host.docker.internal`.
 - Container-packaged OCR for images and scanned/image-backed PDFs using Tesseract plus PyMuPDF page rendering.
 - Parser/OCR extraction warnings returned by ingest APIs, persisted in document metadata, and surfaced in document inventory/detail UI.
+- Extraction duration, OCR duration, and OCR page counts returned by ingest APIs, persisted in document metadata, and surfaced in document detail UI.
 
 ## Supported Document Intake Today
 
@@ -113,7 +114,7 @@ git diff --check
 Recommended next implementation slices:
 
 1. Harden ingestion for large files: direct-to-object-storage multipart uploads, upload progress, resumable upload behavior, and object-storage lifecycle cleanup. Basic API/UI size and extension limits are now in place.
-2. Add richer parser/OCR operations: OCR duration metrics, language pack documentation, and dedicated OCR-heavy worker queues. Container Tesseract packaging, OCR language configuration, scanned-PDF OCR, and UI-visible parser warnings are now in place.
+2. Add richer parser/OCR operations: language pack documentation and dedicated OCR-heavy worker queues. Container Tesseract packaging, OCR language configuration, scanned-PDF OCR, UI-visible parser warnings, and OCR duration/page metrics are now in place.
 3. Persist vector retrieval beyond the current POC baseline: pgvector/Qdrant write/read integration for embeddings, migration checks, and tenant-safe vector filtering.
 4. Add reranking and stronger local model options: local cross-encoder or reranker adapter, vLLM adapter path, model health dashboards, and performance thresholds.
 5. Improve operations controls: job cancel/retry history, dead-letter queue, worker concurrency controls, and richer audit event filtering.

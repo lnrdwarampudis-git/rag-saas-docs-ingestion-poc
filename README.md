@@ -180,7 +180,7 @@ After login, the frontend shows:
 
 - A&A and session management panels so the resolved tenant, roles, token expiry, and refresh behavior are visible.
 - Format intake guidance for PDF, DOCX, XLSX, PPTX, text/CSV/markdown, and image OCR uploads.
-- Authorized document inventory with file name, status, visibility, OCR indicator, extraction warning count, chunk count, updated time, and detail inspection.
+- Authorized document inventory with file name, status, visibility, OCR indicator, extraction warning count, chunk count, updated time, and detail inspection with extraction/OCR timing.
 - Chunk preview for the selected document, using the same RBAC checks as the query/retrieval path.
 - Queued upload status for background ingestion jobs, with automatic polling until completion or failure.
 - Retry action for failed background ingestion jobs.
