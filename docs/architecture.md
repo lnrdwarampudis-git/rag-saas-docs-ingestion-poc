@@ -189,7 +189,7 @@ sequenceDiagram
 
 ## Component Responsibilities
 
-- React/Vite UI: PKCE login/logout, document upload, mounted-path ingestion, queued upload status and failed-job retry, read-only A&A and session status display, model runtime readiness, evaluation quality gate display, admin analytics and recent operations summary, format guidance, document inventory/detail/chunk preview, query form, citations, cache status, and latency display.
+- React/Vite UI: PKCE login/logout, document upload, mounted-path ingestion, queued upload status and failed-job retry, read-only A&A and session status display, model runtime readiness, evaluation quality gate display, admin analytics and recent operations summary, format guidance, document inventory/detail/chunk preview with extraction warnings, query form, citations, cache status, and latency display.
 - FastAPI backend: bearer-token validation, RBAC resolution, request validation, upload size/type guardrails, ingestion orchestration, processing job status/run/retry APIs, document inventory APIs, model runtime status API, retrieval evaluation API, admin analytics/audit API, retrieval orchestration, persistence, and API contracts.
 - Keycloak: identity provider for OAuth/OIDC (Authorization Code + PKCE for the SPA), issues and refreshes JWTs, exposes the JWKS used to validate them, and owns realm roles and demo users.
 - PostgreSQL + pgvector: tenant metadata, RBAC tables (`app_users`, `roles`, `user_roles`) as the source of truth for tenant/role resolution, document records, chunk records, and audit logs.

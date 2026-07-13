@@ -38,6 +38,7 @@ class DocumentSummary(BaseModel):
     byte_size: int | None = None
     mime_type: str | None = None
     uploaded_by: str | None = None
+    extraction_warnings: list[str] = Field(default_factory=list)
     created_at: datetime | None = None
     updated_at: datetime | None = None
     latest_audit_action: str | None = None

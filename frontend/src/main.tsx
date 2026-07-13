@@ -2,6 +2,7 @@ import React from "react";
 import ReactDOM from "react-dom/client";
 import {
   Activity,
+  AlertTriangle,
   BadgeCheck,
   Clock3,
   Cpu,
@@ -47,7 +48,7 @@ type IngestResult = {
   file_name: string;
   chunks_created: number;
   ocr_used: boolean;
-  extraction_warnings: string[];
+  extraction_warnings?: string[];
 };
 
 type Citation = {
@@ -91,6 +92,7 @@ type ManagedDocument = {
   byte_size?: number | null;
   mime_type?: string | null;
   uploaded_by?: string | null;
+  extraction_warnings: string[];
   created_at?: string | null;
   updated_at?: string | null;
   latest_audit_action?: string | null;
@@ -821,8 +823,16 @@ function AuthenticatedApp() {
                   <div>
                     <strong>{item.file_name}</strong>
                     <span>{item.chunks_created} chunks</span>
+                    {extractionWarnings(item).length ? (
+                      <small>{extractionWarnings(item).length} extraction warning(s)</small>
+                    ) : null}
                   </div>
-                  {item.ocr_used ? <Badge label="OCR" /> : <Badge label="Text" />}
+                  <div className="job-actions">
+                    {extractionWarnings(item).length ? (
+                      <AlertTriangle size={16} className="warning-icon" />
+                    ) : null}
+                    {item.ocr_used ? <Badge label="OCR" /> : <Badge label="Text" />}
+                  </div>
                 </article>
               ))}
             </div>
@@ -932,6 +942,7 @@ function AuthenticatedApp() {
               <span>Access</span>
               <span>Chunks</span>
               <span>OCR</span>
+              <span>Warnings</span>
               <span>Updated</span>
               <span>Action</span>
             </div>
@@ -942,6 +953,7 @@ function AuthenticatedApp() {
                 <span>{document.visibility}</span>
                 <span>{document.chunks_created}</span>
                 <span>{document.ocr_used ? "Yes" : "No"}</span>
+                <span>{extractionWarnings(document).length}</span>
                 <span>{formatDate(document.updated_at ?? document.created_at)}</span>
                 <button
                   className="secondary-action compact-action"
@@ -976,6 +988,19 @@ function AuthenticatedApp() {
                 <StatusItem label="Audit" value={selectedDocument.latest_audit_action ?? "none"} />
                 <StatusItem label="MIME" value={selectedDocument.mime_type ?? "unknown"} />
               </div>
+              {extractionWarnings(selectedDocument).length ? (
+                <div className="warning-panel" role="status" aria-label="Extraction warnings">
+                  <div className="warning-heading">
+                    <AlertTriangle size={17} />
+                    <strong>Extraction warnings</strong>
+                  </div>
+                  <ul>
+                    {extractionWarnings(selectedDocument).map((warning, index) => (
+                      <li key={`${warning}-${index}`}>{warning}</li>
+                    ))}
+                  </ul>
+                </div>
+              ) : null}
               <div className="chunk-list">
                 {selectedDocument.chunks.slice(0, 5).map((chunk) => (
                   <div className="chunk-card" key={chunk.chunk_index}>
@@ -1071,6 +1096,10 @@ function StatusItem({ label, value }: { label: string; value: string }) {
       <strong>{value}</strong>
     </div>
   );
+}
+
+function extractionWarnings(document: { extraction_warnings?: string[] }) {
+  return document.extraction_warnings ?? [];
 }
 
 function QueryRunDetails({

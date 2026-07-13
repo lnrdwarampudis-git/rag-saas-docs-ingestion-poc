@@ -26,6 +26,7 @@ def persist_document_ingestion(
     allowed_role_names: list[str],
     force_ocr: bool,
     ocr_used: bool,
+    extraction_warnings: list[str],
     chunks: list[ChunkDTO],
     uploaded_by_user_id: UUID | None = None,
 ) -> None:
@@ -39,6 +40,7 @@ def persist_document_ingestion(
     extraction_metadata = {
         "chunk_count": len(chunks),
         "ocr_used": ocr_used,
+        "extraction_warnings": extraction_warnings,
         "source": "upload_or_mounted_path",
     }
 
@@ -143,6 +145,7 @@ def persist_document_ingestion(
                             "file_name": file_name,
                             "chunks_created": len(chunks),
                             "ocr_used": ocr_used,
+                            "warning_count": len(extraction_warnings),
                         }
                     ),
                 },
@@ -543,10 +546,18 @@ def _summary_from_row(row) -> DocumentSummary:
         byte_size=row["byte_size"],
         mime_type=row["mime_type"],
         uploaded_by=row["uploaded_by_subject"],
+        extraction_warnings=_extraction_warnings(metadata),
         created_at=row["created_at"],
         updated_at=row["updated_at"],
         latest_audit_action=row["latest_audit_action"],
     )
+
+
+def _extraction_warnings(metadata: dict) -> list[str]:
+    raw_warnings = metadata.get("extraction_warnings")
+    if not isinstance(raw_warnings, list):
+        return []
+    return [str(warning) for warning in raw_warnings if str(warning).strip()]
 
 
 def _chunk_from_row(row) -> ChunkDTO:

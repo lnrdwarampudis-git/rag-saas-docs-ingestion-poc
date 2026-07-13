@@ -65,6 +65,7 @@ def process_document_path(
         byte_size=path.stat().st_size,
         mime_type=extraction.mime_type,
         uploaded_by=uploaded_by,
+        extraction_warnings=extraction.warnings,
     )
     persist_document_ingestion(
         document_id=resolved_document_id,
@@ -76,6 +77,7 @@ def process_document_path(
         allowed_role_names=allowed_role_names,
         force_ocr=force_ocr,
         ocr_used=extraction.ocr_used,
+        extraction_warnings=extraction.warnings,
         chunks=chunk_dtos,
         uploaded_by_user_id=uploaded_by_user_id,
     )

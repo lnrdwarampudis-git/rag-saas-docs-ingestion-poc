@@ -754,10 +754,10 @@ button {
 
 .document-row {
   display: grid;
-  grid-template-columns: minmax(180px, 1.4fr) 92px 82px 70px 64px 120px 92px;
+  grid-template-columns: minmax(180px, 1.4fr) 92px 82px 70px 64px 82px 120px 92px;
   gap: 10px;
   align-items: center;
-  min-width: 840px;
+  min-width: 930px;
   min-height: 52px;
   padding: 10px;
   border: 1px solid #e0e8e4;
@@ -791,6 +791,43 @@ button {
 
 .document-detail-grid {
   grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.warning-panel {
+  display: grid;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid #e7c66d;
+  border-radius: 8px;
+  color: #533f0d;
+  background: #fff9e8;
+}
+
+.warning-heading {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.warning-heading strong {
+  font-size: 14px;
+}
+
+.warning-panel ul {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding-left: 20px;
+}
+
+.warning-panel li {
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+
+.warning-icon {
+  flex-shrink: 0;
+  color: #a06d00;
 }
 
 .chunk-list {

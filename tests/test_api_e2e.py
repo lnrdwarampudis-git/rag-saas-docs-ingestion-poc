@@ -45,6 +45,47 @@ def test_ingest_then_query_authorized_context(tmp_path: Path, api_client_as) -> 
     assert query_payload["metrics"]["contexts_used"] >= 1
 
 
+def test_document_extraction_warnings_are_returned_in_inventory_and_detail(
+    tmp_path: Path,
+    api_client_as,
+) -> None:
+    source = tmp_path / "legacy-format.bin"
+    source.write_text("LEGACY FORMAT\nFallback text extraction should surface a warning.", encoding="utf-8")
+    tenant_id = "00000000-0000-4000-8000-000000000021"
+    client = api_client_as(tenant_id, ["admin"])
+
+    ingest_response = client.post(
+        "/api/v1/documents/ingest",
+        json={
+            "local_path": str(source),
+            "visibility": "tenant",
+            "allowed_role_names": [],
+            "force_ocr": False,
+        },
+    )
+
+    assert ingest_response.status_code == 200
+    ingest_payload = ingest_response.json()
+    document_id = ingest_payload["document_id"]
+    assert ingest_payload["extraction_warnings"] == [
+        "No parser configured for .bin; attempted utf-8 text fallback."
+    ]
+
+    list_response = client.get("/api/v1/documents")
+    assert list_response.status_code == 200
+    matching = [
+        document
+        for document in list_response.json()["documents"]
+        if document["document_id"] == document_id
+    ]
+    assert matching
+    assert matching[0]["extraction_warnings"] == ingest_payload["extraction_warnings"]
+
+    detail_response = client.get(f"/api/v1/documents/{document_id}")
+    assert detail_response.status_code == 200
+    assert detail_response.json()["extraction_warnings"] == ingest_payload["extraction_warnings"]
+
+
 def test_query_returns_service_unavailable_when_model_provider_fails(
     api_client_as,
     monkeypatch,
