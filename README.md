@@ -49,6 +49,7 @@ See [Model Providers](docs/model-providers.md#tested-host-ollama-docker-settings
 For full setup, execution, test, and GitHub export instructions, see:
 
 - [Setup Guide](docs/setup.md)
+- [Current Status And Roadmap](docs/current-status.md)
 - [Architecture Diagram](docs/architecture.md)
 - [Flow Diagrams](docs/flow-diagrams.md)
 - [Retrieval Evaluation](docs/retrieval-evaluation.md)
@@ -181,6 +182,8 @@ After login, the frontend shows:
 - Queued upload status for background ingestion jobs, with automatic polling until completion or failure.
 - Retry action for failed background ingestion jobs.
 - Admin operations summary for ingestion totals, job queue state, failed jobs, query cache hit rate, query latency, recent audit operations, and retrieval evaluation pass rate.
+
+For the latest supported-format matrix, OCR notes, local-model switching instructions, validation checklist, and pending roadmap, see [Current Status And Roadmap](docs/current-status.md).
 
 When running with Docker, the backend cannot read arbitrary Mac paths such as `/Users/name/Documents/file.pdf`. Put local files under `data/ingest/` in this repo, then enter the container path in the UI:
 

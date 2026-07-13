@@ -193,6 +193,8 @@ Supported POC intake formats:
 
 Legacy DOC, XLS, and PPT files should be converted to DOCX, XLSX, or PPTX.
 
+For the current support matrix, OCR behavior, local-model modes, validation checklist, and pending roadmap, see [Current Status And Roadmap](current-status.md).
+
 Alternative mounted-path workflow:
 
 1. Put files in `data/ingest`.
