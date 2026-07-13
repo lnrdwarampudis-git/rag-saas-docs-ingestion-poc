@@ -18,6 +18,8 @@ class Settings(BaseSettings):
     chunk_target_tokens: int = 750
     chunk_overlap_tokens: int = 120
     upload_dir: str = "/tmp/rag-uploads"
+    max_upload_bytes: int = 536_870_912
+    allowed_upload_extensions: str = ".pdf,.txt,.md,.csv,.tsv,.docx,.xlsx,.pptx,.png,.jpg,.jpeg,.tiff,.bmp"
     enable_db_persistence: bool = False
     host_mount_source_prefix: str = ""
     retrieval_min_score: float = 0.12

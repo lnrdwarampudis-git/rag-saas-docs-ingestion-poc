@@ -156,6 +156,8 @@ The ingestion endpoint accepts a local file path for Week 1 development. Product
 
 The upload endpoint accepts multipart browser uploads and is the preferred local SaaS-style flow because it does not require Docker path mapping.
 
+Browser uploads are guarded by configurable extension and size limits. Defaults are `ALLOWED_UPLOAD_EXTENSIONS=.pdf,.txt,.md,.csv,.tsv,.docx,.xlsx,.pptx,.png,.jpg,.jpeg,.tiff,.bmp` and `MAX_UPLOAD_BYTES=536870912` (512 MiB). Unsupported formats return `415`; oversized files return `413`.
+
 The async upload endpoint returns `202 Accepted` with a `job_id` and `document_id`. Docker Compose includes a `worker` service that polls Redis, processes queued files, updates `processing_jobs`, and transitions documents from `pending` to `embedded` or `failed`. Failed jobs can be retried through the processing job retry API or the UI retry action.
 
 Supported POC intake formats:

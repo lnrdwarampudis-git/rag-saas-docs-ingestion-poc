@@ -182,6 +182,15 @@ Preferred local workflow:
 
 For larger documents or a more production-like workflow, use **Upload to queue**. The backend returns a processing job immediately, the `worker` service picks it up from Redis, and the UI polls until the job reaches `completed` or `failed`.
 
+Browser uploads are checked by extension and byte size before ingestion. Defaults:
+
+```text
+MAX_UPLOAD_BYTES=536870912
+ALLOWED_UPLOAD_EXTENSIONS=.pdf,.txt,.md,.csv,.tsv,.docx,.xlsx,.pptx,.png,.jpg,.jpeg,.tiff,.bmp
+```
+
+The frontend mirrors the 512 MiB default for immediate feedback. The API remains the source of truth and returns `415` for unsupported extensions or `413` when the upload exceeds `MAX_UPLOAD_BYTES`.
+
 Supported POC intake formats:
 
 - PDF

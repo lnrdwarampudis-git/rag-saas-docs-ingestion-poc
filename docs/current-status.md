@@ -8,6 +8,7 @@ This page is the short handoff for what the POC supports today, how to run it, a
 - React/Vite UI with login, session visibility, document upload, document management, query, model status, retrieval evaluation, and admin analytics panels.
 - Docker Compose stack for backend, frontend, worker, Postgres/pgvector, Redis, MinIO, Qdrant, and Keycloak.
 - Background ingestion through `POST /api/v1/documents/upload-async`, Redis queue, and `python -m app.worker`.
+- Configurable upload guardrails for browser uploads: allowed extensions and maximum byte size are enforced by the API and pre-checked in the UI.
 - Processing job status, local run, and retry controls through `GET /api/v1/processing-jobs/{job_id}`, `POST /api/v1/processing-jobs/{job_id}/run`, and `POST /api/v1/processing-jobs/{job_id}/retry`.
 - Tenant-scoped document inventory, chunk preview, query pipeline, citations, Redis query cache, and cache/model-aware query metrics.
 - Offline retrieval quality gate through `python -m app.eval.run` and authenticated UI/API evaluation status.
@@ -38,6 +39,13 @@ docker compose up -d --build
 ```
 
 Open the UI at `http://127.0.0.1:5173`, sign in with a demo user, upload or queue a document, wait for ingestion to finish, and ask a question.
+
+Browser uploads are capped at 512 MiB by default. Tune these values in `.env` when needed:
+
+```text
+MAX_UPLOAD_BYTES=536870912
+ALLOWED_UPLOAD_EXTENSIONS=.pdf,.txt,.md,.csv,.tsv,.docx,.xlsx,.pptx,.png,.jpg,.jpeg,.tiff,.bmp
+```
 
 Demo users all use password `Passw0rd!`:
 
@@ -99,7 +107,7 @@ git diff --check
 
 Recommended next implementation slices:
 
-1. Harden ingestion for large files: direct-to-object-storage multipart uploads, upload progress, size/type limits, and resumable upload behavior.
+1. Harden ingestion for large files: direct-to-object-storage multipart uploads, upload progress, resumable upload behavior, and object-storage lifecycle cleanup. Basic API/UI size and extension limits are now in place.
 2. Add production-grade parser/OCR packaging: container-level Tesseract installation, OCR language configuration, stronger scanned-PDF handling, and parser warnings surfaced in the UI.
 3. Persist vector retrieval beyond the current POC baseline: pgvector/Qdrant write/read integration for embeddings, migration checks, and tenant-safe vector filtering.
 4. Add reranking and stronger local model options: local cross-encoder or reranker adapter, vLLM adapter path, model health dashboards, and performance thresholds.

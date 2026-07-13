@@ -2,6 +2,7 @@ from pathlib import Path
 from uuid import UUID
 
 import app.api.query as query_api
+from app.config import get_settings
 from app.rag.model_providers import ModelProviderRequestError
 
 
@@ -153,6 +154,40 @@ def test_upload_document_then_query_context(tmp_path: Path, api_client_as) -> No
     assert query_response.status_code == 200
     query_payload = query_response.json()
     assert "Uploaded files" in query_payload["answer"]
+
+
+def test_upload_rejects_unsupported_extension(api_client_as) -> None:
+    client = api_client_as("00000000-0000-4000-8000-000000000019", ["admin"])
+
+    response = client.post(
+        "/api/v1/documents/upload",
+        data={"visibility": "tenant", "force_ocr": "false"},
+        files={"file": ("malware.exe", b"not a supported document", "application/octet-stream")},
+    )
+
+    assert response.status_code == 415
+    assert "Unsupported file type" in response.json()["detail"]
+
+
+def test_upload_rejects_files_over_configured_limit(
+    tmp_path: Path,
+    api_client_as,
+    monkeypatch,
+) -> None:
+    settings = get_settings()
+    monkeypatch.setattr(settings, "upload_dir", str(tmp_path))
+    monkeypatch.setattr(settings, "max_upload_bytes", 8)
+    client = api_client_as("00000000-0000-4000-8000-000000000020", ["admin"])
+
+    response = client.post(
+        "/api/v1/documents/upload",
+        data={"visibility": "tenant", "force_ocr": "false"},
+        files={"file": ("too-large.txt", b"this file is too large", "text/plain")},
+    )
+
+    assert response.status_code == 413
+    assert "exceeds" in response.json()["detail"]
+    assert list(tmp_path.iterdir()) == []
 
 
 def test_async_upload_job_can_be_processed_then_queried(api_client_as) -> None:

@@ -25,6 +25,23 @@ import "./styles.css";
 import { AuthProvider, useAuth } from "./auth/AuthProvider";
 import { apiFetch, ApiAuthError } from "./api";
 
+const MAX_UPLOAD_BYTES = 536_870_912;
+const ALLOWED_UPLOAD_EXTENSIONS = [
+  ".pdf",
+  ".txt",
+  ".md",
+  ".csv",
+  ".tsv",
+  ".docx",
+  ".xlsx",
+  ".pptx",
+  ".png",
+  ".jpg",
+  ".jpeg",
+  ".tiff",
+  ".bmp"
+];
+
 type IngestResult = {
   document_id: string;
   file_name: string;
@@ -389,6 +406,9 @@ function AuthenticatedApp() {
     if (!selectedFile) {
       return;
     }
+    if (!validateSelectedFile(selectedFile)) {
+      return;
+    }
     setBusy(true);
     setError("");
     setStatus("Uploading");
@@ -482,6 +502,9 @@ function AuthenticatedApp() {
     if (!selectedFile) {
       return;
     }
+    if (!validateSelectedFile(selectedFile)) {
+      return;
+    }
     setBusy(true);
     setError("");
     setStatus("Queueing");
@@ -544,6 +567,21 @@ function AuthenticatedApp() {
     } finally {
       setBusy(false);
     }
+  };
+
+  const validateSelectedFile = (file: File) => {
+    const extension = fileExtension(file.name);
+    if (!ALLOWED_UPLOAD_EXTENSIONS.includes(extension)) {
+      setError(`Unsupported file type '${extension || "none"}'. Choose a supported document format.`);
+      setStatus("Needs attention");
+      return false;
+    }
+    if (file.size > MAX_UPLOAD_BYTES) {
+      setError(`File is ${formatBytes(file.size)}. The current upload limit is ${formatBytes(MAX_UPLOAD_BYTES)}.`);
+      setStatus("Needs attention");
+      return false;
+    }
+    return true;
   };
 
   const modelReady = Boolean(modelStatus?.embedding.ready && modelStatus.answer.ready);
@@ -677,12 +715,18 @@ function AuthenticatedApp() {
               <span>Upload file: PDF, Word, Excel, PowerPoint, text, image</span>
               <input
                 type="file"
-                accept=".pdf,.txt,.md,.csv,.tsv,.docx,.xlsx,.pptx,.png,.jpg,.jpeg,.tiff,.bmp"
-                onChange={(event) => setSelectedFile(event.target.files?.[0] ?? null)}
+                accept={ALLOWED_UPLOAD_EXTENSIONS.join(",")}
+                onChange={(event) => {
+                  const file = event.target.files?.[0] ?? null;
+                  setSelectedFile(file);
+                  if (file) {
+                    validateSelectedFile(file);
+                  }
+                }}
               />
               <small className="field-help">
-                Best for files from your Mac or another machine. The browser sends the file to the
-                backend, so no Docker path mapping is needed.
+                Best for files from your Mac or another machine. Limit: {formatBytes(MAX_UPLOAD_BYTES)}.
+                The browser sends the file to the backend, so no Docker path mapping is needed.
               </small>
             </label>
 
@@ -1282,6 +1326,24 @@ function formatPercent(value?: number) {
     return "0%";
   }
   return `${Math.round(value * 100)}%`;
+}
+
+function fileExtension(fileName: string) {
+  const index = fileName.lastIndexOf(".");
+  return index >= 0 ? fileName.slice(index).toLowerCase() : "";
+}
+
+function formatBytes(value: number) {
+  if (value >= 1024 * 1024 * 1024) {
+    return `${(value / (1024 * 1024 * 1024)).toFixed(1)} GiB`;
+  }
+  if (value >= 1024 * 1024) {
+    return `${(value / (1024 * 1024)).toFixed(0)} MiB`;
+  }
+  if (value >= 1024) {
+    return `${(value / 1024).toFixed(0)} KiB`;
+  }
+  return `${value} bytes`;
 }
 
 async function readApiError(response: Response) {

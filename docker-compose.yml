@@ -15,6 +15,8 @@ services:
       KEYCLOAK_AUDIENCE: rag-api
       KEYCLOAK_CLIENT_ID: rag-frontend
       UPLOAD_DIR: /data/uploads
+      MAX_UPLOAD_BYTES: ${MAX_UPLOAD_BYTES:-536870912}
+      ALLOWED_UPLOAD_EXTENSIONS: ${ALLOWED_UPLOAD_EXTENSIONS:-.pdf,.txt,.md,.csv,.tsv,.docx,.xlsx,.pptx,.png,.jpg,.jpeg,.tiff,.bmp}
       ENABLE_DB_PERSISTENCE: "true"
       RETRIEVAL_MIN_SCORE: "0.12"
       RETRIEVAL_MIN_KEYWORD_OVERLAP: "0.20"
@@ -67,6 +69,8 @@ services:
       KEYCLOAK_AUDIENCE: rag-api
       KEYCLOAK_CLIENT_ID: rag-frontend
       UPLOAD_DIR: /data/uploads
+      MAX_UPLOAD_BYTES: ${MAX_UPLOAD_BYTES:-536870912}
+      ALLOWED_UPLOAD_EXTENSIONS: ${ALLOWED_UPLOAD_EXTENSIONS:-.pdf,.txt,.md,.csv,.tsv,.docx,.xlsx,.pptx,.png,.jpg,.jpeg,.tiff,.bmp}
       ENABLE_DB_PERSISTENCE: "true"
       RETRIEVAL_MIN_SCORE: "0.12"
       RETRIEVAL_MIN_KEYWORD_OVERLAP: "0.20"

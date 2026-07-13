@@ -1,5 +1,4 @@
 from pathlib import Path
-import shutil
 from urllib.parse import unquote, urlparse
 from uuid import UUID, uuid4
 
@@ -25,6 +24,7 @@ from app.schemas.documents import (
 )
 
 router = APIRouter(prefix="/documents", tags=["documents"])
+UPLOAD_COPY_CHUNK_SIZE = 1024 * 1024
 
 class DocumentChunksResponse(BaseModel):
     document_id: UUID
@@ -170,10 +170,37 @@ def _save_upload(file: UploadFile) -> tuple[Path, str]:
     upload_dir = Path(settings.upload_dir)
     upload_dir.mkdir(parents=True, exist_ok=True)
     safe_name = Path(file.filename or "upload.bin").name
+    _validate_upload_extension(safe_name)
     target = upload_dir / f"{uuid4()}-{safe_name}"
+    bytes_written = 0
     with target.open("wb") as output:
-        shutil.copyfileobj(file.file, output)
+        while chunk := file.file.read(UPLOAD_COPY_CHUNK_SIZE):
+            bytes_written += len(chunk)
+            if bytes_written > settings.max_upload_bytes:
+                target.unlink(missing_ok=True)
+                raise HTTPException(
+                    status_code=413,
+                    detail=(
+                        f"Uploaded file exceeds the {settings.max_upload_bytes} byte limit"
+                    ),
+                )
+            output.write(chunk)
     return target, safe_name
+
+
+def _validate_upload_extension(file_name: str) -> None:
+    suffix = Path(file_name).suffix.lower()
+    allowed = {
+        extension.strip().lower()
+        for extension in get_settings().allowed_upload_extensions.split(",")
+        if extension.strip()
+    }
+    if suffix not in allowed:
+        allowed_list = ", ".join(sorted(allowed))
+        raise HTTPException(
+            status_code=415,
+            detail=f"Unsupported file type '{suffix or 'none'}'. Allowed extensions: {allowed_list}",
+        )
 
 
 def _resolve_ingest_path(raw_path: str) -> Path:
