@@ -19,9 +19,6 @@ from app.schemas.documents import ProcessingJobStatus
 
 logger = logging.getLogger(__name__)
 
-QUEUE_NAME = "rag:processing-jobs"
-
-
 @dataclass
 class ProcessingJob:
     job_id: UUID
@@ -104,14 +101,19 @@ def create_processing_job(
 
 
 def enqueue_processing_job(job_id: UUID) -> None:
+    queue_name = _queue_name_for_job(job_id)
     redis_client = _redis_client()
     if redis_client is None:
-        logger.info("Redis unavailable; processing job %s can be run by direct worker polling", job_id)
+        logger.info(
+            "Redis unavailable; processing job %s can be run by direct worker polling",
+            job_id,
+        )
         return
     try:
-        redis_client.rpush(QUEUE_NAME, str(job_id))
+        redis_client.rpush(queue_name, str(job_id))
+        logger.info("Enqueued processing job %s on %s", job_id, queue_name)
     except Exception:
-        logger.exception("Failed to enqueue processing job %s in Redis", job_id)
+        logger.exception("Failed to enqueue processing job %s in Redis queue %s", job_id, queue_name)
 
 
 def get_processing_job(job_id: UUID, current_user: AuthenticatedUser) -> ProcessingJobStatus | None:
@@ -182,17 +184,25 @@ def process_processing_job(job_id: UUID) -> ProcessingJobStatus | None:
     return job.to_status()
 
 
-def process_next_queued_job(timeout_seconds: int = 5) -> ProcessingJobStatus | None:
+def process_next_queued_job(
+    timeout_seconds: int = 5,
+    queue_names: list[str] | None = None,
+) -> ProcessingJobStatus | None:
+    queues = queue_names or _worker_queue_names()
     redis_client = _redis_client()
     if redis_client is None:
         queued = sorted(
-            (job for job in _jobs.values() if job.status == "queued"),
+            (
+                job
+                for job in _jobs.values()
+                if job.status == "queued" and _queue_name(job) in queues
+            ),
             key=lambda item: item.created_at or datetime.min.replace(tzinfo=timezone.utc),
         )
         return process_processing_job(queued[0].job_id) if queued else None
 
     try:
-        item = redis_client.blpop(QUEUE_NAME, timeout=timeout_seconds)
+        item = redis_client.blpop(queues, timeout=timeout_seconds)
     except Exception as exc:
         if exc.__class__.__name__ == "TimeoutError":
             return None
@@ -202,6 +212,28 @@ def process_next_queued_job(timeout_seconds: int = 5) -> ProcessingJobStatus | N
         return None
     _, raw_job_id = item
     return process_processing_job(UUID(raw_job_id))
+
+
+def _queue_name_for_job(job_id: UUID) -> str:
+    job = _load_job(job_id)
+    if job is None:
+        return get_settings().processing_queue_name
+    return _queue_name(job)
+
+
+def _queue_name(job: ProcessingJob) -> str:
+    settings = get_settings()
+    return settings.ocr_processing_queue_name if job.force_ocr else settings.processing_queue_name
+
+
+def _worker_queue_names() -> list[str]:
+    settings = get_settings()
+    queues = [
+        queue.strip()
+        for queue in settings.worker_queue_names.split(",")
+        if queue.strip()
+    ]
+    return queues or [settings.processing_queue_name]
 
 
 def _redis_client():

@@ -8,6 +8,9 @@ services:
       ENVIRONMENT: docker
       DATABASE_URL: postgresql+psycopg://rag:rag@postgres:5432/rag
       REDIS_URL: redis://redis:6379/0
+      PROCESSING_QUEUE_NAME: ${PROCESSING_QUEUE_NAME:-rag:processing-jobs}
+      OCR_PROCESSING_QUEUE_NAME: ${OCR_PROCESSING_QUEUE_NAME:-rag:processing-jobs:ocr}
+      WORKER_QUEUE_NAMES: ${WORKER_QUEUE_NAMES:-rag:processing-jobs}
       MINIO_ENDPOINT: http://minio:9000
       QDRANT_URL: http://qdrant:6333
       KEYCLOAK_ISSUER: http://localhost:8080/realms/rag
@@ -65,6 +68,58 @@ services:
       ENVIRONMENT: docker
       DATABASE_URL: postgresql+psycopg://rag:rag@postgres:5432/rag
       REDIS_URL: redis://redis:6379/0
+      PROCESSING_QUEUE_NAME: ${PROCESSING_QUEUE_NAME:-rag:processing-jobs}
+      OCR_PROCESSING_QUEUE_NAME: ${OCR_PROCESSING_QUEUE_NAME:-rag:processing-jobs:ocr}
+      WORKER_QUEUE_NAMES: ${WORKER_QUEUE_NAMES:-rag:processing-jobs}
+      MINIO_ENDPOINT: http://minio:9000
+      QDRANT_URL: http://qdrant:6333
+      KEYCLOAK_ISSUER: http://localhost:8080/realms/rag
+      KEYCLOAK_INTERNAL_ISSUER: http://keycloak:8080/realms/rag
+      KEYCLOAK_AUDIENCE: rag-api
+      KEYCLOAK_CLIENT_ID: rag-frontend
+      UPLOAD_DIR: /data/uploads
+      MAX_UPLOAD_BYTES: ${MAX_UPLOAD_BYTES:-536870912}
+      ALLOWED_UPLOAD_EXTENSIONS: ${ALLOWED_UPLOAD_EXTENSIONS:-.pdf,.txt,.md,.csv,.tsv,.docx,.xlsx,.pptx,.png,.jpg,.jpeg,.tiff,.bmp}
+      OCR_LANGUAGE: ${OCR_LANGUAGE:-eng}
+      OCR_PDF_DPI: ${OCR_PDF_DPI:-200}
+      OCR_MAX_PDF_PAGES: ${OCR_MAX_PDF_PAGES:-20}
+      ENABLE_DB_PERSISTENCE: "true"
+      RETRIEVAL_MIN_SCORE: "0.12"
+      RETRIEVAL_MIN_KEYWORD_OVERLAP: "0.20"
+      LLM_PROVIDER: ${LLM_PROVIDER:-local}
+      LOCAL_LLM_RUNTIME: ${LOCAL_LLM_RUNTIME:-extractive}
+      LOCAL_LLM_MODEL_NAME: ${LOCAL_LLM_MODEL_NAME:-extractive}
+      LOCAL_LLM_BASE_URL: ${LOCAL_LLM_BASE_URL:-http://ollama:11434}
+      EMBEDDING_PROVIDER: ${EMBEDDING_PROVIDER:-local}
+      LOCAL_EMBEDDING_RUNTIME: ${LOCAL_EMBEDDING_RUNTIME:-hashing}
+      LOCAL_EMBEDDING_MODEL_NAME: ${LOCAL_EMBEDDING_MODEL_NAME:-hashing-384}
+      EMBEDDING_DIMENSIONS: ${EMBEDDING_DIMENSIONS:-384}
+      LOCAL_EMBEDDING_BASE_URL: ${LOCAL_EMBEDDING_BASE_URL:-http://ollama:11434}
+      LOCAL_MODEL_REQUEST_TIMEOUT_SECONDS: ${LOCAL_MODEL_REQUEST_TIMEOUT_SECONDS:-30}
+      PUBLIC_LLM_ENABLED: ${PUBLIC_LLM_ENABLED:-false}
+    volumes:
+      - ./data/ingest:/data/ingest:ro
+      - ./data/uploads:/data/uploads
+      - ${HOST_DOWNLOADS_DIR:-./data/host-downloads}:/host-downloads:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_started
+
+  worker-ocr:
+    build:
+      context: .
+      dockerfile: Dockerfile.backend
+    command: ["python", "-m", "app.worker"]
+    environment:
+      APP_NAME: rag-saas-docs-ingestion-poc
+      ENVIRONMENT: docker
+      DATABASE_URL: postgresql+psycopg://rag:rag@postgres:5432/rag
+      REDIS_URL: redis://redis:6379/0
+      PROCESSING_QUEUE_NAME: ${PROCESSING_QUEUE_NAME:-rag:processing-jobs}
+      OCR_PROCESSING_QUEUE_NAME: ${OCR_PROCESSING_QUEUE_NAME:-rag:processing-jobs:ocr}
+      WORKER_QUEUE_NAMES: ${OCR_PROCESSING_QUEUE_NAME:-rag:processing-jobs:ocr}
       MINIO_ENDPOINT: http://minio:9000
       QDRANT_URL: http://qdrant:6333
       KEYCLOAK_ISSUER: http://localhost:8080/realms/rag

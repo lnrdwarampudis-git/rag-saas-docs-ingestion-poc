@@ -93,7 +93,8 @@ Services:
 
 - Frontend: `http://127.0.0.1:5173`
 - Backend: `http://127.0.0.1:8000`
-- Worker: `python -m app.worker` inside Docker Compose, polling Redis for queued ingestion jobs
+- Worker: `python -m app.worker` inside Docker Compose, polling Redis for normal queued ingestion jobs
+- OCR worker: `python -m app.worker` inside Docker Compose, polling the OCR-heavy queue for forced OCR jobs
 - Postgres: `127.0.0.1:55432`
 - Redis: `127.0.0.1:6379`
 - MinIO: `http://127.0.0.1:9001`
@@ -228,15 +229,17 @@ Alternative mounted-path workflow:
 ## Verify Background Worker
 
 ```bash
-docker compose ps backend worker frontend postgres redis
+docker compose ps backend worker worker-ocr frontend postgres redis
 docker compose logs --tail=50 worker
+docker compose logs --tail=50 worker-ocr
 ```
 
 Expected result:
 
 - `backend` is healthy.
-- `worker` is up and logs `Starting RAG document processing worker`.
-- Queued uploads appear in the UI as job cards, then transition to `completed` after the worker processes them.
+- `worker` is up and logs `Starting RAG document processing worker for queues=['rag:processing-jobs']`.
+- `worker-ocr` is up and logs `Starting RAG document processing worker for queues=['rag:processing-jobs:ocr']`.
+- Queued uploads appear in the UI as job cards, then transition to `completed` after the matching worker processes them.
 
 ## Stop Stack
 

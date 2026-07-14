@@ -40,8 +40,9 @@ sequenceDiagram
   participant UI as React/Vite UI
   participant API as FastAPI Documents API
   participant DB as PostgreSQL
-  participant Redis as Redis Queue
-  participant Worker as app.worker
+  participant Redis as Redis Queues
+  participant Worker as app.worker default
+  participant OCRWorker as app.worker OCR
   participant Parser as Parser/OCR/Chunker
   participant Vector as pgvector/Qdrant Ready Index
 
@@ -50,11 +51,17 @@ sequenceDiagram
   API->>API: Validate bearer token and resolve tenant/roles
   API->>API: Save upload under UPLOAD_DIR
   API->>DB: Insert pending document + queued processing_jobs row
-  API->>Redis: RPUSH rag:processing-jobs job_id
+  alt Normal extraction
+    API->>Redis: RPUSH rag:processing-jobs job_id
+  else Forced OCR / OCR-heavy extraction
+    API->>Redis: RPUSH rag:processing-jobs:ocr job_id
+  end
   API-->>UI: 202 Accepted with job_id + document_id
   UI->>API: Poll GET /api/v1/processing-jobs/{job_id}
   Worker->>Redis: BLPOP rag:processing-jobs
   Redis-->>Worker: job_id
+  OCRWorker->>Redis: BLPOP rag:processing-jobs:ocr
+  Redis-->>OCRWorker: OCR job_id
   Worker->>DB: Load job and document context
   Worker->>DB: Mark job processing, increment attempts
   Worker->>Parser: Extract text, OCR when needed, chunk with metadata
@@ -68,7 +75,7 @@ sequenceDiagram
   Member->>UI: Retry failed job
   UI->>API: POST /api/v1/processing-jobs/{job_id}/retry
   API->>DB: Reset failed job to queued
-  API->>Redis: RPUSH rag:processing-jobs job_id
+  API->>Redis: RPUSH original queue for job_id
   API-->>UI: queued
   UI->>API: GET /api/v1/documents/{document_id}
   API-->>UI: Authorized document detail + chunk preview

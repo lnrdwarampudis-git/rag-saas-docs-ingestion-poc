@@ -370,7 +370,15 @@ curl -H "Authorization: Bearer $TOKEN" \
   http://127.0.0.1:8000/api/v1/processing-jobs/$JOB_ID
 ```
 
-In Docker, the `worker` service polls Redis and processes queued jobs automatically. For a local API-only smoke test without the worker loop, run one job explicitly:
+In Docker, the `worker` service polls `rag:processing-jobs` and `worker-ocr` polls `rag:processing-jobs:ocr`. Forced OCR uploads route to the OCR queue automatically. Confirm queue configuration:
+
+```bash
+docker compose exec backend python -c "import os; keys=['PROCESSING_QUEUE_NAME','OCR_PROCESSING_QUEUE_NAME']; print({k: os.environ.get(k) for k in keys})"
+docker compose logs --tail=50 worker
+docker compose logs --tail=50 worker-ocr
+```
+
+For a local API-only smoke test without the worker loop, run one job explicitly:
 
 ```bash
 curl -X POST -H "Authorization: Bearer $TOKEN" \

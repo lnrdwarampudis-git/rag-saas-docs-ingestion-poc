@@ -65,7 +65,7 @@ For full setup, execution, test, and GitHub export instructions, see:
 - PostgreSQL schema with RBAC, tenants, documents, chunks, processing jobs, and audit logs
 - pgvector-ready chunk table for embeddings
 - Qdrant service included for higher-scale vector retrieval experiments
-- Redis, MinIO, PostgreSQL, Qdrant, and Keycloak in Docker Compose
+- Redis, MinIO, PostgreSQL, Qdrant, Keycloak, default worker, and OCR worker in Docker Compose
 - OCR-aware parser abstraction
 - Recursive token-aware chunking with metadata propagation
 - Role-aware chunk metadata model
@@ -158,7 +158,7 @@ The upload endpoint accepts multipart browser uploads and is the preferred local
 
 Browser uploads are guarded by configurable extension and size limits. Defaults are `ALLOWED_UPLOAD_EXTENSIONS=.pdf,.txt,.md,.csv,.tsv,.docx,.xlsx,.pptx,.png,.jpg,.jpeg,.tiff,.bmp` and `MAX_UPLOAD_BYTES=536870912` (512 MiB). Unsupported formats return `415`; oversized files return `413`.
 
-The async upload endpoint returns `202 Accepted` with a `job_id` and `document_id`. Docker Compose includes a `worker` service that polls Redis, processes queued files, updates `processing_jobs`, and transitions documents from `pending` to `embedded` or `failed`. Failed jobs can be retried through the processing job retry API or the UI retry action.
+The async upload endpoint returns `202 Accepted` with a `job_id` and `document_id`. Docker Compose includes a default `worker` service for normal ingestion and a `worker-ocr` service for forced OCR jobs. Both poll Redis, process queued files, update `processing_jobs`, and transition documents from `pending` to `embedded` or `failed`. Failed jobs can be retried through the processing job retry API or the UI retry action.
 
 Supported POC intake formats:
 
