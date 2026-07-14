@@ -249,6 +249,7 @@ def persist_processing_job_update(job: Any) -> None:
             "processing": "extracting" if job.stage in {"upload", "extract", "ocr"} else "chunking",
             "completed": "embedded",
             "failed": "failed",
+            "cancelled": "failed",
         }.get(job.status, "pending")
         with engine.begin() as connection:
             connection.execute(

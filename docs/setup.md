@@ -41,6 +41,8 @@ LOCAL_EMBEDDING_MODEL_NAME=hashing-384
 EMBEDDING_DIMENSIONS=384
 LOCAL_EMBEDDING_BASE_URL=http://localhost:11434
 LOCAL_MODEL_REQUEST_TIMEOUT_SECONDS=30
+LOCAL_MODEL_PROFILE=custom
+LOCAL_MODEL_GPU_PROFILE=none
 LLM_PROVIDER=local
 LOCAL_LLM_RUNTIME=extractive
 LOCAL_LLM_MODEL_NAME=extractive
@@ -63,6 +65,7 @@ ollama list
 Set these values in `.env`:
 
 ```text
+LOCAL_MODEL_PROFILE=host-ollama
 LOCAL_EMBEDDING_RUNTIME=ollama
 LOCAL_EMBEDDING_MODEL_NAME=nomic-embed-text:latest
 LOCAL_EMBEDDING_BASE_URL=http://host.docker.internal:11434
@@ -115,6 +118,7 @@ docker compose --profile local-models exec ollama ollama pull llama3.1
 Then set these values in `.env` if you want the backend and worker containers to use the Compose Ollama service:
 
 ```text
+LOCAL_MODEL_PROFILE=compose-ollama
 LOCAL_EMBEDDING_RUNTIME=ollama
 LOCAL_EMBEDDING_MODEL_NAME=nomic-embed-text
 LOCAL_EMBEDDING_BASE_URL=http://ollama:11434
@@ -183,6 +187,8 @@ Preferred local workflow:
 
 For larger documents or a more production-like workflow, use **Upload to queue**. The backend returns a processing job immediately, the `worker` service picks it up from Redis, and the UI polls until the job reaches `completed` or `failed`.
 
+Queued or processing jobs can be cancelled from the job card. Failed jobs can be retried from the same card, and retry/cancel events are included in job status history. For supervised or batch-style worker deployments, set `WORKER_MAX_JOBS_PER_RUN` to a positive number so a worker exits after that many processed jobs; `0` keeps the current long-running worker behavior.
+
 Browser uploads are checked by extension and byte size before ingestion. Defaults:
 
 ```text
@@ -196,6 +202,7 @@ Resumable upload-session defaults:
 
 ```text
 UPLOAD_SESSION_PART_BYTES=8388608
+UPLOAD_SESSION_MAX_PARTS=10000
 UPLOAD_SESSION_STORAGE_BACKEND=filesystem
 UPLOAD_SESSION_BUCKET=rag-upload-sessions
 UPLOAD_SESSION_PRESIGN_EXPIRY_SECONDS=3600
@@ -204,7 +211,7 @@ UPLOAD_SESSION_LIFECYCLE_EXPIRATION_DAYS=7
 MINIO_PUBLIC_ENDPOINT=http://localhost:9000
 ```
 
-The upload-session API stores numbered parts, reports uploaded part numbers for resume clients, and completes the assembled file into the existing async processing queue. Sessions are scoped to the authenticated tenant and uploader subject. The default `filesystem` backend stores parts under `UPLOAD_DIR/sessions`. Use `UPLOAD_SESSION_STORAGE_BACKEND=minio` to store parts in MinIO and enable presigned part URLs for direct browser-to-object-storage upload. In Docker, keep `MINIO_ENDPOINT=http://minio:9000` for backend/worker storage calls and set `MINIO_PUBLIC_ENDPOINT=http://localhost:9000` so presigned URLs work from the host browser. Configure bucket CORS with [infra/minio/upload-session-cors.json](../infra/minio/upload-session-cors.json) when using direct browser-to-MinIO uploads from the UI. The React intake panel's `Upload session` action creates the session, uploads each part, calls the presigned complete endpoint when MinIO is active, and then queues processing. Completed sessions delete their temporary parts after assembly. Stale abandoned sessions can be removed with:
+The upload-session API stores numbered parts, reports uploaded part numbers for resume clients, and completes the assembled file into the existing async processing queue. Sessions are scoped to the authenticated tenant and uploader subject. `UPLOAD_SESSION_PART_BYTES` is the preferred part size; if a file would exceed `UPLOAD_SESSION_MAX_PARTS`, the backend records a larger per-session `part_size_bytes` so clients can remain under object-store part-count limits. The default `filesystem` backend stores parts under `UPLOAD_DIR/sessions`. Use `UPLOAD_SESSION_STORAGE_BACKEND=minio` to store parts in MinIO and enable presigned part URLs for direct browser-to-object-storage upload. In Docker, keep `MINIO_ENDPOINT=http://minio:9000` for backend/worker storage calls and set `MINIO_PUBLIC_ENDPOINT=http://localhost:9000` so presigned URLs work from the host browser. Configure bucket CORS with [infra/minio/upload-session-cors.json](../infra/minio/upload-session-cors.json) when using direct browser-to-MinIO uploads from the UI. The React intake panel's `Upload session` action creates the session, uploads each part, calls the presigned complete endpoint when MinIO is active, and then queues processing. Completed sessions delete their temporary parts after assembly. Stale abandoned sessions can be removed with:
 
 ```bash
 python -m app.rag.cleanup_upload_sessions --max-age-hours 24

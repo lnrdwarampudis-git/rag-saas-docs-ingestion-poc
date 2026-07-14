@@ -5,6 +5,7 @@ from pathlib import Path
 from uuid import UUID, uuid4
 from datetime import datetime, timedelta, timezone
 import json
+import math
 import shutil
 import tempfile
 
@@ -26,6 +27,7 @@ class UploadSession:
     visibility: str
     allowed_role_names: list[str]
     force_ocr: bool
+    part_size_bytes: int
     uploaded_parts_manifest: list[int]
 
     @property
@@ -62,6 +64,7 @@ def create_upload_session(
             status_code=413,
             detail=f"Uploaded file exceeds the {settings.max_upload_bytes} byte limit",
         )
+    part_size_bytes = _part_size_for_upload(byte_size)
     session = UploadSession(
         upload_session_id=uuid4(),
         tenant_id=tenant_id,
@@ -71,6 +74,7 @@ def create_upload_session(
         visibility=visibility,
         allowed_role_names=allowed_role_names if visibility == "role" else [],
         force_ocr=force_ocr,
+        part_size_bytes=part_size_bytes,
         uploaded_parts_manifest=[],
     )
     session_dir = _session_dir(session.upload_session_id)
@@ -86,6 +90,7 @@ def create_upload_session(
                 "visibility": session.visibility,
                 "allowed_role_names": session.allowed_role_names,
                 "force_ocr": session.force_ocr,
+                "part_size_bytes": session.part_size_bytes,
                 "uploaded_parts": [],
                 "created_at": datetime.now(timezone.utc).isoformat(),
             }
@@ -109,6 +114,7 @@ def get_upload_session(upload_session_id: UUID) -> UploadSession:
         visibility=data["visibility"],
         allowed_role_names=list(data.get("allowed_role_names", [])),
         force_ocr=bool(data.get("force_ocr", False)),
+        part_size_bytes=int(data.get("part_size_bytes") or get_settings().upload_session_part_bytes),
         uploaded_parts_manifest=list(data.get("uploaded_parts", [])),
     )
 
@@ -290,6 +296,13 @@ def _session_created_at(manifest: Path) -> datetime:
 
 def _storage_backend() -> str:
     return get_settings().upload_session_storage_backend.lower()
+
+
+def _part_size_for_upload(byte_size: int) -> int:
+    settings = get_settings()
+    max_parts = max(1, settings.upload_session_max_parts)
+    configured_size = max(1, settings.upload_session_part_bytes)
+    return max(configured_size, math.ceil(byte_size / max_parts))
 
 
 def _save_minio_part(session: UploadSession, part_number: int, file: UploadFile) -> int:

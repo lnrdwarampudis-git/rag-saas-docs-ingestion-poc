@@ -157,7 +157,72 @@ def record_job_retry_audit_event(
         return
 
 
-def get_analytics(current_user: AuthenticatedUser) -> AnalyticsResponse:
+def record_job_cancel_audit_event(
+    *,
+    current_user: AuthenticatedUser,
+    job_status,
+) -> None:
+    _record_processing_job_audit_event(
+        current_user=current_user,
+        job_status=job_status,
+        action="processing_job.cancelled",
+    )
+
+
+def _record_processing_job_audit_event(
+    *,
+    current_user: AuthenticatedUser,
+    job_status,
+    action: str,
+) -> None:
+    if not get_settings().enable_db_persistence:
+        return
+
+    metadata = {
+        "job_id": str(job_status.job_id),
+        "document_id": str(job_status.document_id),
+        "file_name": job_status.file_name,
+        "attempts": job_status.attempts,
+        "status": job_status.status,
+        "stage": job_status.stage,
+    }
+
+    try:
+        from app.db import engine
+
+        with engine.begin() as connection:
+            connection.execute(
+                text(
+                    f"""
+                    INSERT INTO audit_logs (
+                      tenant_id, actor_user_id, action, resource_type, resource_id, metadata
+                    )
+                    VALUES (
+                      :tenant_id, :actor_user_id, :action, 'processing_job',
+                      :resource_id, {_metadata_sql_expression(connection)}
+                    )
+                    """
+                ),
+                {
+                    "tenant_id": str(current_user.tenant_id),
+                    "actor_user_id": (
+                        str(current_user.app_user_id) if current_user.app_user_id else None
+                    ),
+                    "action": action,
+                    "resource_id": str(job_status.job_id),
+                    "metadata": json.dumps(metadata),
+                },
+            )
+    except SQLAlchemyError:
+        return
+
+
+def get_analytics(
+    current_user: AuthenticatedUser,
+    *,
+    audit_action: str | None = None,
+    audit_resource_type: str | None = None,
+) -> AnalyticsResponse:
     documents, jobs = _persistent_operational_analytics(current_user)
     if documents is None:
         documents = _in_memory_document_analytics(current_user)
@@ -171,7 +236,11 @@ def get_analytics(current_user: AuthenticatedUser) -> AnalyticsResponse:
         queries=queries,
         retrieval=_retrieval_analytics(queries),
         evaluation=_evaluation_analytics(),
-        recent_events=_persistent_audit_events(current_user),
+        recent_events=_persistent_audit_events(
+            current_user,
+            action=audit_action,
+            resource_type=audit_resource_type,
+        ),
     )
 
 
@@ -251,12 +320,19 @@ def _persistent_operational_analytics(
                       count(*) FILTER (WHERE status = 'queued') AS queued,
                       count(*) FILTER (WHERE status = 'processing') AS processing,
                       count(*) FILTER (WHERE status = 'completed') AS completed,
-                      count(*) FILTER (WHERE status = 'failed') AS failed
+                      count(*) FILTER (WHERE status = 'failed') AS failed,
+                      count(*) FILTER (WHERE status = 'cancelled') AS cancelled,
+                      count(*) FILTER (
+                        WHERE status = 'failed' AND attempts >= :max_attempts
+                      ) AS dead_lettered
                     FROM processing_jobs
                     WHERE tenant_id = :tenant_id
                     """
                 ),
-                {"tenant_id": str(current_user.tenant_id)},
+                {
+                    "tenant_id": str(current_user.tenant_id),
+                    "max_attempts": max(1, get_settings().processing_job_max_attempts),
+                },
             ).mappings().one()
             failure_rows = connection.execute(
                 text(
@@ -288,6 +364,8 @@ def _persistent_operational_analytics(
                 processing=int(job_row["processing"] or 0),
                 completed=int(job_row["completed"] or 0),
                 failed=int(job_row["failed"] or 0),
+                cancelled=int(job_row["cancelled"] or 0),
+                dead_lettered=int(job_row["dead_lettered"] or 0),
                 recent_failures=recent_failures,
             ),
         )
@@ -345,6 +423,8 @@ def _persistent_query_analytics(current_user: AuthenticatedUser) -> QueryAnalyti
 def _persistent_audit_events(
     current_user: AuthenticatedUser,
     limit: int = 8,
+    action: str | None = None,
+    resource_type: str | None = None,
 ) -> list[AuditEvent]:
     if not get_settings().enable_db_persistence:
         return []
@@ -366,6 +446,8 @@ def _persistent_audit_events(
                     FROM audit_logs a
                     LEFT JOIN app_users u ON u.id = a.actor_user_id
                     WHERE a.tenant_id = :tenant_id
+                      AND (:action IS NULL OR a.action = :action)
+                      AND (:resource_type IS NULL OR a.resource_type = :resource_type)
                     ORDER BY a.created_at DESC
                     LIMIT :limit
                     """
@@ -373,6 +455,8 @@ def _persistent_audit_events(
                 {
                     "tenant_id": str(current_user.tenant_id),
                     "limit": max(1, min(limit, 25)),
+                    "action": action,
+                    "resource_type": resource_type,
                 },
             ).mappings()
             return [

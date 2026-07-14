@@ -441,6 +441,30 @@ def test_processing_job_retry_requires_failed_status(api_client_as) -> None:
     assert retry_response.status_code == 409
 
 
+def test_processing_job_can_be_cancelled_before_worker_runs(api_client_as) -> None:
+    tenant_id = "00000000-0000-4000-8000-000000000023"
+    client = api_client_as(tenant_id, ["admin"], "cancel-admin")
+    upload_response = client.post(
+        "/api/v1/documents/upload-async",
+        data={"visibility": "tenant", "force_ocr": "false"},
+        files={"file": ("cancel-job.txt", b"Queued job can be cancelled.", "text/plain")},
+    )
+    assert upload_response.status_code == 202
+    job_id = upload_response.json()["job_id"]
+
+    cancel_response = client.post(f"/api/v1/processing-jobs/{job_id}/cancel")
+
+    assert cancel_response.status_code == 200
+    cancelled_job = cancel_response.json()
+    assert cancelled_job["status"] == "cancelled"
+    assert cancelled_job["error_message"] == "Cancelled by user"
+    assert "cancelled" in cancelled_job["retry_history"][-1]
+
+    run_response = client.post(f"/api/v1/processing-jobs/{job_id}/run")
+    assert run_response.status_code == 200
+    assert run_response.json()["status"] == "cancelled"
+
+
 def test_document_management_lists_and_details_authorized_documents(tmp_path: Path, api_client_as) -> None:
     tenant_id = "00000000-0000-4000-8000-000000000004"
     client = api_client_as(tenant_id, ["finance"], "finance-subject")

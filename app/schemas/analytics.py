@@ -16,6 +16,8 @@ class JobAnalytics(BaseModel):
     processing: int = 0
     completed: int = 0
     failed: int = 0
+    cancelled: int = 0
+    dead_lettered: int = 0
     recent_failures: list[str] = Field(default_factory=list)
 
 

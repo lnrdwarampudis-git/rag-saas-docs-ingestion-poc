@@ -58,6 +58,11 @@ sequenceDiagram
   end
   API-->>UI: 202 Accepted with job_id + document_id
   UI->>API: Poll GET /api/v1/processing-jobs/{job_id}
+  opt User cancels queued or processing job
+    UI->>API: POST /api/v1/processing-jobs/{job_id}/cancel
+    API->>DB: Mark cancelled + write audit event
+    API-->>UI: cancelled
+  end
   Worker->>Redis: BLPOP rag:processing-jobs
   Redis-->>Worker: job_id
   OCRWorker->>Redis: BLPOP rag:processing-jobs:ocr
@@ -69,9 +74,12 @@ sequenceDiagram
   Worker->>DB: Upsert document, chunks, audit event
   Worker->>Vector: Embedding/index step ready for pgvector/Qdrant
   Worker->>DB: Mark job completed or failed
+  opt Failed at max attempts
+    Worker->>Redis: RPUSH rag:processing-jobs:dead-letter job_id
+  end
   UI->>API: Poll job status
   API->>DB: Read processing_jobs for caller tenant
-  API-->>UI: completed or failed
+  API-->>UI: completed, failed, or cancelled
   Member->>UI: Retry failed job
   UI->>API: POST /api/v1/processing-jobs/{job_id}/retry
   API->>DB: Reset failed job to queued
@@ -172,7 +180,7 @@ flowchart TD
   api --> auth["JWT Validation"]
   auth --> rbac["Tenant + Role Resolution"]
   rbac --> docs["Document Rollup<br/>total, embedded, pending, failed, chunks, OCR"]
-  rbac --> jobs["Processing Job Rollup<br/>queued, running, completed, failed"]
+  rbac --> jobs["Processing Job Rollup<br/>queued, running, completed, failed, cancelled, dead-letter"]
   rbac --> queryEvents["Persisted Query Events<br/>cache hits, misses, latency"]
   rbac --> auditEvents["Recent Audit Events<br/>action, resource, actor, metadata"]
   docs --> db[("PostgreSQL when enabled")]
@@ -195,9 +203,13 @@ flowchart TD
 ```mermaid
 flowchart LR
   config["Settings"] --> embeddingProvider["EMBEDDING_PROVIDER"]
+  config --> modelProfile["LOCAL_MODEL_PROFILE<br/>custom, local-default, host-ollama, compose-ollama, vllm-gpu"]
   config --> vectorIndex["VECTOR_INDEX_BACKEND"]
   config --> rerankerProvider["RERANKER_PROVIDER"]
   config --> llmProvider["LLM_PROVIDER"]
+  modelProfile --> embeddingProvider
+  modelProfile --> llmProvider
+  modelProfile --> rerankerProvider
   embeddingProvider --> localEmbedding{"local"}
   localEmbedding --> hashing["Default hashing embeddings"]
   localEmbedding --> ollamaEmbedding["Optional Ollama embeddings"]

@@ -79,6 +79,17 @@ def test_persistent_query_analytics_rolls_up_recent_events(monkeypatch) -> None:
         connection.execute(
             text(
                 """
+                CREATE TABLE app_users (
+                  id TEXT PRIMARY KEY,
+                  display_name TEXT,
+                  email TEXT
+                )
+                """
+            )
+        )
+        connection.execute(
+            text(
+                """
                 CREATE TABLE query_events (
                   tenant_id TEXT NOT NULL,
                   cached BOOLEAN NOT NULL,
@@ -207,6 +218,72 @@ def test_persistent_audit_events_return_recent_tenant_history(monkeypatch) -> No
     assert events[0].metadata["file_name"] == "runbook.pdf"
 
 
+def test_persistent_audit_events_can_filter_by_action_and_resource_type(monkeypatch) -> None:
+    tenant_id = UUID("00000000-0000-4000-8000-000000000025")
+    engine = create_engine("sqlite+pysqlite:///:memory:")
+    with engine.begin() as connection:
+        connection.execute(
+            text(
+                """
+                CREATE TABLE app_users (
+                  id TEXT PRIMARY KEY,
+                  display_name TEXT,
+                  email TEXT
+                )
+                """
+            )
+        )
+        connection.execute(
+            text(
+                """
+                CREATE TABLE audit_logs (
+                  tenant_id TEXT NOT NULL,
+                  actor_user_id TEXT,
+                  action TEXT NOT NULL,
+                  resource_type TEXT NOT NULL,
+                  resource_id TEXT,
+                  metadata TEXT,
+                  created_at TEXT NOT NULL
+                )
+                """
+            )
+        )
+        connection.execute(
+            text(
+                """
+                INSERT INTO audit_logs (
+                  tenant_id, actor_user_id, action, resource_type, resource_id, metadata, created_at
+                )
+                VALUES
+                  (:tenant_id, NULL, 'processing_job.cancelled', 'processing_job', 'job-1',
+                   '{}', '2026-07-12T10:00:00'),
+                  (:tenant_id, NULL, 'document.ingested', 'document', 'doc-1',
+                   '{}', '2026-07-12T11:00:00')
+                """
+            ),
+            {"tenant_id": str(tenant_id)},
+        )
+
+    monkeypatch.setattr(analytics.get_settings(), "enable_db_persistence", True)
+    import app.db as db
+
+    monkeypatch.setattr(db, "engine", engine)
+
+    events = analytics._persistent_audit_events(
+        AuthenticatedUser(
+            keycloak_subject="analytics-subject",
+            tenant_id=tenant_id,
+            roles=["admin"],
+        ),
+        action="processing_job.cancelled",
+        resource_type="processing_job",
+    )
+
+    assert len(events) == 1
+    assert events[0].action == "processing_job.cancelled"
+    assert events[0].resource_type == "processing_job"
+
+
 def test_query_audit_event_persists_safe_metadata(monkeypatch) -> None:
     tenant_id = UUID("00000000-0000-4000-8000-000000000016")
     actor_id = UUID("10000000-0000-4000-8000-000000000016")
@@ -328,3 +405,60 @@ def test_job_retry_audit_event_persists_retry_metadata(monkeypatch) -> None:
         "status": "queued",
         "stage": "upload",
     }
+
+
+def test_job_cancel_audit_event_persists_cancel_metadata(monkeypatch) -> None:
+    tenant_id = UUID("00000000-0000-4000-8000-000000000026")
+    actor_id = UUID("10000000-0000-4000-8000-000000000026")
+    job_id = UUID("20000000-0000-4000-8000-000000000026")
+    document_id = UUID("30000000-0000-4000-8000-000000000026")
+    engine = create_engine("sqlite+pysqlite:///:memory:")
+    with engine.begin() as connection:
+        connection.execute(
+            text(
+                """
+                CREATE TABLE audit_logs (
+                  tenant_id TEXT NOT NULL,
+                  actor_user_id TEXT,
+                  action TEXT NOT NULL,
+                  resource_type TEXT NOT NULL,
+                  resource_id TEXT,
+                  metadata TEXT NOT NULL
+                )
+                """
+            )
+        )
+
+    monkeypatch.setattr(analytics.get_settings(), "enable_db_persistence", True)
+    import app.db as db
+
+    monkeypatch.setattr(db, "engine", engine)
+
+    analytics.record_job_cancel_audit_event(
+        current_user=AuthenticatedUser(
+            keycloak_subject="analytics-subject",
+            tenant_id=tenant_id,
+            roles=["admin"],
+            app_user_id=actor_id,
+        ),
+        job_status=ProcessingJobStatus(
+            job_id=job_id,
+            document_id=document_id,
+            file_name="cancel-me.pdf",
+            status="cancelled",
+            stage="upload",
+            attempts=0,
+        ),
+    )
+
+    with engine.begin() as connection:
+        row = connection.execute(text("SELECT * FROM audit_logs")).mappings().one()
+
+    metadata = analytics._metadata_dict(row["metadata"])
+    assert row["tenant_id"] == str(tenant_id)
+    assert row["actor_user_id"] == str(actor_id)
+    assert row["action"] == "processing_job.cancelled"
+    assert row["resource_type"] == "processing_job"
+    assert row["resource_id"] == str(job_id)
+    assert metadata["file_name"] == "cancel-me.pdf"
+    assert metadata["status"] == "cancelled"

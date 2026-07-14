@@ -8,6 +8,7 @@ import httpx
 
 from app.config import Settings, get_settings
 from app.rag.embeddings import EmbeddingConfig, HashingEmbeddingModel
+from app.rag.model_profiles import resolve_model_profile
 from app.rag.retrieval import RetrievalResult, _content_terms
 
 
@@ -215,7 +216,7 @@ class VllmAnswerGenerator:
 
 
 def build_model_provider(settings: Settings | None = None) -> ModelProvider:
-    settings = settings or get_settings()
+    settings = resolve_model_profile(settings or get_settings())
     provider_name = settings.llm_provider.lower()
     embedding_provider = settings.embedding_provider.lower()
 

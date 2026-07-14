@@ -3,6 +3,7 @@ from json import JSONDecodeError
 import httpx
 
 from app.config import Settings, get_settings
+from app.rag.model_profiles import resolve_model_profile
 from app.schemas.model_status import ModelPerformanceStatus, ModelRuntimeStatus, ModelStatusResponse
 
 
@@ -12,7 +13,7 @@ SUPPORTED_RERANKER_RUNTIMES = {"none", "keyword", "cross-encoder", "vllm"}
 
 
 def get_model_status(settings: Settings | None = None) -> ModelStatusResponse:
-    settings = settings or get_settings()
+    settings = resolve_model_profile(settings or get_settings())
     llm_provider = settings.llm_provider.lower()
     embedding_provider = settings.embedding_provider.lower()
     embedding_runtime = settings.local_embedding_runtime.lower()
@@ -21,6 +22,8 @@ def get_model_status(settings: Settings | None = None) -> ModelStatusResponse:
     return ModelStatusResponse(
         llm_provider=llm_provider,
         embedding_provider=embedding_provider,
+        model_profile=settings.local_model_profile,
+        gpu_profile=settings.local_model_gpu_profile,
         embedding=_embedding_status(settings, embedding_provider, embedding_runtime),
         answer=_answer_status(settings, llm_provider, answer_runtime),
         vector_index=_vector_index_status(settings),

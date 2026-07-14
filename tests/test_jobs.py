@@ -70,6 +70,41 @@ def test_worker_polls_configured_queue_names(monkeypatch) -> None:
     assert fake_redis.polled == ["test:jobs:ocr", "test:jobs:priority"]
 
 
+def test_failed_processing_job_moves_to_dead_letter_queue_after_max_attempts(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    settings = get_settings()
+    monkeypatch.setattr(settings, "processing_job_max_attempts", 1)
+    monkeypatch.setattr(settings, "processing_dead_letter_queue_name", "test:jobs:dead")
+    fake_redis = FakeRedis()
+    monkeypatch.setattr(jobs, "_redis_client", lambda: fake_redis)
+
+    job = jobs.create_processing_job(
+        path=_source_file(tmp_path, "dead-letter.txt"),
+        file_name="dead-letter.txt",
+        tenant_id=UUID("00000000-0000-4000-8000-000000000032"),
+        uploaded_by="subject",
+        uploaded_by_user_id=None,
+        visibility="tenant",
+        allowed_role_names=[],
+        force_ocr=False,
+    )
+
+    def fail_processing(*args, **kwargs):
+        raise RuntimeError("parser unavailable")
+
+    monkeypatch.setattr(jobs, "process_document_path", fail_processing)
+
+    status = jobs.process_processing_job(job.job_id)
+
+    assert status is not None
+    assert status.status == "failed"
+    assert status.attempts == 1
+    assert fake_redis.pushed == [("test:jobs:dead", str(job.job_id))]
+    assert "dead-lettered" in status.retry_history[-1]
+
+
 def _source_file(tmp_path: Path, file_name: str) -> Path:
     source = tmp_path / file_name
     source.write_text("Queue routing test", encoding="utf-8")

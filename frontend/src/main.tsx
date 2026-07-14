@@ -128,6 +128,7 @@ type ProcessingJobStatus = {
   created_at?: string | null;
   started_at?: string | null;
   finished_at?: string | null;
+  retry_history: string[];
 };
 
 type UploadSessionStatus = {
@@ -165,6 +166,8 @@ type ModelPerformanceStatus = {
 type ModelStatus = {
   llm_provider: string;
   embedding_provider: string;
+  model_profile: string;
+  gpu_profile: string;
   embedding: ModelRuntimeStatus;
   answer: ModelRuntimeStatus;
   vector_index: ModelRuntimeStatus;
@@ -209,6 +212,8 @@ type AnalyticsReport = {
     processing: number;
     completed: number;
     failed: number;
+    cancelled: number;
+    dead_lettered: number;
     recent_failures: string[];
   };
   queries: {
@@ -527,8 +532,35 @@ function AuthenticatedApp() {
     }
   };
 
+  const cancelJob = async (jobId: string) => {
+    setBusy(true);
+    setError("");
+    setStatus("Cancelling job");
+    try {
+      const response = await apiFetch(`/api/v1/processing-jobs/${jobId}/cancel`, {
+        method: "POST"
+      });
+      if (!response.ok) {
+        throw new Error(await response.text());
+      }
+      const payload = (await response.json()) as ProcessingJobStatus;
+      setProcessingJobs((items) => items.map((item) => (item.job_id === jobId ? payload : item)));
+      setStatus("Cancelled");
+      loadAnalyticsReport();
+    } catch (caught) {
+      if (!handleAuthError(caught)) {
+        setError(caught instanceof Error ? caught.message : "Job cancel failed");
+        setStatus("Needs attention");
+      }
+    } finally {
+      setBusy(false);
+    }
+  };
+
   React.useEffect(() => {
-    const activeJobs = processingJobs.filter((job) => !["completed", "failed"].includes(job.status));
+    const activeJobs = processingJobs.filter(
+      (job) => !["completed", "failed", "cancelled"].includes(job.status)
+    );
     if (!activeJobs.length) {
       return;
     }
@@ -977,8 +1009,22 @@ function AuthenticatedApp() {
                       {job.status} / {job.stage} / attempt {job.attempts}
                     </span>
                     {job.error_message ? <small>{job.error_message}</small> : null}
+                    {job.retry_history.length ? (
+                      <small>{job.retry_history[job.retry_history.length - 1]}</small>
+                    ) : null}
                   </div>
                   <div className="job-actions">
+                    {["queued", "processing"].includes(job.status) ? (
+                      <button
+                        className="icon-action"
+                        type="button"
+                        disabled={busy}
+                        onClick={() => cancelJob(job.job_id)}
+                        title="Cancel job"
+                      >
+                        <AlertTriangle size={16} />
+                      </button>
+                    ) : null}
                     {job.status === "failed" ? (
                       <button
                         className="icon-action"
@@ -1221,6 +1267,7 @@ function AuthenticatedApp() {
               <StatusItem label="Answer runtime" value={formatRuntimeDetail(modelStatus?.answer)} />
               <StatusItem label="Vector index" value={formatRuntimeDetail(modelStatus?.vector_index)} />
               <StatusItem label="Reranker" value={formatRuntimeDetail(modelStatus?.reranker)} />
+              <StatusItem label="Model profile" value={formatModelProfile(modelStatus)} />
               <StatusItem label="Latency thresholds" value={formatPerformanceThresholds(modelStatus)} />
             </div>
           </section>
@@ -1412,6 +1459,14 @@ function AnalyticsPanel({
           value={report ? String(report.documents.ocr_documents) : "Loading"}
         />
         <StatusItem label="Jobs failed" value={report ? String(report.jobs.failed) : "Loading"} />
+        <StatusItem
+          label="Jobs cancelled"
+          value={report ? String(report.jobs.cancelled) : "Loading"}
+        />
+        <StatusItem
+          label="Dead-letter"
+          value={report ? String(report.jobs.dead_lettered) : "Loading"}
+        />
         <StatusItem label="Queries" value={report ? String(report.queries.total) : "Loading"} />
         <StatusItem
           label="Cache hit rate"
@@ -1556,6 +1611,13 @@ function formatPerformanceThresholds(modelStatus?: ModelStatus | null) {
   return `${formatMilliseconds(modelStatus.performance.retrieval_warning_ms)} retrieval / ${formatMilliseconds(
     modelStatus.performance.total_warning_ms
   )} total`;
+}
+
+function formatModelProfile(modelStatus?: ModelStatus | null) {
+  if (!modelStatus) {
+    return "Loading";
+  }
+  return `${modelStatus.model_profile} / ${modelStatus.gpu_profile}`;
 }
 
 function formatMilliseconds(value?: number) {

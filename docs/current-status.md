@@ -9,11 +9,11 @@ This page is the short handoff for what the POC supports today, how to run it, a
 - Docker Compose stack for backend, frontend, default worker, OCR worker, Postgres/pgvector, Redis, MinIO, Qdrant, and Keycloak.
 - Background ingestion through `POST /api/v1/documents/upload-async`, Redis queues, and `python -m app.worker`.
 - Configurable upload guardrails for browser uploads: allowed extensions and maximum byte size are enforced by the API and pre-checked in the UI.
-- Resumable upload-session API and UI mode for large files with tenant/uploader-bound sessions, filesystem or MinIO part storage, presigned MinIO part URLs, browser part progress, async completion, completed-session cleanup, and stale-session cleanup command.
-- Processing job status, local run, and retry controls through `GET /api/v1/processing-jobs/{job_id}`, `POST /api/v1/processing-jobs/{job_id}/run`, and `POST /api/v1/processing-jobs/{job_id}/retry`.
+- Resumable upload-session API and UI mode for large files with tenant/uploader-bound sessions, filesystem or MinIO part storage, dynamic max-part sizing, presigned MinIO part URLs, browser part progress, async completion, completed-session cleanup, and stale-session cleanup command.
+- Processing job status, local run, cancel, and retry controls through `GET /api/v1/processing-jobs/{job_id}`, `POST /api/v1/processing-jobs/{job_id}/run`, `POST /api/v1/processing-jobs/{job_id}/cancel`, and `POST /api/v1/processing-jobs/{job_id}/retry`.
 - Tenant-scoped document inventory, chunk preview, query pipeline, citations, Redis query cache, and cache/model-aware query metrics.
 - Offline retrieval quality gate through `python -m app.eval.run` and authenticated UI/API evaluation status.
-- Admin analytics for documents, jobs, query volume/cache/latency, vector/reranker retrieval state, audit operations, and evaluation health.
+- Admin analytics for documents, jobs, query volume/cache/latency, vector/reranker retrieval state, audit operations, audit filtering, and evaluation health.
 - Local/open-source model abstraction with deterministic hashing embeddings and extractive answer generation as defaults.
 - Optional Ollama embeddings and answer generation for local models, including tested Mac-host Ollama access from Docker through `host.docker.internal`.
 - Vector index abstraction with in-memory default, pgvector and Qdrant adapter paths, vector backfill command, model-status readiness checks, analytics warning thresholds, default no-op reranker, and deterministic local keyword reranker.
@@ -23,9 +23,10 @@ This page is the short handoff for what the POC supports today, how to run it, a
 
 ## Recently Completed Ops Extensions
 
-- Large-file ingestion ops now include the React `Upload session` action, tenant/uploader-bound resumable sessions, filesystem or MinIO part storage, direct browser-to-MinIO presigned uploads, completed-session cleanup, stale-session cleanup, MinIO lifecycle policy automation, `MINIO_PUBLIC_ENDPOINT` for browser-reachable presigned URLs, and local MinIO CORS setup guidance.
-- Persistent vector retrieval operations now include pgvector and Qdrant adapter paths, vector ops check/backfill automation, Qdrant payload indexes for RBAC filter fields, vector backend metrics in query responses, vector-index readiness in `/api/v1/model-status`, and retrieval backend/reranker warning state in `/api/v1/analytics`.
-- Stronger local model foundations now include Ollama and vLLM-compatible embedding/answer-generation paths, model-status checks for embedding/answer/vector/reranker runtimes, deterministic local keyword reranking, HTTP-backed cross-encoder/vLLM reranking, latency warning threshold config, and UI surfaces for active model, vector, reranker, and threshold state.
+- Large-file ingestion ops now include the React `Upload session` action, tenant/uploader-bound resumable sessions, filesystem or MinIO part storage, dynamic part sizing through `UPLOAD_SESSION_PART_BYTES` plus `UPLOAD_SESSION_MAX_PARTS`, direct browser-to-MinIO presigned uploads, completed-session cleanup, stale-session cleanup, MinIO lifecycle policy automation, `MINIO_PUBLIC_ENDPOINT` for browser-reachable presigned URLs, and local MinIO CORS setup guidance.
+- Persistent vector retrieval operations now include pgvector and Qdrant adapter paths, vector ops check/backfill automation, Qdrant payload indexes for RBAC filter fields, vector backend metrics in query responses, vector-index readiness in `/api/v1/model-status`, retrieval backend/reranker warning state in `/api/v1/analytics`, and documented production checks after backend/model changes.
+- Stronger local model foundations now include packaged profiles (`local-default`, `host-ollama`, `compose-ollama`, `vllm-gpu`), Ollama and vLLM-compatible embedding/answer-generation paths, model-status checks for embedding/answer/vector/reranker runtimes, deterministic local keyword reranking, HTTP-backed cross-encoder/vLLM reranking, latency warning threshold config, and UI surfaces for active model, profile, vector, reranker, and threshold state.
+- Operations controls now include queued/processing job cancel, failed-job retry history, Redis dead-letter queue routing after `PROCESSING_JOB_MAX_ATTEMPTS`, `WORKER_MAX_JOBS_PER_RUN` for supervised/batch workers, job cancel audit events, and `GET /api/v1/analytics?action=...&resource_type=...` audit filtering.
 
 ## Supported Document Intake Today
 
@@ -62,6 +63,9 @@ OCR_MAX_PDF_PAGES=20
 PROCESSING_QUEUE_NAME=rag:processing-jobs
 OCR_PROCESSING_QUEUE_NAME=rag:processing-jobs:ocr
 WORKER_QUEUE_NAMES=rag:processing-jobs,rag:processing-jobs:ocr
+WORKER_MAX_JOBS_PER_RUN=0
+PROCESSING_DEAD_LETTER_QUEUE_NAME=rag:processing-jobs:dead-letter
+PROCESSING_JOB_MAX_ATTEMPTS=3
 ```
 
 Demo users all use password `Passw0rd!`:
@@ -83,7 +87,18 @@ LOCAL_EMBEDDING_MODEL_NAME=hashing-384
 LLM_PROVIDER=local
 LOCAL_LLM_RUNTIME=extractive
 LOCAL_LLM_MODEL_NAME=extractive
+LOCAL_MODEL_PROFILE=custom
+LOCAL_MODEL_GPU_PROFILE=none
 PUBLIC_LLM_ENABLED=false
+```
+
+Packaged local profiles can replace the individual runtime values when you want a known local deployment target:
+
+```text
+LOCAL_MODEL_PROFILE=local-default   # hashing + extractive defaults
+LOCAL_MODEL_PROFILE=host-ollama     # Docker backend/worker -> Mac Ollama
+LOCAL_MODEL_PROFILE=compose-ollama  # backend/worker -> Compose ollama service
+LOCAL_MODEL_PROFILE=vllm-gpu        # OpenAI-compatible vLLM endpoints plus local reranker
 ```
 
 To use Ollama running on the Mac while backend/worker run in Docker:
@@ -124,11 +139,9 @@ git diff --check
 
 Recommended next implementation slices:
 
-1. Finish large-file ingestion ops: production multipart tuning and deployment-specific lifecycle retention values.
-2. Deepen persistent vector retrieval operations: production migration checks for existing databases and higher-scale Qdrant payload/index tuning based on live data volume.
-3. Add stronger local model options: packaged local model profiles, GPU-specific deployment examples, and deeper model health dashboards.
-4. Improve operations controls: job cancel/retry history, dead-letter queue, worker concurrency controls, and richer audit event filtering.
-5. Add deployment hardening: environment-specific Compose/prod manifests, secrets handling, backup/restore runbooks, and CI quality gates.
-6. Expand evaluation: more tenant/role fixtures, answer-groundedness checks, negative/no-answer cases, and regression trend history.
+1. Add deployment hardening: environment-specific Compose/prod manifests, secrets handling, backup/restore runbooks, and CI quality gates.
+2. Expand evaluation: more tenant/role fixtures, answer-groundedness checks, negative/no-answer cases, and regression trend history.
+3. Add deeper live operations views: persistent retry/dead-letter event tables, worker throughput charts, Qdrant collection-size trend reports, and model latency trend history.
+4. Add production local-model deployment examples for real GPU hosts once the target hardware/runtime is chosen.
 
 Public token-based LLM providers remain intentionally deferred. They should stay behind explicit provider configuration and `PUBLIC_LLM_ENABLED=true`.

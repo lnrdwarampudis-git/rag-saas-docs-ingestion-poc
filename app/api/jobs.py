@@ -4,8 +4,13 @@ from fastapi import APIRouter, Depends, HTTPException
 
 from app.auth.dependencies import get_current_user
 from app.auth.models import AuthenticatedUser
-from app.rag.analytics import record_job_retry_audit_event
-from app.rag.jobs import get_processing_job, process_processing_job, retry_processing_job
+from app.rag.analytics import record_job_cancel_audit_event, record_job_retry_audit_event
+from app.rag.jobs import (
+    cancel_processing_job,
+    get_processing_job,
+    process_processing_job,
+    retry_processing_job,
+)
 from app.schemas.documents import ProcessingJobStatus
 
 router = APIRouter(prefix="/processing-jobs", tags=["processing-jobs"])
@@ -50,4 +55,21 @@ def retry_failed_job(
     if result is None:
         raise HTTPException(status_code=404, detail="Processing job not found")
     record_job_retry_audit_event(current_user=current_user, job_status=result)
+    return result
+
+
+@router.post("/{job_id}/cancel", response_model=ProcessingJobStatus)
+def cancel_job(
+    job_id: UUID,
+    current_user: AuthenticatedUser = Depends(get_current_user),
+) -> ProcessingJobStatus:
+    job = get_processing_job(job_id, current_user)
+    if job is None:
+        raise HTTPException(status_code=404, detail="Processing job not found")
+    if job.status in {"completed", "failed", "cancelled"}:
+        raise HTTPException(status_code=409, detail="Only queued or processing jobs can be cancelled")
+    result = cancel_processing_job(job_id, current_user)
+    if result is None:
+        raise HTTPException(status_code=404, detail="Processing job not found")
+    record_job_cancel_audit_event(current_user=current_user, job_status=result)
     return result

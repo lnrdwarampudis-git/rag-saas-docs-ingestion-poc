@@ -69,6 +69,7 @@ class ProcessingJobStatus(BaseModel):
     created_at: datetime | None = None
     started_at: datetime | None = None
     finished_at: datetime | None = None
+    retry_history: list[str] = Field(default_factory=list)
 
 
 class UploadSessionCreateRequest(BaseModel):

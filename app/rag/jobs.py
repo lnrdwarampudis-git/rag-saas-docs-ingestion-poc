@@ -51,10 +51,12 @@ class ProcessingJob:
             created_at=self.created_at,
             started_at=self.started_at,
             finished_at=self.finished_at,
+            retry_history=list(_job_events.get(self.job_id, [])),
         )
 
 
 _jobs: dict[UUID, ProcessingJob] = {}
+_job_events: dict[UUID, list[str]] = {}
 
 
 def create_processing_job(
@@ -83,6 +85,7 @@ def create_processing_job(
         created_at=now,
     )
     _jobs[job.job_id] = job
+    _record_job_event(job.job_id, "created")
     document_store.put_chunks(
         job.document_id,
         [],
@@ -136,8 +139,26 @@ def retry_processing_job(job_id: UUID, current_user: AuthenticatedUser) -> Proce
     job.started_at = None
     job.finished_at = None
     _jobs[job.job_id] = job
+    _record_job_event(job.job_id, f"retry:{job.attempts}")
     persist_processing_job_update(job)
     enqueue_processing_job(job.job_id)
+    return job.to_status()
+
+
+def cancel_processing_job(job_id: UUID, current_user: AuthenticatedUser) -> ProcessingJobStatus | None:
+    job = _load_job(job_id)
+    if job is None or job.tenant_id != current_user.tenant_id:
+        return None
+    if job.status in {"completed", "failed", "cancelled"}:
+        return job.to_status()
+
+    job.status = "cancelled"
+    job.stage = "upload"
+    job.error_message = "Cancelled by user"
+    job.finished_at = _utcnow()
+    _jobs[job.job_id] = job
+    _record_job_event(job.job_id, "cancelled")
+    persist_processing_job_update(job)
     return job.to_status()
 
 
@@ -145,6 +166,8 @@ def process_processing_job(job_id: UUID) -> ProcessingJobStatus | None:
     job = _load_job(job_id)
     if job is None:
         return None
+    if job.status == "cancelled":
+        return job.to_status()
 
     job.status = "processing"
     job.stage = "extract"
@@ -181,6 +204,8 @@ def process_processing_job(job_id: UUID) -> ProcessingJobStatus | None:
 
     _jobs[job.job_id] = job
     persist_processing_job_update(job)
+    if job.status == "failed" and job.attempts >= max(1, get_settings().processing_job_max_attempts):
+        _dead_letter_processing_job(job)
     return job.to_status()
 
 
@@ -212,6 +237,22 @@ def process_next_queued_job(
         return None
     _, raw_job_id = item
     return process_processing_job(UUID(raw_job_id))
+
+
+def _dead_letter_processing_job(job: ProcessingJob) -> None:
+    _record_job_event(job.job_id, "dead-lettered")
+    redis_client = _redis_client()
+    if redis_client is None:
+        return
+    try:
+        redis_client.rpush(get_settings().processing_dead_letter_queue_name, str(job.job_id))
+    except Exception:
+        logger.exception("Failed to push processing job %s to dead-letter queue", job.job_id)
+
+
+def _record_job_event(job_id: UUID, event: str) -> None:
+    events = _job_events.setdefault(job_id, [])
+    events.append(f"{_utcnow().isoformat()} {event}")
 
 
 def _queue_name_for_job(job_id: UUID) -> str:

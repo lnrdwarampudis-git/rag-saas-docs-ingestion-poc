@@ -120,6 +120,8 @@ LOCAL_EMBEDDING_MODEL_NAME=hashing-384
 EMBEDDING_DIMENSIONS=384
 LOCAL_EMBEDDING_BASE_URL=http://localhost:11434
 LOCAL_MODEL_REQUEST_TIMEOUT_SECONDS=30
+LOCAL_MODEL_PROFILE=custom
+LOCAL_MODEL_GPU_PROFILE=none
 VECTOR_INDEX_BACKEND=memory
 PGVECTOR_DIMENSIONS=1024
 VECTOR_BACKFILL_BATCH_SIZE=100
@@ -141,7 +143,7 @@ See [Model Providers](model-providers.md) for the full setting list, cache behav
 Confirm large-file and retrieval settings inside the backend container:
 
 ```bash
-docker compose exec backend python -c "import os; keys=['UPLOAD_SESSION_PART_BYTES','UPLOAD_SESSION_STORAGE_BACKEND','UPLOAD_SESSION_CLEANUP_MAX_AGE_HOURS','UPLOAD_SESSION_LIFECYCLE_EXPIRATION_DAYS','VECTOR_INDEX_BACKEND','PGVECTOR_DIMENSIONS','QDRANT_COLLECTION_NAME','RERANKER_PROVIDER','LOCAL_RERANKER_RUNTIME','LOCAL_RERANKER_BASE_URL','RETRIEVAL_LATENCY_WARNING_MS','TOTAL_LATENCY_WARNING_MS']; print({k: os.environ.get(k) for k in keys})"
+docker compose exec backend python -c "import os; keys=['UPLOAD_SESSION_PART_BYTES','UPLOAD_SESSION_MAX_PARTS','UPLOAD_SESSION_STORAGE_BACKEND','UPLOAD_SESSION_CLEANUP_MAX_AGE_HOURS','UPLOAD_SESSION_LIFECYCLE_EXPIRATION_DAYS','WORKER_MAX_JOBS_PER_RUN','PROCESSING_JOB_MAX_ATTEMPTS','PROCESSING_DEAD_LETTER_QUEUE_NAME','LOCAL_MODEL_PROFILE','LOCAL_MODEL_GPU_PROFILE','VECTOR_INDEX_BACKEND','PGVECTOR_DIMENSIONS','QDRANT_COLLECTION_NAME','RERANKER_PROVIDER','LOCAL_RERANKER_RUNTIME','LOCAL_RERANKER_BASE_URL','RETRIEVAL_LATENCY_WARNING_MS','TOTAL_LATENCY_WARNING_MS']; print({k: os.environ.get(k) for k in keys})"
 ```
 
 Use `VECTOR_INDEX_BACKEND=pgvector` only with `ENABLE_DB_PERSISTENCE=true`. Use `VECTOR_INDEX_BACKEND=qdrant` for the Qdrant adapter, then run `python -m app.rag.vector_ops` after changing vector backend or embedding model. The default `RERANKER_PROVIDER=none` can be changed to `RERANKER_PROVIDER=local` and `LOCAL_RERANKER_RUNTIME=keyword` for deterministic local reranking, or `cross-encoder` / `vllm` for a local HTTP reranker. Check `/api/v1/model-status` or the UI model panel after changes; it reports vector-index readiness, reranker readiness, and the configured latency warning thresholds.
@@ -453,6 +455,19 @@ curl -X POST -H "Authorization: Bearer $TOKEN" \
   http://127.0.0.1:8000/api/v1/processing-jobs/$JOB_ID/retry
 ```
 
+Cancel a queued or processing background job:
+
+```bash
+curl -X POST -H "Authorization: Bearer $TOKEN" \
+  http://127.0.0.1:8000/api/v1/processing-jobs/$JOB_ID/cancel
+```
+
+Inspect the Redis dead-letter queue for jobs that failed after the configured max attempts:
+
+```bash
+docker compose exec redis redis-cli LRANGE rag:processing-jobs:dead-letter 0 -1
+```
+
 Ask a question:
 
 ```bash
@@ -476,13 +491,20 @@ Check the tenant-scoped analytics summary:
 curl -H "Authorization: Bearer $TOKEN" http://127.0.0.1:8000/api/v1/analytics
 ```
 
+Filter recent audit operations:
+
+```bash
+curl -H "Authorization: Bearer $TOKEN" \
+  "http://127.0.0.1:8000/api/v1/analytics?action=processing_job.cancelled&resource_type=processing_job"
+```
+
 ## UI Smoke Test
 
 1. Open `http://127.0.0.1:5173`.
 2. Sign in with `admin-demo` / `Passw0rd!`.
 3. Confirm the A&A panel shows the resolved tenant and roles, and the Session panel shows token expiry/refresh state.
 4. Upload a PDF, DOCX, XLSX, PPTX, text/CSV/markdown, or image file from the Upload panel.
-5. Use "Upload to queue" to exercise the background processing path; the UI polls job status until the worker completes or fails it. If a job fails, use the retry action on the job card to requeue it.
+5. Use "Upload to queue" to exercise the background processing path; the UI polls job status until the worker completes, fails, or is cancelled. Use the cancel action for queued/processing jobs and the retry action for failed jobs.
 6. Use Document Management to refresh the authorized inventory, open the uploaded document, and confirm chunk previews are visible.
 7. Ask a question in the Query panel and confirm citations plus run details appear: cache outcome, contexts used, top score, retrieval/total latency, embedding runtime, answer runtime, and retrieval thresholds.
 8. Confirm the Evaluation panel shows the retrieval quality gate with all cases passing and context precision, context recall, and answer relevance averages.
@@ -534,6 +556,7 @@ limit 10;
 - If any `/api/v1/*` call returns `401 Unauthorized`, your token is missing, expired, or was issued before `docker compose down -v` reseeded a new realm/tenant -- sign out and back in (or re-fetch a token per the smoke test above).
 - If queries return no context, confirm the uploaded chunks are in `document_chunks` and that you're signed in as a user in the same tenant that uploaded them (the default demo tenant is `00000000-0000-4000-8000-000000000001`).
 - If query construction fails with `ModelProviderConfigurationError`, check `.env` for unsupported provider values. Today the implemented runtimes are `EMBEDDING_PROVIDER=local`, `LOCAL_EMBEDDING_RUNTIME=hashing`, `ollama`, or `vllm`, `LLM_PROVIDER=local`, and `LOCAL_LLM_RUNTIME=extractive`, `ollama`, or `vllm`.
+- If you only want to switch local model modes, prefer `LOCAL_MODEL_PROFILE=local-default`, `host-ollama`, `compose-ollama`, or `vllm-gpu`; use `LOCAL_MODEL_PROFILE=custom` when setting individual runtime values manually.
 - If `LOCAL_EMBEDDING_RUNTIME=ollama` fails with `ModelProviderRequestError`, confirm Ollama is running, `LOCAL_EMBEDDING_BASE_URL` is reachable from the backend process, and `LOCAL_EMBEDDING_MODEL_NAME` has been pulled locally. For Docker Compose with Ollama on the host machine, use `LOCAL_EMBEDDING_BASE_URL=http://host.docker.internal:11434`.
 - If `LOCAL_LLM_RUNTIME=ollama` fails with `ModelProviderRequestError`, confirm Ollama is running, `LOCAL_LLM_BASE_URL` is reachable from the backend process, and `LOCAL_LLM_MODEL_NAME` has been pulled locally. For Docker Compose with Ollama on the host machine, use `LOCAL_LLM_BASE_URL=http://host.docker.internal:11434`.
 - If `/api/v1/model-status` says Ollama is reachable but a configured model is missing, run `ollama list` on the Mac or `docker compose --profile local-models exec ollama ollama list` for the Compose service. Pull the exact model name shown in `.env`; examples are `nomic-embed-text:latest` and `llama3.1:8b`.

@@ -39,6 +39,32 @@ def test_stale_filesystem_upload_sessions_are_removed(tmp_path, monkeypatch) -> 
     assert not manifest.parent.exists()
 
 
+def test_upload_session_part_size_expands_to_stay_under_configured_part_limit(
+    tmp_path,
+    monkeypatch,
+) -> None:
+    settings = get_settings()
+    monkeypatch.setattr(settings, "upload_dir", str(tmp_path))
+    monkeypatch.setattr(settings, "upload_session_part_bytes", 8)
+    monkeypatch.setattr(settings, "upload_session_max_parts", 3)
+
+    session = create_upload_session(
+        tenant_id=UUID("00000000-0000-4000-8000-000000000001"),
+        uploaded_by="subject",
+        file_name="large.txt",
+        byte_size=25,
+        visibility="tenant",
+        allowed_role_names=[],
+        force_ocr=False,
+    )
+
+    assert session.part_size_bytes == 9
+
+    manifest = tmp_path / "sessions" / str(session.upload_session_id) / "manifest.json"
+    data = json.loads(manifest.read_text(encoding="utf-8"))
+    assert data["part_size_bytes"] == 9
+
+
 def test_stale_minio_upload_sessions_remove_objects(tmp_path, monkeypatch) -> None:
     import app.rag.upload_sessions as upload_sessions
 

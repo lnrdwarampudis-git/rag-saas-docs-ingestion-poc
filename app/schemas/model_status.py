@@ -18,8 +18,12 @@ class ModelPerformanceStatus(BaseModel):
 
 
 class ModelStatusResponse(BaseModel):
+    model_config = ConfigDict(protected_namespaces=())
+
     llm_provider: str
     embedding_provider: str
+    model_profile: str = "custom"
+    gpu_profile: str = "none"
     embedding: ModelRuntimeStatus
     answer: ModelRuntimeStatus
     vector_index: ModelRuntimeStatus

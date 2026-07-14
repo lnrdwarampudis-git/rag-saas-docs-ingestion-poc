@@ -15,15 +15,20 @@ def main() -> None:
         if queue.strip()
     ] or [settings.processing_queue_name]
     logger.info("Starting RAG document processing worker for queues=%s", queues)
+    processed = 0
     while True:
         result = process_next_queued_job(timeout_seconds=10, queue_names=queues)
         if result is not None:
+            processed += 1
             logger.info(
                 "Processed job %s for document %s with status=%s",
                 result.job_id,
                 result.document_id,
                 result.status,
             )
+        if settings.worker_max_jobs_per_run > 0 and processed >= settings.worker_max_jobs_per_run:
+            logger.info("Worker processed configured max jobs=%s; exiting", processed)
+            return
 
 
 if __name__ == "__main__":

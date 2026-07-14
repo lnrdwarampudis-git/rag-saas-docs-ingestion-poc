@@ -18,6 +18,8 @@ LOCAL_EMBEDDING_MODEL_NAME=hashing-384
 EMBEDDING_DIMENSIONS=384
 LOCAL_EMBEDDING_BASE_URL=http://localhost:11434
 LOCAL_MODEL_REQUEST_TIMEOUT_SECONDS=30
+LOCAL_MODEL_PROFILE=custom
+LOCAL_MODEL_GPU_PROFILE=none
 VECTOR_INDEX_BACKEND=memory
 PGVECTOR_DIMENSIONS=1024
 VECTOR_BACKFILL_BATCH_SIZE=100
@@ -61,13 +63,44 @@ PUBLIC_LLM_ENABLED=false
 | `RERANKER_CANDIDATE_MULTIPLIER` | positive integer | adapter-tuned values | Controls how many initial candidates are retrieved before final top-k reranking. |
 | `RETRIEVAL_LATENCY_WARNING_MS` | positive number | deployment-specific SLOs | Drives analytics/model-status warning displays for retrieval latency. |
 | `TOTAL_LATENCY_WARNING_MS` | positive number | deployment-specific SLOs | Drives model-status warning displays for end-to-end query latency. |
-| `LOCAL_MODEL_REQUEST_TIMEOUT_SECONDS` | positive number | adapter-specific timeouts | Used by Ollama HTTP clients. |
+| `LOCAL_MODEL_REQUEST_TIMEOUT_SECONDS` | positive number | adapter-specific timeouts | Used by Ollama/vLLM HTTP clients. |
+| `LOCAL_MODEL_PROFILE` | `custom`, `local-default`, `host-ollama`, `compose-ollama`, `vllm-gpu` | deployment-specific profile names | Applies a tested local profile before provider construction. `custom` leaves individual settings unchanged. |
+| `LOCAL_MODEL_GPU_PROFILE` | `none` or a deployment label | GPU-specific values | Informational today; reported by model status/UI so operators can label GPU deployments. |
 | `LLM_PROVIDER` | `local` | public token-based providers | Public providers require `PUBLIC_LLM_ENABLED=true` and adapter code. |
 | `LOCAL_LLM_RUNTIME` | `extractive`, `ollama`, `vllm` | adapter-specific runtimes | `extractive` selects sentences from authorized chunks; `ollama` calls `/api/generate`; `vllm` calls OpenAI-compatible `/v1/chat/completions`. |
 | `LOCAL_LLM_MODEL_NAME` | `extractive`, any installed Ollama generation model | local model names | Sent as `model` for Ollama; included in metrics/cache keys. |
 | `PUBLIC_LLM_ENABLED` | `false` | `true` after policy approval and adapter implementation | Keeps external API usage opt-in. |
 
 If `RERANKER_PROVIDER=local` is selected with `LOCAL_RERANKER_RUNTIME=cross-encoder` or `vllm`, the app expects `LOCAL_RERANKER_BASE_URL` to expose `POST /rerank` with `query`, `documents`, `model`, and `top_n`, returning either `results` entries with `index` and `relevance_score` or a numeric `scores` array.
+
+## Packaged Local Profiles
+
+`LOCAL_MODEL_PROFILE` is the quickest way to switch between known local-open-source deployments while keeping `PUBLIC_LLM_ENABLED=false`.
+
+| Profile | Use case | Applied settings |
+| --- | --- | --- |
+| `custom` | Manual configuration | Leaves all individual runtime/model/base URL settings unchanged. |
+| `local-default` | No-download deterministic demos/tests | Hashing embeddings, extractive answers, no reranker. |
+| `host-ollama` | Backend/worker in Docker, Ollama running on the Mac | Ollama embeddings/generation through `http://host.docker.internal:11434`, with `nomic-embed-text:latest` and `llama3.1:8b`. |
+| `compose-ollama` | Ollama running as the optional Compose service | Ollama embeddings/generation through `http://ollama:11434`, with `nomic-embed-text` and `llama3.1`. |
+| `vllm-gpu` | Local GPU/OpenAI-compatible endpoints | vLLM embeddings/generation through `http://host.docker.internal:8000` plus a local reranker endpoint at `http://host.docker.internal:8081`. |
+
+Example for Mac-host Ollama from Docker:
+
+```text
+LOCAL_MODEL_PROFILE=host-ollama
+PUBLIC_LLM_ENABLED=false
+```
+
+Example for a local vLLM GPU service:
+
+```text
+LOCAL_MODEL_PROFILE=vllm-gpu
+LOCAL_MODEL_GPU_PROFILE=single-gpu
+PUBLIC_LLM_ENABLED=false
+```
+
+Profiles can still be overridden later by returning to `LOCAL_MODEL_PROFILE=custom` and setting individual runtime values.
 
 ## Vector Indexing And Reranking
 
@@ -118,6 +151,7 @@ LOCAL_EMBEDDING_BASE_URL=http://localhost:11434
 When the backend runs inside Docker Compose and Ollama runs on the host machine, use:
 
 ```text
+LOCAL_MODEL_PROFILE=host-ollama
 LOCAL_EMBEDDING_BASE_URL=http://host.docker.internal:11434
 ```
 
@@ -148,6 +182,7 @@ LOCAL_LLM_BASE_URL=http://localhost:11434
 When the backend runs inside Docker Compose and Ollama runs on the host machine, use:
 
 ```text
+LOCAL_MODEL_PROFILE=host-ollama
 LOCAL_LLM_BASE_URL=http://host.docker.internal:11434
 ```
 
@@ -181,6 +216,7 @@ docker compose --profile local-models exec ollama ollama pull llama3.1
 Set the backend/worker model config in `.env`:
 
 ```text
+LOCAL_MODEL_PROFILE=compose-ollama
 LOCAL_EMBEDDING_RUNTIME=ollama
 LOCAL_EMBEDDING_MODEL_NAME=nomic-embed-text
 LOCAL_EMBEDDING_BASE_URL=http://ollama:11434
@@ -202,6 +238,7 @@ The model service can also be reached from the host at `http://localhost:11434`.
 Use this `.env` block when Ollama runs on your Mac and backend/worker run in Docker Compose:
 
 ```text
+LOCAL_MODEL_PROFILE=host-ollama
 LOCAL_EMBEDDING_RUNTIME=ollama
 LOCAL_EMBEDDING_MODEL_NAME=nomic-embed-text:latest
 LOCAL_EMBEDDING_BASE_URL=http://host.docker.internal:11434
@@ -256,9 +293,9 @@ Authenticated users can inspect the active model configuration through:
 GET /api/v1/model-status
 ```
 
-The response reports the configured embedding, answer, vector-index, and reranker providers/runtimes, model names, readiness, local endpoint URLs when relevant, and performance warning thresholds. Hashing embeddings, extractive answer generation, the memory vector index, and disabled/keyword rerankers report ready without network calls. Ollama runtimes perform a lightweight `GET /api/tags` readiness check and mark the component not ready when Ollama is unreachable or the configured model has not been pulled. Qdrant vector-index status checks the configured collection and reports attention when Qdrant is unreachable or the collection has not been created/backfilled.
+The response reports the configured model profile, GPU profile label, embedding, answer, vector-index, and reranker providers/runtimes, model names, readiness, local endpoint URLs when relevant, and performance warning thresholds. Hashing embeddings, extractive answer generation, the memory vector index, and disabled/keyword rerankers report ready without network calls. Ollama runtimes perform a lightweight `GET /api/tags` readiness check and mark the component not ready when Ollama is unreachable or the configured model has not been pulled. Qdrant vector-index status checks the configured collection and reports attention when Qdrant is unreachable or the collection has not been created/backfilled.
 
-The React console uses this endpoint to show the model readiness pill and the active embedding, answer, vector-index, reranker, and latency-threshold cards.
+The React console uses this endpoint to show the model readiness pill and the active profile, embedding, answer, vector-index, reranker, and latency-threshold cards.
 
 Ollama query-time failures raise `ModelProviderRequestError` with the operation, model name, endpoint, and HTTP status or timeout class. The query API converts those provider errors into `503 Service Unavailable` responses so callers see a clear local-model readiness issue instead of a generic server failure.
 

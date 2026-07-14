@@ -11,7 +11,7 @@ The implemented milestone path is:
 - Week 5: Keycloak OIDC login (Authorization Code + PKCE), JWT validation middleware, Postgres-backed RBAC, and stateless-JWT session management.
 - Week 6: background document ingestion with queued upload, Redis worker polling, processing job status APIs, and UI job status polling.
 - Week 7: retrieval evaluation, precision thresholds, and local/open-source model strategy.
-- Current ops extensions: resumable upload sessions with filesystem or MinIO part storage, direct browser-to-MinIO presigned upload mode, upload-session cleanup, MinIO lifecycle automation, pgvector/Qdrant vector-index adapters, vector ops check/backfill automation, Qdrant payload indexes, deterministic local keyword or HTTP reranking, vLLM-compatible local model adapters, model/runtime readiness status, and retrieval ops analytics.
+- Current ops extensions: resumable upload sessions with filesystem or MinIO part storage, direct browser-to-MinIO presigned upload mode, upload-session cleanup, MinIO lifecycle automation, dynamic upload part sizing, pgvector/Qdrant vector-index adapters, vector ops check/backfill automation, Qdrant payload indexes, deterministic local keyword or HTTP reranking, packaged local model profiles, vLLM-compatible local model adapters, model/runtime readiness status, job cancel/retry/dead-letter controls, worker run limits, filtered audit events, and retrieval ops analytics.
 
 ## Quick Start
 
@@ -85,7 +85,7 @@ For full setup, execution, test, and GitHub export instructions, see:
 - Server-side RBAC resolved from Postgres (`app_users`/`roles`/`user_roles`), with tenant_id/roles always taken from the validated token -- never from request bodies
 - PDF, Word DOCX, Excel XLSX, PowerPoint PPTX, text, CSV/TSV, markdown, image intake, and scanned-PDF OCR
 - Document management inventory with authorized list/detail APIs, ingestion status, visibility, OCR flags, chunk counts, and chunk preview
-- Week 6 background ingestion path with queued upload, Redis-backed worker polling, processing job status/retry APIs, and UI job polling
+- Week 6 background ingestion path with queued upload, Redis-backed worker polling, processing job status/cancel/retry APIs, retry history, dead-letter routing, and UI job polling
 - Week 7 offline retrieval evaluation dataset and runner with context precision, context recall, and answer relevance checks
 - Authenticated retrieval evaluation API and UI quality gate panel
 - Resumable upload-session API and UI action with filesystem part uploads, MinIO part storage, presigned browser-direct MinIO uploads, completed-session cleanup, stale-session cleanup, MinIO lifecycle automation, public MinIO presign endpoint config, and bucket CORS guidance
@@ -150,6 +150,7 @@ docker compose up --build
 - `GET /api/v1/processing-jobs/{job_id}`
 - `POST /api/v1/processing-jobs/{job_id}/run`
 - `POST /api/v1/processing-jobs/{job_id}/retry`
+- `POST /api/v1/processing-jobs/{job_id}/cancel`
 - `GET /api/v1/evaluation/retrieval`
 - `GET /api/v1/model-status`
 - `GET /api/v1/analytics`
@@ -157,7 +158,7 @@ docker compose up --build
 
 The document list/detail endpoints power the UI's Document Management panel. They apply the same tenant and RBAC rules as retrieval: users can inspect only documents and chunks their authenticated identity is authorized to see.
 
-The analytics endpoint powers the UI's Admin operations summary. It returns tenant-scoped document counts, processing job counts and recent failures, recent persisted query volume/cache/latency metrics, vector/reranker retrieval ops status, recent audit operations, and the current retrieval quality gate summary.
+The analytics endpoint powers the UI's Admin operations summary. It returns tenant-scoped document counts, processing job counts and recent failures/cancellations/dead-letter candidates, recent persisted query volume/cache/latency metrics, vector/reranker retrieval ops status, recent audit operations, and the current retrieval quality gate summary. Optional `action` and `resource_type` query parameters filter the recent audit feed.
 
 Successful query requests also write `query.executed` audit events with safe metadata such as query hash, query length, cache state, latency, contexts used, models, and cited document ids. Raw query text is not stored in the audit log.
 
@@ -167,7 +168,7 @@ The upload endpoint accepts multipart browser uploads and is the preferred local
 
 Browser uploads are guarded by configurable extension and size limits. Defaults are `ALLOWED_UPLOAD_EXTENSIONS=.pdf,.txt,.md,.csv,.tsv,.docx,.xlsx,.pptx,.png,.jpg,.jpeg,.tiff,.bmp` and `MAX_UPLOAD_BYTES=536870912` (512 MiB). Unsupported formats return `415`; oversized files return `413`.
 
-The async upload endpoint returns `202 Accepted` with a `job_id` and `document_id`. The resumable upload-session endpoints create a session, upload numbered parts, inspect uploaded parts, and complete the session into the same async processing queue. Sessions are bound to the tenant and uploader subject. By default parts use local filesystem storage under `UPLOAD_DIR`; `UPLOAD_SESSION_STORAGE_BACKEND=minio` stores parts in MinIO and exposes presigned part URLs for direct browser-to-object-storage uploads. `MINIO_ENDPOINT` is the backend/worker internal endpoint, while `MINIO_PUBLIC_ENDPOINT` is used when generating browser-reachable presigned URLs. The React intake panel includes an `Upload session` action that uses the same API and automatically chooses backend part uploads or presigned MinIO part uploads based on the session storage backend. Docker Compose includes a default `worker` service for normal ingestion and a `worker-ocr` service for forced OCR jobs. Both poll Redis, process queued files, update `processing_jobs`, and transition documents from `pending` to `embedded` or `failed`. Failed jobs can be retried through the processing job retry API or the UI retry action.
+The async upload endpoint returns `202 Accepted` with a `job_id` and `document_id`. The resumable upload-session endpoints create a session, upload numbered parts, inspect uploaded parts, and complete the session into the same async processing queue. Sessions are bound to the tenant and uploader subject. By default parts use local filesystem storage under `UPLOAD_DIR`; `UPLOAD_SESSION_STORAGE_BACKEND=minio` stores parts in MinIO and exposes presigned part URLs for direct browser-to-object-storage uploads. `MINIO_ENDPOINT` is the backend/worker internal endpoint, while `MINIO_PUBLIC_ENDPOINT` is used when generating browser-reachable presigned URLs. `UPLOAD_SESSION_PART_BYTES` sets the preferred part size and `UPLOAD_SESSION_MAX_PARTS` lets the backend increase part size for very large files so deployments stay under object-store part-count limits. The React intake panel includes an `Upload session` action that uses the same API and automatically chooses backend part uploads or presigned MinIO part uploads based on the session storage backend. Docker Compose includes a default `worker` service for normal ingestion and a `worker-ocr` service for forced OCR jobs. Both poll Redis, process queued files, update `processing_jobs`, and transition documents from `pending` to `embedded` or `failed`. Queued or processing jobs can be cancelled through the cancel API/UI action. Failed jobs can be retried through the processing job retry API or the UI retry action. Jobs that fail at or above `PROCESSING_JOB_MAX_ATTEMPTS` are pushed to `PROCESSING_DEAD_LETTER_QUEUE_NAME` when Redis is available. `WORKER_MAX_JOBS_PER_RUN` can limit worker process lifetime for batch or supervised deployments.
 
 Completed upload sessions remove temporary part storage after the final file is assembled. Abandoned sessions can be cleaned up with `python -m app.rag.cleanup_upload_sessions --max-age-hours 24`.
 
@@ -197,7 +198,7 @@ After login, the frontend shows:
 - Chunk preview for the selected document, using the same RBAC checks as the query/retrieval path.
 - Queued upload status for background ingestion jobs, with automatic polling until completion or failure.
 - Retry action for failed background ingestion jobs.
-- Admin operations summary for ingestion totals, job queue state, failed jobs, query cache hit rate, query latency, vector/reranker retrieval status, recent audit operations, and retrieval evaluation pass rate.
+- Admin operations summary for ingestion totals, job queue state, failed/cancelled/dead-letter candidate jobs, query cache hit rate, query latency, vector/reranker retrieval status, recent audit operations, and retrieval evaluation pass rate.
 
 For the latest supported-format matrix, OCR notes, local-model switching instructions, validation checklist, and pending roadmap, see [Current Status And Roadmap](docs/current-status.md).
 
@@ -227,7 +228,7 @@ Username: rag
 Password: rag
 ```
 
-The query endpoint uses the local model provider abstraction plus a vector index boundary. The default configuration keeps demos deterministic with hashing embeddings, the in-memory vector index, no reranker, and extractive answer generation. `VECTOR_INDEX_BACKEND=pgvector` enables the PostgreSQL/pgvector adapter when DB persistence is on, and `VECTOR_INDEX_BACKEND=qdrant` enables the Qdrant adapter for higher-scale vector experiments. `python -m app.rag.vector_ops` checks the selected vector backend, ensures Qdrant payload indexes when needed, and runs vector backfill. For local semantic embeddings or local answer generation, set the corresponding runtime to `ollama` or `vllm` with a running local service. `RERANKER_PROVIDER=local` plus `LOCAL_RERANKER_RUNTIME=keyword`, `cross-encoder`, or `vllm` enables deterministic or HTTP-backed local reranking. `/api/v1/model-status` and the UI model/status panels report embedding, answer, vector-index, reranker, and latency-threshold readiness.
+The query endpoint uses the local model provider abstraction plus a vector index boundary. The default configuration keeps demos deterministic with hashing embeddings, the in-memory vector index, no reranker, and extractive answer generation. `VECTOR_INDEX_BACKEND=pgvector` enables the PostgreSQL/pgvector adapter when DB persistence is on, and `VECTOR_INDEX_BACKEND=qdrant` enables the Qdrant adapter for higher-scale vector experiments. `python -m app.rag.vector_ops` checks the selected vector backend, ensures Qdrant payload indexes when needed, and runs vector backfill. For local semantic embeddings or local answer generation, either set the individual runtime values to `ollama` or `vllm`, or set `LOCAL_MODEL_PROFILE=host-ollama`, `compose-ollama`, or `vllm-gpu` to apply a packaged local profile. `RERANKER_PROVIDER=local` plus `LOCAL_RERANKER_RUNTIME=keyword`, `cross-encoder`, or `vllm` enables deterministic or HTTP-backed local reranking. `/api/v1/model-status` and the UI model/status panels report the selected profile, GPU profile label, embedding, answer, vector-index, reranker, and latency-threshold readiness.
 
 Run the offline retrieval quality gate:
 
@@ -244,6 +245,8 @@ LOCAL_EMBEDDING_MODEL_NAME=hashing-384
 EMBEDDING_DIMENSIONS=384
 LOCAL_EMBEDDING_BASE_URL=http://localhost:11434
 LOCAL_MODEL_REQUEST_TIMEOUT_SECONDS=30
+LOCAL_MODEL_PROFILE=custom
+LOCAL_MODEL_GPU_PROFILE=none
 LLM_PROVIDER=local
 LOCAL_LLM_RUNTIME=extractive
 LOCAL_LLM_MODEL_NAME=extractive

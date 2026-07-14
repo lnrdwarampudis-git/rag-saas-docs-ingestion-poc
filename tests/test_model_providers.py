@@ -315,6 +315,28 @@ def test_vllm_generation_runtime_is_available() -> None:
     assert isinstance(provider.answer_generator, VllmAnswerGenerator)
 
 
+def test_host_ollama_profile_configures_host_accessible_local_models() -> None:
+    provider = build_model_provider(Settings(_env_file=None, local_model_profile="host-ollama"))
+
+    assert provider.embedding_runtime == "ollama"
+    assert provider.embedding_model_name == "nomic-embed-text:latest"
+    assert provider.answer_runtime == "ollama"
+    assert provider.answer_model_name == "llama3.1:8b"
+    assert isinstance(provider.embedding_model, OllamaEmbeddingModel)
+    assert isinstance(provider.answer_generator, OllamaAnswerGenerator)
+
+
+def test_vllm_gpu_profile_configures_openai_compatible_local_models() -> None:
+    provider = build_model_provider(Settings(_env_file=None, local_model_profile="vllm-gpu"))
+
+    assert provider.embedding_runtime == "vllm"
+    assert provider.embedding_model_name == "BAAI/bge-small-en-v1.5"
+    assert provider.answer_runtime == "vllm"
+    assert provider.answer_model_name == "mistralai/Mistral-7B-Instruct-v0.3"
+    assert isinstance(provider.embedding_model, VllmEmbeddingModel)
+    assert isinstance(provider.answer_generator, VllmAnswerGenerator)
+
+
 def test_vllm_answer_generator_posts_chat_completion() -> None:
     requests: list[httpx.Request] = []
 

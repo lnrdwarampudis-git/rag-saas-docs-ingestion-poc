@@ -11,6 +11,9 @@ class Settings(BaseSettings):
     processing_queue_name: str = "rag:processing-jobs"
     ocr_processing_queue_name: str = "rag:processing-jobs:ocr"
     worker_queue_names: str = "rag:processing-jobs,rag:processing-jobs:ocr"
+    worker_max_jobs_per_run: int = 0
+    processing_dead_letter_queue_name: str = "rag:processing-jobs:dead-letter"
+    processing_job_max_attempts: int = 3
     minio_endpoint: str = "http://localhost:9000"
     minio_public_endpoint: str = "http://localhost:9000"
     minio_access_key: str = "minio"
@@ -34,6 +37,7 @@ class Settings(BaseSettings):
     upload_dir: str = "/tmp/rag-uploads"
     max_upload_bytes: int = 536_870_912
     upload_session_part_bytes: int = 8_388_608
+    upload_session_max_parts: int = 10_000
     allowed_upload_extensions: str = ".pdf,.txt,.md,.csv,.tsv,.docx,.xlsx,.pptx,.png,.jpg,.jpeg,.tiff,.bmp"
     ocr_language: str = "eng"
     ocr_pdf_dpi: int = 200
@@ -64,6 +68,8 @@ class Settings(BaseSettings):
     local_embedding_base_url: str = "http://localhost:11434"
     local_model_request_timeout_seconds: float = 30.0
     public_llm_enabled: bool = False
+    local_model_profile: str = "custom"
+    local_model_gpu_profile: str = "none"
 
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
 

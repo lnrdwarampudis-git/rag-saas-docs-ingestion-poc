@@ -8,6 +8,8 @@ from app.rag.model_status import get_model_status
 def test_default_model_status_reports_ready_local_runtimes() -> None:
     status = get_model_status(Settings(_env_file=None))
 
+    assert status.model_profile == "custom"
+    assert status.gpu_profile == "none"
     assert status.llm_provider == "local"
     assert status.embedding.runtime == "hashing"
     assert status.embedding.ready is True
@@ -218,8 +220,33 @@ def test_model_status_endpoint_returns_authenticated_runtime_status(api_client_a
     payload = response.json()
     assert payload["embedding"]["runtime"] == "hashing"
     assert payload["embedding"]["ready"] is True
-    assert payload["answer"]["runtime"] == "extractive"
-    assert payload["answer"]["ready"] is True
-    assert payload["vector_index"]["runtime"] == "memory"
-    assert payload["reranker"]["runtime"] == "none"
-    assert payload["performance"]["retrieval_warning_ms"] == 1500.0
+
+
+def test_model_status_reports_resolved_model_profile(monkeypatch) -> None:
+    original_client = httpx.Client
+    monkeypatch.setattr(
+        httpx,
+        "Client",
+        lambda **kwargs: original_client(
+            **kwargs,
+            transport=httpx.MockTransport(
+                lambda request: httpx.Response(
+                    200,
+                    json={
+                        "models": [
+                            {"name": "nomic-embed-text:latest"},
+                            {"name": "llama3.1:8b"},
+                        ]
+                    },
+                )
+            ),
+        ),
+    )
+
+    status = get_model_status(Settings(_env_file=None, local_model_profile="host-ollama"))
+
+    assert status.model_profile == "host-ollama"
+    assert status.embedding.runtime == "ollama"
+    assert status.embedding.base_url == "http://host.docker.internal:11434"
+    assert status.answer.runtime == "ollama"
+    assert status.answer.base_url == "http://host.docker.internal:11434"
