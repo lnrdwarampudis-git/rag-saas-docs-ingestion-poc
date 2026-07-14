@@ -1,6 +1,6 @@
 # Current Status And Roadmap
 
-This page is the short handoff for what the POC supports today, how to run it, and what remains to build next. Keep it aligned with [README](../README.md), [Architecture](architecture.md), [Flow Diagrams](flow-diagrams.md), [Model Providers](model-providers.md), and [Execution Runbook](runbook.md).
+This page is the short handoff for what the POC supports today, how to run it, and what remains to build next. Keep it aligned with [README](../README.md), [Architecture](architecture.md), [Flow Diagrams](flow-diagrams.md), [Model Providers](model-providers.md), [Deployment Hardening](deployment-hardening.md), [Local Model Deployment](local-model-deployment.md), and [Execution Runbook](runbook.md).
 
 ## Current Delivered State
 
@@ -12,8 +12,8 @@ This page is the short handoff for what the POC supports today, how to run it, a
 - Resumable upload-session API and UI mode for large files with tenant/uploader-bound sessions, filesystem or MinIO part storage, dynamic max-part sizing, presigned MinIO part URLs, browser part progress, async completion, completed-session cleanup, and stale-session cleanup command.
 - Processing job status, local run, cancel, and retry controls through `GET /api/v1/processing-jobs/{job_id}`, `POST /api/v1/processing-jobs/{job_id}/run`, `POST /api/v1/processing-jobs/{job_id}/cancel`, and `POST /api/v1/processing-jobs/{job_id}/retry`.
 - Tenant-scoped document inventory, chunk preview, query pipeline, citations, Redis query cache, and cache/model-aware query metrics.
-- Offline retrieval quality gate through `python -m app.eval.run` and authenticated UI/API evaluation status.
-- Admin analytics for documents, jobs, query volume/cache/latency, vector/reranker retrieval state, audit operations, audit filtering, and evaluation health.
+- Offline retrieval quality gate through `python -m app.eval.run` and authenticated UI/API evaluation status, including no-answer, RBAC-denial, tenant-isolation, and answer-groundedness checks.
+- Admin analytics for documents, jobs, query volume/cache/latency, p95/recent latency, vector/reranker retrieval state, audit operations, audit filtering, and evaluation health.
 - Local/open-source model abstraction with deterministic hashing embeddings and extractive answer generation as defaults.
 - Optional Ollama embeddings and answer generation for local models, including tested Mac-host Ollama access from Docker through `host.docker.internal`.
 - Vector index abstraction with in-memory default, pgvector and Qdrant adapter paths, vector backfill command, model-status readiness checks, analytics warning thresholds, default no-op reranker, and deterministic local keyword reranker.
@@ -27,6 +27,7 @@ This page is the short handoff for what the POC supports today, how to run it, a
 - Persistent vector retrieval operations now include pgvector and Qdrant adapter paths, vector ops check/backfill automation, Qdrant payload indexes for RBAC filter fields, vector backend metrics in query responses, vector-index readiness in `/api/v1/model-status`, retrieval backend/reranker warning state in `/api/v1/analytics`, and documented production checks after backend/model changes.
 - Stronger local model foundations now include packaged profiles (`local-default`, `host-ollama`, `compose-ollama`, `vllm-gpu`), Ollama and vLLM-compatible embedding/answer-generation paths, model-status checks for embedding/answer/vector/reranker runtimes, deterministic local keyword reranking, HTTP-backed cross-encoder/vLLM reranking, latency warning threshold config, and UI surfaces for active model, profile, vector, reranker, and threshold state.
 - Operations controls now include queued/processing job cancel, failed-job retry history, Redis dead-letter queue routing after `PROCESSING_JOB_MAX_ATTEMPTS`, `WORKER_MAX_JOBS_PER_RUN` for supervised/batch workers, job cancel audit events, and `GET /api/v1/analytics?action=...&resource_type=...` audit filtering.
+- Deployment hardening now includes a GitHub Actions CI workflow, production Compose overlay example, production environment checklist, deployment hardening guide, backup/restore runbook, expanded evaluation gate, live latency trend metrics, and local GPU/vLLM deployment examples.
 
 ## Supported Document Intake Today
 
@@ -139,9 +140,10 @@ git diff --check
 
 Recommended next implementation slices:
 
-1. Add deployment hardening: environment-specific Compose/prod manifests, secrets handling, backup/restore runbooks, and CI quality gates.
-2. Expand evaluation: more tenant/role fixtures, answer-groundedness checks, negative/no-answer cases, and regression trend history.
-3. Add deeper live operations views: persistent retry/dead-letter event tables, worker throughput charts, Qdrant collection-size trend reports, and model latency trend history.
-4. Add production local-model deployment examples for real GPU hosts once the target hardware/runtime is chosen.
+1. Add persistent operations history tables for retry/dead-letter events and model latency buckets instead of deriving live metrics from recent in-memory/query-event windows.
+2. Add deployment-specific manifests for the chosen target platform after it is known, such as ECS, Kubernetes, Fly.io, Render, or a VM/systemd layout.
+3. Add regression trend storage for retrieval evaluation runs so quality history survives process restarts.
+4. Add live Qdrant collection-size and optimizer-health reports from the Qdrant API.
+5. Add public/token LLM providers only after policy approval and explicit `PUBLIC_LLM_ENABLED=true`.
 
 Public token-based LLM providers remain intentionally deferred. They should stay behind explicit provider configuration and `PUBLIC_LLM_ENABLED=true`.

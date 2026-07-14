@@ -55,6 +55,8 @@ For full setup, execution, test, and GitHub export instructions, see:
 - [Flow Diagrams](docs/flow-diagrams.md)
 - [Retrieval Evaluation](docs/retrieval-evaluation.md)
 - [Model Providers](docs/model-providers.md)
+- [Deployment Hardening](docs/deployment-hardening.md)
+- [Local Model Deployment](docs/local-model-deployment.md)
 - [Execution Runbook](docs/runbook.md)
 - [GitHub Export Guide](docs/github-export.md)
 - [Week 6 Suggested Target Plan](docs/week6-plan.md)
@@ -92,6 +94,7 @@ For full setup, execution, test, and GitHub export instructions, see:
 - Vector retrieval operations with in-memory default, pgvector and Qdrant adapters, vector backfill/check command, Qdrant payload indexes for RBAC filters, vector/reranker query metrics, model-status readiness checks, and analytics warning thresholds
 - Local/open-source model provider abstraction for deterministic hashing embeddings, optional Ollama embeddings, vLLM-compatible embeddings/generation, extractive answer generation, optional Ollama answer generation, deterministic keyword reranking, HTTP cross-encoder/vLLM reranking, model/runtime readiness checks, and later gated public providers
 - Authenticated admin analytics API and UI summary for document ingestion, processing jobs, persisted query cache/latency, vector/reranker retrieval state, recent audit operations, and retrieval evaluation health
+- Deployment hardening assets with CI quality gates, production Compose overlay example, production env checklist, backup/restore runbook, expanded evaluation gate, live latency trend metrics, and local GPU model deployment examples
 
 ## Recommended Week 1 Commands
 
@@ -254,7 +257,7 @@ LOCAL_LLM_BASE_URL=http://localhost:11434
 PUBLIC_LLM_ENABLED=false
 ```
 
-`app/rag/model_providers.py` defines the embedding and answer-generation interfaces. `LOCAL_EMBEDDING_RUNTIME=ollama` or `vllm` is available for local semantic embeddings, and `LOCAL_LLM_RUNTIME=ollama` or `vllm` is available for local answer generation. Public token-based LLM providers remain blocked unless `PUBLIC_LLM_ENABLED=true`. See [Model Providers](docs/model-providers.md) for the full configuration reference and adapter contract.
+`app/rag/model_providers.py` defines the embedding and answer-generation interfaces. `LOCAL_EMBEDDING_RUNTIME=ollama` or `vllm` is available for local semantic embeddings, and `LOCAL_LLM_RUNTIME=ollama` or `vllm` is available for local answer generation. Public token-based LLM providers remain blocked unless `PUBLIC_LLM_ENABLED=true`. See [Model Providers](docs/model-providers.md) for the full configuration reference and adapter contract, [Local Model Deployment](docs/local-model-deployment.md) for host-Ollama/Compose-Ollama/vLLM examples, and [Deployment Hardening](docs/deployment-hardening.md) for CI, production overlay, and backup/restore guidance.
 
 ## Architecture
 

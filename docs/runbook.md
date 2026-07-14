@@ -48,8 +48,9 @@ curl -H "Authorization: Bearer $TOKEN" http://127.0.0.1:8000/api/v1/analytics
 
 When Postgres persistence is enabled, query volume, cache hits, and latency come
 from persisted `query_events`; local non-persistent tests fall back to the
-in-memory query event buffer. The same response includes recent tenant audit
-events from `audit_logs` so the UI can show an operations history.
+in-memory query event buffer. The same response includes p95 latency, recent
+average latency, recent tenant audit events from `audit_logs`, and evaluation
+groundedness so the UI can show an operations history and live quality signals.
 
 Expected response sections:
 
@@ -58,9 +59,12 @@ Expected response sections:
   "documents": {},
   "jobs": {},
   "queries": {},
+  "retrieval": {},
   "evaluation": {}
 }
 ```
+
+For production deployment checks, CI gates, and backup/restore commands, see [Deployment Hardening](deployment-hardening.md).
 
 ## Backend Tests
 

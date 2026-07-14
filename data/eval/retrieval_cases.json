@@ -71,5 +71,46 @@
         "allowed_role_names": ["legal"]
       }
     ]
+  },
+  {
+    "id": "tenant-isolation-negative",
+    "query": "What is the Tenant B launch codename?",
+    "tenant_id": "00000000-0000-4000-8000-000000000104",
+    "role_names": ["admin"],
+    "top_k": 3,
+    "expected_document_ids": [],
+    "expected_answer_terms": ["could not find enough authorized context"],
+    "chunks": [
+      {
+        "document_id": "tenant-b-launch",
+        "file_name": "tenant-b-roadmap.txt",
+        "chunk_index": 0,
+        "text": "Tenant B launch codename is Blue Harbor and should never appear to Tenant A users.",
+        "visibility": "tenant",
+        "allowed_role_names": [],
+        "tenant_id": "00000000-0000-4000-8000-000000000105"
+      }
+    ]
+  },
+  {
+    "id": "private-owner-filter",
+    "query": "What is the private engineering note?",
+    "tenant_id": "00000000-0000-4000-8000-000000000106",
+    "role_names": ["engineering"],
+    "requester_subject": "engineer-a",
+    "top_k": 3,
+    "expected_document_ids": [],
+    "expected_answer_terms": ["could not find enough authorized context"],
+    "chunks": [
+      {
+        "document_id": "private-note",
+        "file_name": "private-note.txt",
+        "chunk_index": 0,
+        "text": "The private engineering note says rollout window beta starts after approval.",
+        "visibility": "private",
+        "allowed_role_names": [],
+        "uploaded_by": "engineer-b"
+      }
+    ]
   }
 ]

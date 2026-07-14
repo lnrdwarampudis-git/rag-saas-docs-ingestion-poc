@@ -13,7 +13,41 @@ DEFAULT_DATASET = Path("data/eval/retrieval_cases.json")
 CONTEXT_PRECISION_TARGET = 0.85
 CONTEXT_RECALL_TARGET = 0.80
 ANSWER_RELEVANCE_TARGET = 0.85
+ANSWER_GROUNDEDNESS_TARGET = 0.90
 ANSWER_GENERATOR = ExtractiveAnswerGenerator()
+GROUNDING_STOPWORDS = {
+    "about",
+    "after",
+    "answer",
+    "authorized",
+    "based",
+    "before",
+    "check",
+    "context",
+    "could",
+    "does",
+    "document",
+    "documents",
+    "enough",
+    "find",
+    "for",
+    "from",
+    "help",
+    "how",
+    "matching",
+    "not",
+    "precisely",
+    "question",
+    "relevant",
+    "role",
+    "the",
+    "this",
+    "to",
+    "try",
+    "upload",
+    "with",
+    "your",
+}
 
 
 @dataclass(frozen=True)
@@ -22,6 +56,7 @@ class EvalCaseResult:
     context_precision: float
     context_recall: float
     answer_relevance: float
+    answer_groundedness: float
     retrieved_document_ids: list[str]
     expected_document_ids: list[str]
     answer: str
@@ -32,6 +67,7 @@ class EvalCaseResult:
             self.context_precision >= CONTEXT_PRECISION_TARGET
             and self.context_recall >= CONTEXT_RECALL_TARGET
             and self.answer_relevance >= ANSWER_RELEVANCE_TARGET
+            and self.answer_groundedness >= ANSWER_GROUNDEDNESS_TARGET
         )
 
 
@@ -45,10 +81,12 @@ def run_eval(dataset_path: Path = DEFAULT_DATASET) -> dict:
         "context_precision": _average([result.context_precision for result in results]),
         "context_recall": _average([result.context_recall for result in results]),
         "answer_relevance": _average([result.answer_relevance for result in results]),
+        "answer_groundedness": _average([result.answer_groundedness for result in results]),
         "targets": {
             "context_precision": CONTEXT_PRECISION_TARGET,
             "context_recall": CONTEXT_RECALL_TARGET,
             "answer_relevance": ANSWER_RELEVANCE_TARGET,
+            "answer_groundedness": ANSWER_GROUNDEDNESS_TARGET,
         },
     }
     return {
@@ -60,6 +98,7 @@ def run_eval(dataset_path: Path = DEFAULT_DATASET) -> dict:
                 "context_precision": round(result.context_precision, 4),
                 "context_recall": round(result.context_recall, 4),
                 "answer_relevance": round(result.answer_relevance, 4),
+                "answer_groundedness": round(result.answer_groundedness, 4),
                 "retrieved_document_ids": result.retrieved_document_ids,
                 "expected_document_ids": result.expected_document_ids,
                 "answer": result.answer,
@@ -87,7 +126,8 @@ def main() -> None:
         "Averages: "
         f"context_precision={summary['context_precision']:.3f}, "
         f"context_recall={summary['context_recall']:.3f}, "
-        f"answer_relevance={summary['answer_relevance']:.3f}"
+        f"answer_relevance={summary['answer_relevance']:.3f}, "
+        f"answer_groundedness={summary['answer_groundedness']:.3f}"
     )
     for result in report["results"]:
         status = "PASS" if result["passed"] else "FAIL"
@@ -95,7 +135,8 @@ def main() -> None:
             f"{status} {result['case_id']} "
             f"precision={result['context_precision']:.3f} "
             f"recall={result['context_recall']:.3f} "
-            f"answer={result['answer_relevance']:.3f}"
+            f"answer={result['answer_relevance']:.3f} "
+            f"grounded={result['answer_groundedness']:.3f}"
         )
 
 
@@ -118,11 +159,13 @@ def _evaluate_case(case: dict) -> EvalCaseResult:
         if result.chunk.metadata.get("document_id")
     ]
     answer = ANSWER_GENERATOR.generate(case["query"], results).lower()
+    context_text = " ".join(result.chunk.text for result in results)
     return EvalCaseResult(
         case_id=case["id"],
         context_precision=_context_precision(retrieved_document_ids, expected_document_ids),
         context_recall=_context_recall(retrieved_document_ids, expected_document_ids),
         answer_relevance=_answer_relevance(answer, case.get("expected_answer_terms", [])),
+        answer_groundedness=_answer_groundedness(answer, context_text),
         retrieved_document_ids=retrieved_document_ids,
         expected_document_ids=expected_document_ids,
         answer=answer,
@@ -131,7 +174,7 @@ def _evaluate_case(case: dict) -> EvalCaseResult:
 
 def _chunk_from_case(case: dict, chunk: dict) -> ChunkDTO:
     metadata = {
-        "tenant_id": case["tenant_id"],
+        "tenant_id": chunk.get("tenant_id", case["tenant_id"]),
         "document_id": chunk["document_id"],
         "file_name": chunk["file_name"],
         "visibility": chunk.get("visibility", "tenant"),
@@ -163,6 +206,26 @@ def _answer_relevance(answer: str, expected_terms: list[str]) -> float:
     if not expected_terms:
         return 1.0
     return len([term for term in expected_terms if term.lower() in answer]) / len(expected_terms)
+
+
+def _answer_groundedness(answer: str, context_text: str) -> float:
+    if "could not find enough authorized context" in answer:
+        return 1.0
+
+    answer_terms = _grounding_terms(answer)
+    if not answer_terms:
+        return 1.0
+    context_terms = _grounding_terms(context_text)
+    return len(answer_terms.intersection(context_terms)) / len(answer_terms)
+
+
+def _grounding_terms(value: str) -> set[str]:
+    terms = set()
+    for raw_term in value.lower().replace("'", " ").split():
+        term = raw_term.strip(".,:;!?()[]")
+        if len(term) > 2 and term not in GROUNDING_STOPWORDS:
+            terms.add(term)
+    return terms
 
 
 def _average(values: list[float]) -> float:

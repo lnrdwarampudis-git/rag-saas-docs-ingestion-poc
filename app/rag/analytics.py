@@ -382,41 +382,33 @@ def _persistent_query_analytics(current_user: AuthenticatedUser) -> QueryAnalyti
 
         with engine.begin() as connection:
             _ensure_query_events_table(connection)
-            row = connection.execute(
-                text(
-                    """
-                    WITH recent_events AS (
-                      SELECT cached, retrieval_ms, total_ms
-                      FROM query_events
-                      WHERE tenant_id = :tenant_id
-                      ORDER BY created_at DESC
-                      LIMIT 500
-                    )
-                    SELECT
-                      count(*) AS total,
-                      count(*) FILTER (WHERE cached) AS cache_hits,
-                      COALESCE(avg(retrieval_ms), 0) AS average_retrieval_ms,
-                      COALESCE(avg(total_ms), 0) AS average_total_ms
-                    FROM recent_events
-                    """
-                ),
-                {"tenant_id": str(current_user.tenant_id)},
-            ).mappings().one()
+            rows = list(
+                connection.execute(
+                    text(
+                        """
+                        SELECT cached, retrieval_ms, total_ms
+                        FROM query_events
+                        WHERE tenant_id = :tenant_id
+                        ORDER BY created_at DESC
+                        LIMIT 500
+                        """
+                    ),
+                    {"tenant_id": str(current_user.tenant_id)},
+                ).mappings()
+            )
     except SQLAlchemyError:
         return None
 
-    total = int(row["total"] or 0)
-    if total == 0:
-        return QueryAnalytics()
-
-    cache_hits = int(row["cache_hits"] or 0)
-    return QueryAnalytics(
-        total=total,
-        cache_hits=cache_hits,
-        cache_misses=total - cache_hits,
-        cache_hit_rate=round(cache_hits / total, 4),
-        average_retrieval_ms=round(float(row["average_retrieval_ms"] or 0), 3),
-        average_total_ms=round(float(row["average_total_ms"] or 0), 3),
+    return _query_analytics_from_events(
+        [
+            QueryEvent(
+                tenant_id=str(current_user.tenant_id),
+                cached=bool(row["cached"]),
+                retrieval_ms=float(row["retrieval_ms"] or 0),
+                total_ms=float(row["total_ms"] or 0),
+            )
+            for row in rows
+        ]
     )
 
 
@@ -522,17 +514,27 @@ def _in_memory_document_analytics(current_user: AuthenticatedUser) -> DocumentAn
 
 def _query_analytics(tenant_id: str) -> QueryAnalytics:
     events = [event for event in _query_events if event.tenant_id == tenant_id]
+    return _query_analytics_from_events(events)
+
+
+def _query_analytics_from_events(events: list[QueryEvent]) -> QueryAnalytics:
     if not events:
         return QueryAnalytics()
     cache_hits = sum(event.cached for event in events)
     total = len(events)
+    retrieval_values = [event.retrieval_ms for event in events]
+    total_values = [event.total_ms for event in events]
+    recent_values = total_values[:25]
     return QueryAnalytics(
         total=total,
         cache_hits=cache_hits,
         cache_misses=total - cache_hits,
         cache_hit_rate=round(cache_hits / total, 4),
-        average_retrieval_ms=round(mean(event.retrieval_ms for event in events), 3),
-        average_total_ms=round(mean(event.total_ms for event in events), 3),
+        average_retrieval_ms=round(mean(retrieval_values), 3),
+        average_total_ms=round(mean(total_values), 3),
+        p95_retrieval_ms=round(_percentile(retrieval_values, 0.95), 3),
+        p95_total_ms=round(_percentile(total_values, 0.95), 3),
+        recent_average_total_ms=round(mean(recent_values), 3),
     )
 
 
@@ -542,9 +544,14 @@ def _retrieval_analytics(queries: QueryAnalytics) -> RetrievalAnalytics:
         vector_index_backend=settings.vector_index_backend,
         reranker_runtime=settings.local_reranker_runtime,
         average_retrieval_ms=queries.average_retrieval_ms,
+        p95_retrieval_ms=queries.p95_retrieval_ms,
         retrieval_warning_ms=settings.retrieval_latency_warning_ms,
         retrieval_attention=(
-            queries.total > 0 and queries.average_retrieval_ms > settings.retrieval_latency_warning_ms
+            queries.total > 0
+            and (
+                queries.average_retrieval_ms > settings.retrieval_latency_warning_ms
+                or queries.p95_retrieval_ms > settings.retrieval_latency_warning_ms
+            )
         ),
     )
 
@@ -591,4 +598,13 @@ def _evaluation_analytics() -> EvaluationAnalytics:
         context_precision=summary["context_precision"],
         context_recall=summary["context_recall"],
         answer_relevance=summary["answer_relevance"],
+        answer_groundedness=summary["answer_groundedness"],
     )
+
+
+def _percentile(values: list[float], percentile: float) -> float:
+    if not values:
+        return 0.0
+    ordered = sorted(values)
+    index = min(len(ordered) - 1, max(0, round((len(ordered) - 1) * percentile)))
+    return ordered[index]

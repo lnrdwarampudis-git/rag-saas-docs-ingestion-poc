@@ -8,6 +8,7 @@ class EvaluationSummary(BaseModel):
     context_precision: float
     context_recall: float
     answer_relevance: float
+    answer_groundedness: float
     targets: dict[str, float]
 
 
@@ -17,6 +18,7 @@ class EvaluationCaseResult(BaseModel):
     context_precision: float
     context_recall: float
     answer_relevance: float
+    answer_groundedness: float
     retrieved_document_ids: list[str]
     expected_document_ids: list[str]
     answer: str
@@ -25,4 +27,3 @@ class EvaluationCaseResult(BaseModel):
 class EvaluationReport(BaseModel):
     summary: EvaluationSummary
     results: list[EvaluationCaseResult]
-

@@ -28,12 +28,16 @@ class QueryAnalytics(BaseModel):
     cache_hit_rate: float = 0.0
     average_retrieval_ms: float = 0.0
     average_total_ms: float = 0.0
+    p95_retrieval_ms: float = 0.0
+    p95_total_ms: float = 0.0
+    recent_average_total_ms: float = 0.0
 
 
 class RetrievalAnalytics(BaseModel):
     vector_index_backend: str = "memory"
     reranker_runtime: str = "none"
     average_retrieval_ms: float = 0.0
+    p95_retrieval_ms: float = 0.0
     retrieval_warning_ms: float = 1500.0
     retrieval_attention: bool = False
 
@@ -45,6 +49,7 @@ class EvaluationAnalytics(BaseModel):
     context_precision: float = 0.0
     context_recall: float = 0.0
     answer_relevance: float = 0.0
+    answer_groundedness: float = 0.0
 
 
 class AuditEvent(BaseModel):

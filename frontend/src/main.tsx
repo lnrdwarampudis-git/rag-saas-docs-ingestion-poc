@@ -183,6 +183,7 @@ type EvaluationReport = {
     context_precision: number;
     context_recall: number;
     answer_relevance: number;
+    answer_groundedness: number;
     targets: Record<string, number>;
   };
   results: Array<{
@@ -191,6 +192,7 @@ type EvaluationReport = {
     context_precision: number;
     context_recall: number;
     answer_relevance: number;
+    answer_groundedness: number;
     retrieved_document_ids: string[];
     expected_document_ids: string[];
     answer: string;
@@ -223,11 +225,15 @@ type AnalyticsReport = {
     cache_hit_rate: number;
     average_retrieval_ms: number;
     average_total_ms: number;
+    p95_retrieval_ms: number;
+    p95_total_ms: number;
+    recent_average_total_ms: number;
   };
   retrieval: {
     vector_index_backend: string;
     reranker_runtime: string;
     average_retrieval_ms: number;
+    p95_retrieval_ms: number;
     retrieval_warning_ms: number;
     retrieval_attention: boolean;
   };
@@ -238,6 +244,7 @@ type AnalyticsReport = {
     context_precision: number;
     context_recall: number;
     answer_relevance: number;
+    answer_groundedness: number;
   };
   recent_events: Array<{
     action: string;
@@ -1409,6 +1416,7 @@ function EvaluationPanel({
         <StatusItem label="Context precision" value={formatPercent(summary?.context_precision)} />
         <StatusItem label="Context recall" value={formatPercent(summary?.context_recall)} />
         <StatusItem label="Answer relevance" value={formatPercent(summary?.answer_relevance)} />
+        <StatusItem label="Groundedness" value={formatPercent(summary?.answer_groundedness)} />
       </div>
 
       <div className="evaluation-case-list">
@@ -1418,7 +1426,7 @@ function EvaluationPanel({
               <strong>{item.case_id}</strong>
               <span>
                 P {formatPercent(item.context_precision)} / R {formatPercent(item.context_recall)} /
-                A {formatPercent(item.answer_relevance)}
+                A {formatPercent(item.answer_relevance)} / G {formatPercent(item.answer_groundedness)}
               </span>
             </div>
             <Badge label={item.passed ? "PASS" : "FAIL"} />
@@ -1476,6 +1484,14 @@ function AnalyticsPanel({
           label="Avg total"
           value={report ? formatMilliseconds(report.queries.average_total_ms) : "Loading"}
         />
+        <StatusItem
+          label="P95 total"
+          value={report ? formatMilliseconds(report.queries.p95_total_ms) : "Loading"}
+        />
+        <StatusItem
+          label="Recent avg"
+          value={report ? formatMilliseconds(report.queries.recent_average_total_ms) : "Loading"}
+        />
       </div>
 
       <div className="analytics-subgrid">
@@ -1485,7 +1501,7 @@ function AnalyticsPanel({
             report
               ? `${formatMilliseconds(report.queries.average_retrieval_ms)} retrieval / ${formatMilliseconds(
                   report.queries.average_total_ms
-                )} total`
+                )} total / ${formatMilliseconds(report.queries.p95_retrieval_ms)} p95 retrieval`
               : "Loading"
           }
         />
@@ -1513,7 +1529,7 @@ function AnalyticsPanel({
             report
               ? `${report.evaluation.passed}/${report.evaluation.cases} cases / ${formatPercent(
                   report.evaluation.context_precision
-                )} precision`
+                )} precision / ${formatPercent(report.evaluation.answer_groundedness)} grounded`
               : "Loading"
           }
         />

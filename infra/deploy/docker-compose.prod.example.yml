@@ -1,0 +1,44 @@
+services:
+  backend:
+    restart: unless-stopped
+    environment:
+      ENVIRONMENT: ${ENVIRONMENT:-production}
+      ENABLE_DB_PERSISTENCE: ${ENABLE_DB_PERSISTENCE:-true}
+      VECTOR_INDEX_BACKEND: ${VECTOR_INDEX_BACKEND:-qdrant}
+      UPLOAD_SESSION_STORAGE_BACKEND: ${UPLOAD_SESSION_STORAGE_BACKEND:-minio}
+    ports: []
+
+  frontend:
+    restart: unless-stopped
+    ports:
+      - "${FRONTEND_PORT:-5173}:80"
+
+  worker:
+    restart: unless-stopped
+    deploy:
+      replicas: ${WORKER_REPLICAS:-1}
+
+  worker-ocr:
+    restart: unless-stopped
+    deploy:
+      replicas: ${OCR_WORKER_REPLICAS:-1}
+
+  postgres:
+    restart: unless-stopped
+    ports: []
+
+  redis:
+    restart: unless-stopped
+    ports: []
+
+  minio:
+    restart: unless-stopped
+    ports: []
+
+  qdrant:
+    restart: unless-stopped
+    ports: []
+
+  keycloak:
+    restart: unless-stopped
+    ports: []

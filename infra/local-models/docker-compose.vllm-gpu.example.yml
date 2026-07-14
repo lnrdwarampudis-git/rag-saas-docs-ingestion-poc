@@ -1,0 +1,46 @@
+services:
+  vllm:
+    image: vllm/vllm-openai:latest
+    command:
+      - --model
+      - ${VLLM_MODEL:-mistralai/Mistral-7B-Instruct-v0.3}
+      - --host
+      - 0.0.0.0
+      - --port
+      - "8000"
+    environment:
+      HUGGING_FACE_HUB_TOKEN: ${HUGGING_FACE_HUB_TOKEN:-}
+    ports:
+      - "${VLLM_PORT:-8000}:8000"
+    volumes:
+      - vllm_cache:/root/.cache/huggingface
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: ${GPU_COUNT:-1}
+              capabilities: [gpu]
+
+  reranker:
+    image: ghcr.io/huggingface/text-embeddings-inference:latest
+    command:
+      - --model-id
+      - ${RERANKER_MODEL:-BAAI/bge-reranker-base}
+      - --port
+      - "8081"
+    ports:
+      - "${RERANKER_PORT:-8081}:8081"
+    volumes:
+      - reranker_cache:/data
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: ${GPU_COUNT:-1}
+              capabilities: [gpu]
+
+volumes:
+  vllm_cache:
+  reranker_cache:

@@ -20,7 +20,7 @@ Authenticated users can also fetch the same quality gate through the API:
 GET /api/v1/evaluation/retrieval
 ```
 
-The React console renders this report in the Evaluation panel so demos can show the current pass/fail state, average context precision, context recall, answer relevance, and per-case results without leaving the UI.
+The React console renders this report in the Evaluation panel so demos can show the current pass/fail state, average context precision, context recall, answer relevance, answer groundedness, and per-case results without leaving the UI.
 
 ## Dataset
 
@@ -39,17 +39,21 @@ Each case defines:
 - expected source document ids
 - expected answer terms
 
+The checked-in dataset includes positive retrieval cases, RBAC-denial cases, tenant-isolation cases, private-owner denial cases, and no-answer behavior.
+
 ## Metrics
 
 - Context Precision: percentage of retrieved documents that are expected.
 - Context Recall: percentage of expected documents retrieved.
 - Answer Relevance: percentage of expected answer terms present in the generated/extractive answer.
+- Answer Groundedness: percentage of non-boilerplate answer terms that are supported by retrieved context, with no-answer responses treated as grounded when no authorized context is expected.
 
 Current targets:
 
 - Context Precision >= 0.85
 - Context Recall >= 0.80
 - Answer Relevance >= 0.85
+- Answer Groundedness >= 0.90
 
 ## Precision Guardrails
 
@@ -80,7 +84,7 @@ LOCAL_LLM_BASE_URL=http://localhost:11434
 PUBLIC_LLM_ENABLED=false
 ```
 
-The default local runtimes are deterministic so tests and demos run without model downloads. `LOCAL_EMBEDDING_RUNTIME=ollama` can be used for local semantic embeddings when an Ollama embedding model is available, and `LOCAL_LLM_RUNTIME=ollama` can be used for local answer generation when an Ollama generation model is available. Future local upgrades should add vLLM embeddings/generation and reranker models such as BGE reranker.
+The default local runtimes are deterministic so tests and demos run without model downloads. `LOCAL_MODEL_PROFILE=host-ollama`, `compose-ollama`, or `vllm-gpu` can switch to stronger local runtimes when those services are available.
 
 Public token-based LLMs should be added later behind explicit config flags only when deployment policy allows external API usage.
 

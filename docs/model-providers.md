@@ -102,6 +102,8 @@ PUBLIC_LLM_ENABLED=false
 
 Profiles can still be overridden later by returning to `LOCAL_MODEL_PROFILE=custom` and setting individual runtime values.
 
+For deployment commands and the separate vLLM GPU Compose example, see [Local Model Deployment](local-model-deployment.md).
+
 ## Vector Indexing And Reranking
 
 The query pipeline asks the configured vector index for tenant-safe candidates before hybrid scoring. Defaults use the in-memory vector index and deterministic hashing embeddings. When `VECTOR_INDEX_BACKEND=pgvector` and `ENABLE_DB_PERSISTENCE=true`, ingestion writes chunk embeddings to `document_chunks.embedding`, and query retrieval orders candidates with pgvector before the existing keyword/early-term/hybrid score is applied. `VECTOR_INDEX_BACKEND=qdrant` writes/searches vectors in Qdrant using RBAC metadata payload filters plus the application-level authorization check.

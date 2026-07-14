@@ -18,8 +18,9 @@ def test_analytics_endpoint_returns_operational_summary(api_client_as) -> None:
     assert response.status_code == 200
     payload = response.json()
     assert set(payload) == {"documents", "jobs", "queries", "retrieval", "evaluation", "recent_events"}
-    assert payload["evaluation"]["cases"] == 3
+    assert payload["evaluation"]["cases"] == 5
     assert payload["evaluation"]["failed"] == 0
+    assert payload["evaluation"]["answer_groundedness"] >= 0.9
     assert payload["retrieval"]["vector_index_backend"] == "memory"
 
 
@@ -59,6 +60,7 @@ def test_analytics_counts_in_memory_documents_and_query_events(api_client_as) ->
     assert payload["queries"]["cache_hits"] >= 1
     assert payload["queries"]["cache_hit_rate"] > 0
     assert payload["retrieval"]["average_retrieval_ms"] >= 0
+    assert payload["retrieval"]["p95_retrieval_ms"] >= 0
 
 
 def test_retrieval_analytics_flags_slow_average(monkeypatch) -> None:
@@ -107,6 +109,7 @@ def test_persistent_query_analytics_rolls_up_recent_events(monkeypatch) -> None:
                 VALUES
                   (:tenant_id, 0, 10.0, 30.0),
                   (:tenant_id, 1, 4.0, 8.0),
+                  (:tenant_id, 0, 25.0, 80.0),
                   (:other_tenant_id, 1, 1.0, 1.0)
                 """
             ),
@@ -131,12 +134,15 @@ def test_persistent_query_analytics_rolls_up_recent_events(monkeypatch) -> None:
     )
 
     assert report is not None
-    assert report.total == 2
+    assert report.total == 3
     assert report.cache_hits == 1
-    assert report.cache_misses == 1
-    assert report.cache_hit_rate == 0.5
-    assert report.average_retrieval_ms == 7.0
-    assert report.average_total_ms == 19.0
+    assert report.cache_misses == 2
+    assert report.cache_hit_rate == 0.3333
+    assert report.average_retrieval_ms == 13.0
+    assert report.average_total_ms == 39.333
+    assert report.p95_retrieval_ms == 25.0
+    assert report.p95_total_ms == 80.0
+    assert report.recent_average_total_ms == 39.333
 
 
 def test_persistent_audit_events_return_recent_tenant_history(monkeypatch) -> None:
