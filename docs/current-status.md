@@ -21,6 +21,12 @@ This page is the short handoff for what the POC supports today, how to run it, a
 - Parser/OCR extraction warnings returned by ingest APIs, persisted in document metadata, and surfaced in document inventory/detail UI.
 - Extraction duration, OCR duration, and OCR page counts returned by ingest APIs, persisted in document metadata, and surfaced in document detail UI.
 
+## Recently Completed Ops Extensions
+
+- Large-file ingestion ops now include the React `Upload session` action, tenant/uploader-bound resumable sessions, filesystem or MinIO part storage, direct browser-to-MinIO presigned uploads, completed-session cleanup, stale-session cleanup, `MINIO_PUBLIC_ENDPOINT` for browser-reachable presigned URLs, and local MinIO CORS setup guidance.
+- Persistent vector retrieval operations now include pgvector and Qdrant adapter paths, a vector backfill command, vector backend metrics in query responses, vector-index readiness in `/api/v1/model-status`, and retrieval backend/reranker warning state in `/api/v1/analytics`.
+- Stronger local model foundations now include Ollama embedding and answer-generation paths, model-status checks for embedding/answer/vector/reranker runtimes, deterministic local keyword reranking, latency warning threshold config, and UI surfaces for active model, vector, reranker, and threshold state.
+
 ## Supported Document Intake Today
 
 | Format | Status | Notes |

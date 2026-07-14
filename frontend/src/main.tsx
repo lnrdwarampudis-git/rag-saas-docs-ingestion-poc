@@ -745,7 +745,7 @@ function AuthenticatedApp() {
           </div>
           <div>
             <h1>RAG Console</h1>
-            <span>Week 3 UI</span>
+            <span>Operations UI</span>
           </div>
         </div>
         <nav className="nav-list" aria-label="Primary">

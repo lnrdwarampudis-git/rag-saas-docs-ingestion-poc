@@ -1,8 +1,8 @@
 # RAG SaaS Docs Ingestion POC
 
-Open-source proof of concept for a multi-tenant SaaS RAG document ingestion and query workflow. It handles browser file upload, PDF and Microsoft Office text extraction, OCR-ready parsing, chunking, RBAC-aware retrieval, Redis query caching, Postgres persistence, visible A&A/session management surfaces, and a React/Vite UI.
+Open-source proof of concept for a multi-tenant SaaS RAG document ingestion and query workflow. It handles browser file upload, large-file upload sessions, PDF and Microsoft Office text extraction, OCR-ready parsing, chunking, RBAC-aware retrieval, Redis query caching, Postgres persistence, local model provider/runtime controls, visible A&A/session management surfaces, and a React/Vite UI.
 
-The milestone targets are:
+The implemented milestone path is:
 
 - Week 1: database setup, document ingestion foundations, OCR-aware text extraction, and chunking strategies for a multi-tenant RAG SaaS that can scale toward approximately 1 TB of Microsoft Office, PDF, and image-backed documents.
 - Week 2: RAG pipeline creation, Redis query caching, retrieval interface, citation output, and API contracts for the Week 3 UI.
@@ -11,6 +11,7 @@ The milestone targets are:
 - Week 5: Keycloak OIDC login (Authorization Code + PKCE), JWT validation middleware, Postgres-backed RBAC, and stateless-JWT session management.
 - Week 6: background document ingestion with queued upload, Redis worker polling, processing job status APIs, and UI job status polling.
 - Week 7: retrieval evaluation, precision thresholds, and local/open-source model strategy.
+- Current ops extensions: resumable upload sessions with filesystem or MinIO part storage, direct browser-to-MinIO presigned upload mode, upload-session cleanup, pgvector/Qdrant vector-index adapters, deterministic local keyword reranking, model/runtime readiness status, and retrieval ops analytics.
 
 ## Quick Start
 
@@ -87,8 +88,10 @@ For full setup, execution, test, and GitHub export instructions, see:
 - Week 6 background ingestion path with queued upload, Redis-backed worker polling, processing job status/retry APIs, and UI job polling
 - Week 7 offline retrieval evaluation dataset and runner with context precision, context recall, and answer relevance checks
 - Authenticated retrieval evaluation API and UI quality gate panel
-- Local/open-source model provider abstraction for deterministic hashing embeddings, optional Ollama embeddings, extractive answer generation, and optional Ollama answer generation, with later adapter paths for vLLM and gated public providers
-- Authenticated admin analytics API and UI summary for document ingestion, processing jobs, persisted query cache/latency, recent audit operations, and retrieval evaluation health
+- Resumable upload-session API and UI action with filesystem part uploads, MinIO part storage, presigned browser-direct MinIO uploads, completed-session cleanup, stale-session cleanup, public MinIO presign endpoint config, and bucket CORS guidance
+- Vector retrieval operations with in-memory default, pgvector and Qdrant adapters, vector backfill command, vector/reranker query metrics, model-status readiness checks, and analytics warning thresholds
+- Local/open-source model provider abstraction for deterministic hashing embeddings, optional Ollama embeddings, extractive answer generation, optional Ollama answer generation, model/runtime readiness checks, and later adapter paths for vLLM and gated public providers
+- Authenticated admin analytics API and UI summary for document ingestion, processing jobs, persisted query cache/latency, vector/reranker retrieval state, recent audit operations, and retrieval evaluation health
 
 ## Recommended Week 1 Commands
 
@@ -158,7 +161,7 @@ The analytics endpoint powers the UI's Admin operations summary. It returns tena
 
 Successful query requests also write `query.executed` audit events with safe metadata such as query hash, query length, cache state, latency, contexts used, models, and cited document ids. Raw query text is not stored in the audit log.
 
-The ingestion endpoint accepts a local file path for Week 1 development. Production upload should stream files into MinIO first, then enqueue parsing and chunking workers.
+The ingestion endpoint accepts a local file path for development and mounted-volume workflows. For SaaS-style large files, use browser uploads, queued uploads, or the resumable upload-session flow; with `UPLOAD_SESSION_STORAGE_BACKEND=minio`, upload-session parts can go directly from the browser to MinIO before the app assembles and enqueues processing.
 
 The upload endpoint accepts multipart browser uploads and is the preferred local SaaS-style flow because it does not require Docker path mapping.
 

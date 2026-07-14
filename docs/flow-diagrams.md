@@ -81,6 +81,45 @@ sequenceDiagram
   API-->>UI: Authorized document detail + chunk preview
 ```
 
+## Resumable Upload Session Flow
+
+```mermaid
+sequenceDiagram
+  actor Member
+  participant UI as React/Vite UI
+  participant API as FastAPI Documents API
+  participant MinIO as MinIO Upload Session Bucket
+  participant Redis as Redis Queues
+  participant Worker as app.worker
+
+  Member->>UI: Select file and click "Upload session"
+  UI->>API: POST /api/v1/documents/upload-sessions
+  API->>API: Validate JWT, tenant/uploader, file type, and byte limit
+  API-->>UI: upload_session_id, part_size_bytes, storage_backend
+  loop Each numbered part
+    alt filesystem storage backend
+      UI->>API: PUT /upload-sessions/{id}/parts/{part_number}
+      API->>API: Store part under UPLOAD_DIR/sessions
+      API-->>UI: Uploaded part list
+    else minio storage backend
+      UI->>API: POST /upload-sessions/{id}/parts/{part_number}/presign
+      API->>MinIO: Generate presigned PUT with MINIO_PUBLIC_ENDPOINT
+      API-->>UI: Browser-reachable presigned URL
+      UI->>MinIO: PUT part directly
+      UI->>API: POST /upload-sessions/{id}/parts/{part_number}/complete
+      API->>MinIO: Stat object and record uploaded part
+      API-->>UI: Uploaded part list
+    end
+  end
+  UI->>API: POST /upload-sessions/{id}/complete
+  API->>API: Assemble parts into upload file
+  API->>API: Delete temporary part storage
+  API->>Redis: Enqueue processing job
+  API-->>UI: 202 Accepted processing job
+  Worker->>Redis: BLPOP job_id
+  Worker->>API: Processing continues through normal ingestion path
+```
+
 ## Authorized Query Flow
 
 ```mermaid
