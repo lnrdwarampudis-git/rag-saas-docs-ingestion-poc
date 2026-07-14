@@ -282,6 +282,40 @@ def test_resumable_upload_session_completes_to_processing_job(
     assert payload["status"] == "queued"
 
 
+def test_resumable_upload_session_returns_minio_presigned_part_url(
+    tmp_path: Path,
+    api_client_as,
+    monkeypatch,
+) -> None:
+    import app.rag.upload_sessions as upload_sessions
+
+    class FakeMinioClient:
+        def presigned_put_object(self, bucket, object_name, expires):
+            assert bucket == "rag-upload-sessions"
+            assert object_name.endswith("/parts/00000001.part")
+            return "http://minio.test/presigned-part"
+
+    settings = get_settings()
+    monkeypatch.setattr(settings, "upload_dir", str(tmp_path))
+    monkeypatch.setattr(settings, "upload_session_storage_backend", "minio")
+    monkeypatch.setattr(upload_sessions, "_minio_client", lambda: FakeMinioClient())
+    client = api_client_as("00000000-0000-4000-8000-000000000022", ["admin"])
+
+    create_response = client.post(
+        "/api/v1/documents/upload-sessions",
+        json={"file_name": "large-policy.txt", "byte_size": 11},
+    )
+    session = create_response.json()
+    presign_response = client.post(
+        f"/api/v1/documents/upload-sessions/{session['upload_session_id']}/parts/1/presign"
+    )
+
+    assert presign_response.status_code == 200
+    payload = presign_response.json()
+    assert payload["method"] == "PUT"
+    assert payload["url"] == "http://minio.test/presigned-part"
+
+
 def test_async_upload_job_can_be_processed_then_queried(api_client_as) -> None:
     tenant_id = "00000000-0000-4000-8000-000000000006"
     client = api_client_as(tenant_id, ["admin"], "async-admin")

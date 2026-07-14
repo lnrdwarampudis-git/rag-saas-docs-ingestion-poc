@@ -450,6 +450,35 @@ button {
   line-height: 1.45;
 }
 
+.upload-progress {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 42px;
+  align-items: center;
+  gap: 10px;
+  min-height: 18px;
+}
+
+.upload-progress-track {
+  height: 8px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: #dce7e1;
+}
+
+.upload-progress-track span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: #2c765a;
+  transition: width 160ms ease;
+}
+
+.upload-progress strong {
+  color: #2f4038;
+  font-size: 12px;
+  text-align: right;
+}
+
 .field input,
 .field textarea {
   width: 100%;

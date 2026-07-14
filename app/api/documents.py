@@ -17,6 +17,8 @@ from app.rag.upload_sessions import (
     assemble_upload_session,
     create_upload_session,
     get_upload_session,
+    mark_presigned_upload_part,
+    presign_upload_part,
     save_upload_part,
 )
 from app.schemas.documents import (
@@ -27,6 +29,7 @@ from app.schemas.documents import (
     DocumentSummary,
     IngestRequest,
     ProcessingJobStatus,
+    UploadPartPresignResponse,
     UploadSessionCreateRequest,
     UploadSessionStatus,
 )
@@ -48,6 +51,7 @@ def _upload_session_status(upload_session_id: UUID) -> UploadSessionStatus:
         part_size_bytes=get_settings().upload_session_part_bytes,
         uploaded_parts=session.uploaded_parts,
         complete=False,
+        storage_backend=get_settings().upload_session_storage_backend,
     )
 
 
@@ -172,6 +176,7 @@ def create_resumable_upload_session(
         part_size_bytes=get_settings().upload_session_part_bytes,
         uploaded_parts=[],
         complete=False,
+        storage_backend=get_settings().upload_session_storage_backend,
     )
 
 
@@ -193,6 +198,39 @@ def put_resumable_upload_part(
 ) -> UploadSessionStatus:
     _require_upload_session_access(upload_session_id, current_user)
     save_upload_part(upload_session_id, part_number, file)
+    return _upload_session_status(upload_session_id)
+
+
+@router.post(
+    "/upload-sessions/{upload_session_id}/parts/{part_number}/presign",
+    response_model=UploadPartPresignResponse,
+)
+def presign_resumable_upload_part(
+    upload_session_id: UUID,
+    part_number: int,
+    current_user: AuthenticatedUser = Depends(get_current_user),
+) -> UploadPartPresignResponse:
+    _require_upload_session_access(upload_session_id, current_user)
+    url = presign_upload_part(upload_session_id, part_number)
+    return UploadPartPresignResponse(
+        upload_session_id=upload_session_id,
+        part_number=part_number,
+        url=url,
+        expires_in_seconds=get_settings().upload_session_presign_expiry_seconds,
+    )
+
+
+@router.post(
+    "/upload-sessions/{upload_session_id}/parts/{part_number}/complete",
+    response_model=UploadSessionStatus,
+)
+def complete_presigned_resumable_upload_part(
+    upload_session_id: UUID,
+    part_number: int,
+    current_user: AuthenticatedUser = Depends(get_current_user),
+) -> UploadSessionStatus:
+    _require_upload_session_access(upload_session_id, current_user)
+    mark_presigned_upload_part(upload_session_id, part_number)
     return _upload_session_status(upload_session_id)
 
 

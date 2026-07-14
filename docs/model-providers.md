@@ -20,6 +20,9 @@ LOCAL_EMBEDDING_BASE_URL=http://localhost:11434
 LOCAL_MODEL_REQUEST_TIMEOUT_SECONDS=30
 VECTOR_INDEX_BACKEND=memory
 PGVECTOR_DIMENSIONS=1024
+VECTOR_BACKFILL_BATCH_SIZE=100
+QDRANT_COLLECTION_NAME=rag_chunks
+QDRANT_REQUEST_TIMEOUT_SECONDS=10
 RERANKER_PROVIDER=none
 LOCAL_RERANKER_RUNTIME=none
 LOCAL_RERANKER_MODEL_NAME=none
@@ -41,11 +44,14 @@ PUBLIC_LLM_ENABLED=false
 | `LOCAL_EMBEDDING_RUNTIME` | `hashing`, `ollama` | `vllm` | `hashing` uses the deterministic in-process baseline; `ollama` calls `/api/embed` on `LOCAL_EMBEDDING_BASE_URL`. |
 | `LOCAL_EMBEDDING_MODEL_NAME` | `hashing-384`, any installed Ollama embedding model | BGE, E5, Mixedbread, or adapter model names | Informational for hashing; sent as `model` for Ollama; included in metrics/cache keys. |
 | `EMBEDDING_DIMENSIONS` | integer dimension count practical for local ranking | adapter-specific dimensions | Default is `384`; keep it greater than zero for hashing embeddings. |
-| `VECTOR_INDEX_BACKEND` | `memory`, `pgvector` | `qdrant` | `memory` keeps tests/local demos deterministic; `pgvector` stores embeddings in PostgreSQL when DB persistence is enabled. |
+| `VECTOR_INDEX_BACKEND` | `memory`, `pgvector`, `qdrant` | additional managed vector stores | `memory` keeps tests/local demos deterministic; `pgvector` stores embeddings in PostgreSQL; `qdrant` writes/searches the configured Qdrant collection. |
 | `PGVECTOR_DIMENSIONS` | `1024` | adapter-specific dimensions | Matches the current `document_chunks.embedding vector(1024)` column. Shorter embeddings are padded for pgvector storage. |
-| `RERANKER_PROVIDER` | `none` | `local` | `none` leaves hybrid retrieval order unchanged. |
-| `LOCAL_RERANKER_RUNTIME` | `none` | `cross-encoder`, `vllm` | Future local reranker adapters will plug into the existing reranker boundary. |
-| `LOCAL_RERANKER_MODEL_NAME` | `none` | local reranker model names | Included in cache keys/metrics when reranking is enabled later. |
+| `VECTOR_BACKFILL_BATCH_SIZE` | positive integer | adapter-tuned values | Used by `python -m app.rag.backfill_vectors`. |
+| `QDRANT_COLLECTION_NAME` | collection name | deployment-specific names | Default collection is `rag_chunks`. |
+| `QDRANT_REQUEST_TIMEOUT_SECONDS` | positive number | deployment-specific values | Used by the Qdrant HTTP adapter. |
+| `RERANKER_PROVIDER` | `none`, `local` | managed/provider-specific rerankers | `none` leaves hybrid retrieval order unchanged; `local` enables local runtimes. |
+| `LOCAL_RERANKER_RUNTIME` | `none`, `keyword` | `cross-encoder`, `vllm` | `keyword` is deterministic and local; heavier runtimes remain reserved. |
+| `LOCAL_RERANKER_MODEL_NAME` | `none`, `keyword-overlap` | local reranker model names | Included in cache keys/metrics when reranking is enabled. |
 | `RERANKER_CANDIDATE_MULTIPLIER` | positive integer | adapter-tuned values | Controls how many initial candidates are retrieved before final top-k reranking. |
 | `LOCAL_MODEL_REQUEST_TIMEOUT_SECONDS` | positive number | adapter-specific timeouts | Used by Ollama HTTP clients. |
 | `LLM_PROVIDER` | `local` | public token-based providers | Public providers require `PUBLIC_LLM_ENABLED=true` and adapter code. |
@@ -55,13 +61,19 @@ PUBLIC_LLM_ENABLED=false
 
 If `LOCAL_EMBEDDING_RUNTIME=vllm` or `LOCAL_LLM_RUNTIME=vllm` is set before those adapters exist, startup/query construction raises `ModelProviderConfigurationError`. That failure is deliberate: it prevents silently falling back to a different model path.
 
-If `RERANKER_PROVIDER=local` is selected before a `cross-encoder` or `vllm` adapter is implemented, query construction raises `RerankerConfigurationError` for the same reason.
+If `RERANKER_PROVIDER=local` is selected with `LOCAL_RERANKER_RUNTIME=cross-encoder` or `vllm` before those adapters exist, query construction raises `RerankerConfigurationError` for the same reason.
 
 ## Vector Indexing And Reranking
 
-The query pipeline asks the configured vector index for tenant-safe candidates before hybrid scoring. Defaults use the in-memory vector index and deterministic hashing embeddings. When `VECTOR_INDEX_BACKEND=pgvector` and `ENABLE_DB_PERSISTENCE=true`, ingestion writes chunk embeddings to `document_chunks.embedding`, and query retrieval orders candidates with pgvector before the existing keyword/early-term/hybrid score is applied.
+The query pipeline asks the configured vector index for tenant-safe candidates before hybrid scoring. Defaults use the in-memory vector index and deterministic hashing embeddings. When `VECTOR_INDEX_BACKEND=pgvector` and `ENABLE_DB_PERSISTENCE=true`, ingestion writes chunk embeddings to `document_chunks.embedding`, and query retrieval orders candidates with pgvector before the existing keyword/early-term/hybrid score is applied. `VECTOR_INDEX_BACKEND=qdrant` writes/searches vectors in Qdrant using RBAC metadata payload filters plus the application-level authorization check.
 
-The reranker boundary runs after initial retrieval. The current default `RERANKER_PROVIDER=none` returns the existing order unchanged while adding provider/runtime/model names to cache keys and metrics. This keeps today stable and leaves a direct adapter point for local cross-encoder or vLLM reranking.
+Backfill persisted chunks after changing vector backends or embedding models:
+
+```bash
+python -m app.rag.backfill_vectors
+```
+
+The reranker boundary runs after initial retrieval. The default `RERANKER_PROVIDER=none` returns the existing order unchanged while adding provider/runtime/model names to cache keys and metrics. `RERANKER_PROVIDER=local` with `LOCAL_RERANKER_RUNTIME=keyword` applies a deterministic local keyword-overlap rerank step. This keeps today stable and leaves a direct adapter point for local cross-encoder or vLLM reranking.
 
 ## Ollama Embeddings
 

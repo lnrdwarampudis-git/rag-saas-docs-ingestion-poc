@@ -1,7 +1,9 @@
 from app.rag.embeddings import HashingEmbeddingModel
 from app.rag.retrieval import HybridRetriever, RetrievalRequest
-from app.rag.vector_index import InMemoryVectorIndex
+from app.rag.vector_index import InMemoryVectorIndex, QdrantVectorIndex
 from app.schemas.documents import ChunkDTO
+from app.config import Settings
+import httpx
 
 
 def test_retrieval_filters_role_restricted_chunks() -> None:
@@ -155,3 +157,62 @@ def test_memory_vector_index_filters_candidates_by_tenant_and_role() -> None:
     )
 
     assert [result.metadata["document_id"] for result in results] == ["doc-1"]
+
+
+def test_qdrant_vector_index_upserts_and_searches_with_tenant_filter() -> None:
+    requests: list[httpx.Request] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        requests.append(request)
+        if request.method == "GET":
+            return httpx.Response(404)
+        if request.url.path.endswith("/points/search"):
+            return httpx.Response(
+                200,
+                json={
+                    "result": [
+                        {
+                            "payload": {
+                                "chunk_index": 0,
+                                "text": "Redis cache improves retrieval latency.",
+                                "token_count": 5,
+                                "tenant_id": "tenant-1",
+                                "document_id": "doc-1",
+                                "visibility": "tenant",
+                                "allowed_role_names": [],
+                            }
+                        }
+                    ]
+                },
+            )
+        return httpx.Response(200, json={"result": {"status": "ok"}})
+
+    client = httpx.Client(base_url="http://qdrant.test", transport=httpx.MockTransport(handler))
+    index = QdrantVectorIndex(
+        Settings(_env_file=None, qdrant_url="http://qdrant.test", pgvector_dimensions=8),
+        client=client,
+    )
+    embedding_model = HashingEmbeddingModel()
+    chunk = ChunkDTO(
+        chunk_index=0,
+        text="Redis cache improves retrieval latency.",
+        token_count=5,
+        metadata={
+            "tenant_id": "tenant-1",
+            "document_id": "doc-1",
+            "visibility": "tenant",
+            "allowed_role_names": [],
+        },
+    )
+
+    index.upsert_chunks([chunk], embedding_model)
+    results = index.search(
+        RetrievalRequest(query="Redis retrieval", tenant_id="tenant-1", role_names=[]),
+        embedding_model,
+        candidate_limit=3,
+    )
+
+    assert results[0].metadata["document_id"] == "doc-1"
+    search_payload = requests[-1].read()
+    assert b'"tenant_id"' in search_payload
+    assert b'"tenant-1"' in search_payload

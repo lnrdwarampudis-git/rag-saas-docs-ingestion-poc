@@ -86,3 +86,12 @@ class UploadSessionStatus(BaseModel):
     part_size_bytes: int
     uploaded_parts: list[int] = Field(default_factory=list)
     complete: bool = False
+    storage_backend: str = "filesystem"
+
+
+class UploadPartPresignResponse(BaseModel):
+    upload_session_id: UUID
+    part_number: int
+    method: str = "PUT"
+    url: str
+    expires_in_seconds: int

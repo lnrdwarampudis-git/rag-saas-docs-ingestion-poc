@@ -165,7 +165,9 @@ flowchart LR
   localEmbedding --> futureEmbedding["Future vLLM or BGE/E5 adapter"]
   vectorIndex --> memoryIndex["Default in-memory vector index"]
   vectorIndex --> pgvectorIndex["Optional pgvector index"]
+  vectorIndex --> qdrantIndex["Optional Qdrant index"]
   rerankerProvider --> noReranker["Default no reranker"]
+  rerankerProvider --> keywordReranker["Optional local keyword reranker"]
   rerankerProvider --> futureReranker["Future local cross-encoder / vLLM reranker"]
   llmProvider --> localLlm{"local"}
   localLlm --> extractive["Default extractive generator"]
@@ -179,7 +181,9 @@ flowchart LR
   ollamaEmbedding --> cacheKey
   ollamaLlm --> cacheKey
   pgvectorIndex --> cacheKey
+  qdrantIndex --> cacheKey
   noReranker --> cacheKey
+  keywordReranker --> cacheKey
   futureReranker --> cacheKey
 ```
 

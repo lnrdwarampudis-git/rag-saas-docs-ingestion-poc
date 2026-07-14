@@ -9,14 +9,14 @@ This page is the short handoff for what the POC supports today, how to run it, a
 - Docker Compose stack for backend, frontend, default worker, OCR worker, Postgres/pgvector, Redis, MinIO, Qdrant, and Keycloak.
 - Background ingestion through `POST /api/v1/documents/upload-async`, Redis queues, and `python -m app.worker`.
 - Configurable upload guardrails for browser uploads: allowed extensions and maximum byte size are enforced by the API and pre-checked in the UI.
-- Resumable upload-session API groundwork for large files with tenant/uploader-bound sessions and async completion.
+- Resumable upload-session API for large files with tenant/uploader-bound sessions, filesystem or MinIO part storage, presigned MinIO part URLs, browser upload progress, and async completion.
 - Processing job status, local run, and retry controls through `GET /api/v1/processing-jobs/{job_id}`, `POST /api/v1/processing-jobs/{job_id}/run`, and `POST /api/v1/processing-jobs/{job_id}/retry`.
 - Tenant-scoped document inventory, chunk preview, query pipeline, citations, Redis query cache, and cache/model-aware query metrics.
 - Offline retrieval quality gate through `python -m app.eval.run` and authenticated UI/API evaluation status.
 - Admin analytics for documents, jobs, query volume/cache/latency, audit operations, and evaluation health.
 - Local/open-source model abstraction with deterministic hashing embeddings and extractive answer generation as defaults.
 - Optional Ollama embeddings and answer generation for local models, including tested Mac-host Ollama access from Docker through `host.docker.internal`.
-- Vector index abstraction with in-memory default and pgvector adapter path, plus default no-op reranker boundary for future local cross-encoder/vLLM reranking.
+- Vector index abstraction with in-memory default, pgvector and Qdrant adapter paths, vector backfill command, default no-op reranker, and deterministic local keyword reranker.
 - Container-packaged OCR for images and scanned/image-backed PDFs using Tesseract plus PyMuPDF page rendering.
 - Parser/OCR extraction warnings returned by ingest APIs, persisted in document metadata, and surfaced in document inventory/detail UI.
 - Extraction duration, OCR duration, and OCR page counts returned by ingest APIs, persisted in document metadata, and surfaced in document detail UI.
@@ -118,9 +118,9 @@ git diff --check
 
 Recommended next implementation slices:
 
-1. Finish large-file ingestion hardening: move upload-session parts to direct MinIO multipart/presigned uploads, add browser upload progress, and add object-storage lifecycle cleanup.
-2. Deepen persistent vector retrieval: production migration checks for existing databases, Qdrant adapter, index backfill command, and retrieval dashboards.
-3. Add stronger local ranking/model options: local cross-encoder reranker adapter, vLLM adapter path, model health dashboards, and performance thresholds.
+1. Finish large-file ingestion ops: stale-session cleanup, object-storage lifecycle cleanup, direct presigned upload UI mode, and production multipart tuning.
+2. Deepen persistent vector retrieval operations: production migration checks for existing databases, index backfill runbook automation, Qdrant payload/index tuning, and retrieval dashboards.
+3. Add stronger local model options: local cross-encoder reranker adapter, vLLM embedding/generation/reranking path, model health dashboards, and performance thresholds.
 4. Improve operations controls: job cancel/retry history, dead-letter queue, worker concurrency controls, and richer audit event filtering.
 5. Add deployment hardening: environment-specific Compose/prod manifests, secrets handling, backup/restore runbooks, and CI quality gates.
 6. Expand evaluation: more tenant/role fixtures, answer-groundedness checks, negative/no-answer cases, and regression trend history.

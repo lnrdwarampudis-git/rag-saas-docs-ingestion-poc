@@ -122,6 +122,9 @@ LOCAL_EMBEDDING_BASE_URL=http://localhost:11434
 LOCAL_MODEL_REQUEST_TIMEOUT_SECONDS=30
 VECTOR_INDEX_BACKEND=memory
 PGVECTOR_DIMENSIONS=1024
+VECTOR_BACKFILL_BATCH_SIZE=100
+QDRANT_COLLECTION_NAME=rag_chunks
+QDRANT_REQUEST_TIMEOUT_SECONDS=10
 RERANKER_PROVIDER=none
 LOCAL_RERANKER_RUNTIME=none
 LOCAL_RERANKER_MODEL_NAME=none
@@ -138,10 +141,10 @@ See [Model Providers](model-providers.md) for the full setting list, cache behav
 Confirm large-file and retrieval settings inside the backend container:
 
 ```bash
-docker compose exec backend python -c "import os; keys=['UPLOAD_SESSION_PART_BYTES','VECTOR_INDEX_BACKEND','PGVECTOR_DIMENSIONS','RERANKER_PROVIDER','LOCAL_RERANKER_RUNTIME']; print({k: os.environ.get(k) for k in keys})"
+docker compose exec backend python -c "import os; keys=['UPLOAD_SESSION_PART_BYTES','UPLOAD_SESSION_STORAGE_BACKEND','VECTOR_INDEX_BACKEND','PGVECTOR_DIMENSIONS','QDRANT_COLLECTION_NAME','RERANKER_PROVIDER','LOCAL_RERANKER_RUNTIME']; print({k: os.environ.get(k) for k in keys})"
 ```
 
-Use `VECTOR_INDEX_BACKEND=pgvector` only with `ENABLE_DB_PERSISTENCE=true`. The default `RERANKER_PROVIDER=none` is intentional until a local reranker adapter is added.
+Use `VECTOR_INDEX_BACKEND=pgvector` only with `ENABLE_DB_PERSISTENCE=true`. Use `VECTOR_INDEX_BACKEND=qdrant` for the Qdrant adapter, then run `python -m app.rag.backfill_vectors` after changing vector backend or embedding model. The default `RERANKER_PROVIDER=none` can be changed to `RERANKER_PROVIDER=local` and `LOCAL_RERANKER_RUNTIME=keyword` for deterministic local reranking.
 
 ## OCR Runtime Check
 

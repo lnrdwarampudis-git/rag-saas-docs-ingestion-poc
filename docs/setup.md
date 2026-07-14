@@ -196,22 +196,34 @@ Resumable upload-session defaults:
 
 ```text
 UPLOAD_SESSION_PART_BYTES=8388608
+UPLOAD_SESSION_STORAGE_BACKEND=filesystem
+UPLOAD_SESSION_BUCKET=rag-upload-sessions
+UPLOAD_SESSION_PRESIGN_EXPIRY_SECONDS=3600
 ```
 
-The upload-session API stores numbered parts under `UPLOAD_DIR/sessions`, reports uploaded part numbers for resume clients, and completes the assembled file into the existing async processing queue. Sessions are scoped to the authenticated tenant and uploader subject. For production-scale files, replace the local part store with direct MinIO multipart/presigned uploads and lifecycle cleanup.
+The upload-session API stores numbered parts, reports uploaded part numbers for resume clients, and completes the assembled file into the existing async processing queue. Sessions are scoped to the authenticated tenant and uploader subject. The default `filesystem` backend stores parts under `UPLOAD_DIR/sessions`. Use `UPLOAD_SESSION_STORAGE_BACKEND=minio` to store parts in MinIO and enable presigned part URLs for direct browser-to-object-storage upload. Production still needs stale-session and object lifecycle cleanup tuned for the deployment.
 
 Vector and reranker defaults:
 
 ```text
 VECTOR_INDEX_BACKEND=memory
 PGVECTOR_DIMENSIONS=1024
+VECTOR_BACKFILL_BATCH_SIZE=100
+QDRANT_COLLECTION_NAME=rag_chunks
+QDRANT_REQUEST_TIMEOUT_SECONDS=10
 RERANKER_PROVIDER=none
 LOCAL_RERANKER_RUNTIME=none
 LOCAL_RERANKER_MODEL_NAME=none
 RERANKER_CANDIDATE_MULTIPLIER=4
 ```
 
-Use `VECTOR_INDEX_BACKEND=pgvector` with `ENABLE_DB_PERSISTENCE=true` to store chunk embeddings in PostgreSQL and retrieve vector candidates through pgvector before hybrid scoring. The default `RERANKER_PROVIDER=none` keeps ranking deterministic while preserving the adapter boundary for local cross-encoder or vLLM rerankers.
+Use `VECTOR_INDEX_BACKEND=pgvector` with `ENABLE_DB_PERSISTENCE=true` to store chunk embeddings in PostgreSQL and retrieve vector candidates through pgvector before hybrid scoring. Use `VECTOR_INDEX_BACKEND=qdrant` to write/search vectors in Qdrant. After changing vector backends or embedding models, backfill persisted chunks:
+
+```bash
+python -m app.rag.backfill_vectors
+```
+
+The default `RERANKER_PROVIDER=none` keeps ranking deterministic. Use `RERANKER_PROVIDER=local` and `LOCAL_RERANKER_RUNTIME=keyword` for the deterministic local keyword reranker. Cross-encoder and vLLM reranker runtimes remain reserved until their adapters are implemented.
 
 OCR defaults:
 

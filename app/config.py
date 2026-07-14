@@ -12,7 +12,15 @@ class Settings(BaseSettings):
     ocr_processing_queue_name: str = "rag:processing-jobs:ocr"
     worker_queue_names: str = "rag:processing-jobs,rag:processing-jobs:ocr"
     minio_endpoint: str = "http://localhost:9000"
+    minio_access_key: str = "minio"
+    minio_secret_key: str = "minio123"
+    minio_secure: bool = False
+    upload_session_storage_backend: str = "filesystem"
+    upload_session_bucket: str = "rag-upload-sessions"
+    upload_session_presign_expiry_seconds: int = 3600
     qdrant_url: str = "http://localhost:6333"
+    qdrant_collection_name: str = "rag_chunks"
+    qdrant_request_timeout_seconds: float = 10.0
     keycloak_issuer: str = "http://localhost:8080/realms/rag"
     keycloak_audience: str = "rag-api"
     keycloak_client_id: str = "rag-frontend"
@@ -33,6 +41,7 @@ class Settings(BaseSettings):
     retrieval_min_keyword_overlap: float = 0.20
     vector_index_backend: str = "memory"
     pgvector_dimensions: int = 1024
+    vector_backfill_batch_size: int = 100
     reranker_provider: str = "none"
     local_reranker_runtime: str = "none"
     local_reranker_model_name: str = "none"

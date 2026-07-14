@@ -24,7 +24,7 @@ import {
 } from "lucide-react";
 import "./styles.css";
 import { AuthProvider, useAuth } from "./auth/AuthProvider";
-import { apiFetch, ApiAuthError } from "./api";
+import { apiFetch, apiUploadWithProgress, ApiAuthError } from "./api";
 
 const MAX_UPLOAD_BYTES = 536_870_912;
 const ALLOWED_UPLOAD_EXTENSIONS = [
@@ -271,6 +271,7 @@ function AuthenticatedApp() {
   const [status, setStatus] = React.useState("Idle");
   const [busy, setBusy] = React.useState(false);
   const [error, setError] = React.useState("");
+  const [uploadProgress, setUploadProgress] = React.useState<number | null>(null);
 
   const toggleAllowedRole = (role: string) => {
     setAllowedRoles((values) =>
@@ -420,6 +421,7 @@ function AuthenticatedApp() {
     setBusy(true);
     setError("");
     setStatus("Uploading");
+    setUploadProgress(0);
     try {
       const form = new FormData();
       form.append("visibility", visibility);
@@ -429,16 +431,14 @@ function AuthenticatedApp() {
       form.append("force_ocr", String(forceOcr));
       form.append("file", selectedFile);
 
-      const response = await apiFetch("/api/v1/documents/upload", {
-        method: "POST",
-        body: form
-      });
+      const response = await apiUploadWithProgress("/api/v1/documents/upload", form, setUploadProgress);
       if (!response.ok) {
         throw new Error(await response.text());
       }
       const payload = (await response.json()) as IngestResult;
       setIngests((items) => [payload, ...items]);
       setStatus("Indexed");
+      setUploadProgress(100);
       loadDocuments();
       loadAnalyticsReport();
     } catch (caught) {
@@ -448,6 +448,7 @@ function AuthenticatedApp() {
       }
     } finally {
       setBusy(false);
+      window.setTimeout(() => setUploadProgress(null), 800);
     }
   };
 
@@ -516,6 +517,7 @@ function AuthenticatedApp() {
     setBusy(true);
     setError("");
     setStatus("Queueing");
+    setUploadProgress(0);
     try {
       const form = new FormData();
       form.append("visibility", visibility);
@@ -525,16 +527,18 @@ function AuthenticatedApp() {
       form.append("force_ocr", String(forceOcr));
       form.append("file", selectedFile);
 
-      const response = await apiFetch("/api/v1/documents/upload-async", {
-        method: "POST",
-        body: form
-      });
+      const response = await apiUploadWithProgress(
+        "/api/v1/documents/upload-async",
+        form,
+        setUploadProgress
+      );
       if (!response.ok) {
         throw new Error(await response.text());
       }
       const payload = (await response.json()) as ProcessingJobStatus;
       setProcessingJobs((items) => [payload, ...items]);
       setStatus("Queued");
+      setUploadProgress(100);
       loadDocuments();
       loadAnalyticsReport();
     } catch (caught) {
@@ -544,6 +548,7 @@ function AuthenticatedApp() {
       }
     } finally {
       setBusy(false);
+      window.setTimeout(() => setUploadProgress(null), 800);
     }
   };
 
@@ -736,6 +741,14 @@ function AuthenticatedApp() {
                 Best for files from your Mac or another machine. Limit: {formatBytes(MAX_UPLOAD_BYTES)}.
                 The browser sends the file to the backend, so no Docker path mapping is needed.
               </small>
+              {uploadProgress !== null ? (
+                <div className="upload-progress" aria-label="Upload progress">
+                  <div className="upload-progress-track">
+                    <span style={{ width: `${uploadProgress}%` }} />
+                  </div>
+                  <strong>{uploadProgress}%</strong>
+                </div>
+              ) : null}
             </label>
 
             <div className="segmented" role="group" aria-label="Document visibility">
