@@ -156,11 +156,17 @@ flowchart TD
 ```mermaid
 flowchart LR
   config["Settings"] --> embeddingProvider["EMBEDDING_PROVIDER"]
+  config --> vectorIndex["VECTOR_INDEX_BACKEND"]
+  config --> rerankerProvider["RERANKER_PROVIDER"]
   config --> llmProvider["LLM_PROVIDER"]
   embeddingProvider --> localEmbedding{"local"}
   localEmbedding --> hashing["Default hashing embeddings"]
   localEmbedding --> ollamaEmbedding["Optional Ollama embeddings"]
   localEmbedding --> futureEmbedding["Future vLLM or BGE/E5 adapter"]
+  vectorIndex --> memoryIndex["Default in-memory vector index"]
+  vectorIndex --> pgvectorIndex["Optional pgvector index"]
+  rerankerProvider --> noReranker["Default no reranker"]
+  rerankerProvider --> futureReranker["Future local cross-encoder / vLLM reranker"]
   llmProvider --> localLlm{"local"}
   localLlm --> extractive["Default extractive generator"]
   localLlm --> ollamaLlm["Optional Ollama generator"]
@@ -172,6 +178,9 @@ flowchart LR
   extractive --> cacheKey
   ollamaEmbedding --> cacheKey
   ollamaLlm --> cacheKey
+  pgvectorIndex --> cacheKey
+  noReranker --> cacheKey
+  futureReranker --> cacheKey
 ```
 
 ## Model Status Flow

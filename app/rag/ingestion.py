@@ -6,6 +6,8 @@ from app.rag.chunking import ChunkingConfig, chunk_text
 from app.rag.parsers import extract_document_text
 from app.rag.persistence import persist_document_ingestion
 from app.rag.store import document_store
+from app.rag.model_providers import build_model_provider
+from app.rag.vector_index import configured_vector_index
 from app.schemas.documents import ChunkDTO, DocumentIngestResult
 
 
@@ -87,6 +89,8 @@ def process_document_path(
         chunks=chunk_dtos,
         uploaded_by_user_id=uploaded_by_user_id,
     )
+    model_provider = build_model_provider(settings)
+    configured_vector_index(settings).upsert_chunks(chunk_dtos, model_provider.embedding_model)
 
     return DocumentIngestResult(
         document_id=resolved_document_id,

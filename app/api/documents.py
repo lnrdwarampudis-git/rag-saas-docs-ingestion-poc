@@ -13,6 +13,12 @@ from app.rag.ingestion import process_document_path
 from app.rag.jobs import create_processing_job, enqueue_processing_job
 from app.rag.retrieval import is_chunk_authorized
 from app.rag.store import document_store
+from app.rag.upload_sessions import (
+    assemble_upload_session,
+    create_upload_session,
+    get_upload_session,
+    save_upload_part,
+)
 from app.schemas.documents import (
     ChunkDTO,
     DocumentDetail,
@@ -21,6 +27,8 @@ from app.schemas.documents import (
     DocumentSummary,
     IngestRequest,
     ProcessingJobStatus,
+    UploadSessionCreateRequest,
+    UploadSessionStatus,
 )
 
 router = APIRouter(prefix="/documents", tags=["documents"])
@@ -29,6 +37,31 @@ UPLOAD_COPY_CHUNK_SIZE = 1024 * 1024
 class DocumentChunksResponse(BaseModel):
     document_id: UUID
     chunks: list[ChunkDTO] = Field(default_factory=list)
+
+
+def _upload_session_status(upload_session_id: UUID) -> UploadSessionStatus:
+    session = get_upload_session(upload_session_id)
+    return UploadSessionStatus(
+        upload_session_id=session.upload_session_id,
+        file_name=session.file_name,
+        byte_size=session.byte_size,
+        part_size_bytes=get_settings().upload_session_part_bytes,
+        uploaded_parts=session.uploaded_parts,
+        complete=False,
+    )
+
+
+def _require_upload_session_access(
+    upload_session_id: UUID,
+    current_user: AuthenticatedUser,
+):
+    session = get_upload_session(upload_session_id)
+    if (
+        session.tenant_id != current_user.tenant_id
+        or session.uploaded_by != current_user.keycloak_subject
+    ):
+        raise HTTPException(status_code=404, detail="Upload session not found")
+    return session
 
 
 @router.get("", response_model=DocumentListResponse)
@@ -112,6 +145,77 @@ def upload_document_async(
         visibility=visibility,
         allowed_role_names=allowed_role_names if visibility == "role" else [],
         force_ocr=force_ocr,
+    )
+    enqueue_processing_job(job.job_id)
+    return job.to_status()
+
+
+@router.post("/upload-sessions", response_model=UploadSessionStatus, status_code=201)
+def create_resumable_upload_session(
+    payload: UploadSessionCreateRequest,
+    current_user: AuthenticatedUser = Depends(get_current_user),
+) -> UploadSessionStatus:
+    _validate_upload_extension(payload.file_name)
+    session = create_upload_session(
+        tenant_id=current_user.tenant_id,
+        uploaded_by=current_user.keycloak_subject,
+        file_name=payload.file_name,
+        byte_size=payload.byte_size,
+        visibility=payload.visibility,
+        allowed_role_names=payload.allowed_role_names,
+        force_ocr=payload.force_ocr,
+    )
+    return UploadSessionStatus(
+        upload_session_id=session.upload_session_id,
+        file_name=session.file_name,
+        byte_size=session.byte_size,
+        part_size_bytes=get_settings().upload_session_part_bytes,
+        uploaded_parts=[],
+        complete=False,
+    )
+
+
+@router.get("/upload-sessions/{upload_session_id}", response_model=UploadSessionStatus)
+def get_resumable_upload_session(
+    upload_session_id: UUID,
+    current_user: AuthenticatedUser = Depends(get_current_user),
+) -> UploadSessionStatus:
+    _require_upload_session_access(upload_session_id, current_user)
+    return _upload_session_status(upload_session_id)
+
+
+@router.put("/upload-sessions/{upload_session_id}/parts/{part_number}", response_model=UploadSessionStatus)
+def put_resumable_upload_part(
+    upload_session_id: UUID,
+    part_number: int,
+    file: UploadFile = File(...),
+    current_user: AuthenticatedUser = Depends(get_current_user),
+) -> UploadSessionStatus:
+    _require_upload_session_access(upload_session_id, current_user)
+    save_upload_part(upload_session_id, part_number, file)
+    return _upload_session_status(upload_session_id)
+
+
+@router.post(
+    "/upload-sessions/{upload_session_id}/complete",
+    response_model=ProcessingJobStatus,
+    status_code=202,
+)
+def complete_resumable_upload_session(
+    upload_session_id: UUID,
+    current_user: AuthenticatedUser = Depends(get_current_user),
+) -> ProcessingJobStatus:
+    _require_upload_session_access(upload_session_id, current_user)
+    session, path = assemble_upload_session(upload_session_id)
+    job = create_processing_job(
+        path=path,
+        file_name=session.file_name,
+        tenant_id=current_user.tenant_id,
+        uploaded_by=current_user.keycloak_subject,
+        uploaded_by_user_id=current_user.app_user_id,
+        visibility=session.visibility,
+        allowed_role_names=session.allowed_role_names,
+        force_ocr=session.force_ocr,
     )
     enqueue_processing_job(job.job_id)
     return job.to_status()

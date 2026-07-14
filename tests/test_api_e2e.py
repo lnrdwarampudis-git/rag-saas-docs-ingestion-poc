@@ -241,6 +241,47 @@ def test_upload_rejects_files_over_configured_limit(
     assert list(tmp_path.iterdir()) == []
 
 
+def test_resumable_upload_session_completes_to_processing_job(
+    tmp_path: Path,
+    api_client_as,
+    monkeypatch,
+) -> None:
+    settings = get_settings()
+    monkeypatch.setattr(settings, "upload_dir", str(tmp_path))
+    monkeypatch.setattr(settings, "max_upload_bytes", 64)
+    client = api_client_as("00000000-0000-4000-8000-000000000021", ["admin"])
+
+    create_response = client.post(
+        "/api/v1/documents/upload-sessions",
+        json={"file_name": "large-policy.txt", "byte_size": 11},
+    )
+    assert create_response.status_code == 201
+    session = create_response.json()
+
+    first_part = client.put(
+        f"/api/v1/documents/upload-sessions/{session['upload_session_id']}/parts/1",
+        files={"file": ("part-1", b"hello ", "application/octet-stream")},
+    )
+    second_part = client.put(
+        f"/api/v1/documents/upload-sessions/{session['upload_session_id']}/parts/2",
+        files={"file": ("part-2", b"world", "application/octet-stream")},
+    )
+
+    assert first_part.status_code == 200
+    assert second_part.status_code == 200
+    status_response = client.get(f"/api/v1/documents/upload-sessions/{session['upload_session_id']}")
+    assert status_response.json()["uploaded_parts"] == [1, 2]
+
+    complete_response = client.post(
+        f"/api/v1/documents/upload-sessions/{session['upload_session_id']}/complete"
+    )
+
+    assert complete_response.status_code == 202
+    payload = complete_response.json()
+    assert payload["file_name"] == "large-policy.txt"
+    assert payload["status"] == "queued"
+
+
 def test_async_upload_job_can_be_processed_then_queried(api_client_as) -> None:
     tenant_id = "00000000-0000-4000-8000-000000000006"
     client = api_client_as(tenant_id, ["admin"], "async-admin")

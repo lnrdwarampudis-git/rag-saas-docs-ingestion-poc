@@ -5,6 +5,7 @@ from fastapi.testclient import TestClient
 
 from app.auth.dependencies import get_current_user
 from app.auth.models import AuthenticatedUser
+from app.config import get_settings
 from app.main import app
 
 
@@ -17,6 +18,26 @@ def make_user(tenant_id: str, roles: list[str], subject: str = "test-subject") -
         username=subject,
         source="token-claims",
     )
+
+
+@pytest.fixture(autouse=True)
+def deterministic_local_model_settings(monkeypatch):
+    monkeypatch.setenv("EMBEDDING_PROVIDER", "local")
+    monkeypatch.setenv("LOCAL_EMBEDDING_RUNTIME", "hashing")
+    monkeypatch.setenv("LOCAL_EMBEDDING_MODEL_NAME", "hashing-384")
+    monkeypatch.setenv("LLM_PROVIDER", "local")
+    monkeypatch.setenv("LOCAL_LLM_RUNTIME", "extractive")
+    monkeypatch.setenv("LOCAL_LLM_MODEL_NAME", "extractive")
+    monkeypatch.setenv("VECTOR_INDEX_BACKEND", "memory")
+    monkeypatch.setenv("RERANKER_PROVIDER", "none")
+    monkeypatch.setenv("LOCAL_RERANKER_RUNTIME", "none")
+    get_settings.cache_clear()
+    import app.api.query as query_api
+    from app.rag.pipeline import RagPipeline
+
+    query_api.pipeline = RagPipeline()
+    yield
+    get_settings.cache_clear()
 
 
 @pytest.fixture

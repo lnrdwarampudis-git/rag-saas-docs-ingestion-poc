@@ -138,6 +138,10 @@ docker compose up --build
 - `POST /api/v1/documents/upload-async`
 - `GET /api/v1/documents/{document_id}`
 - `GET /api/v1/documents/{document_id}/chunks`
+- `POST /api/v1/documents/upload-sessions`
+- `GET /api/v1/documents/upload-sessions/{upload_session_id}`
+- `PUT /api/v1/documents/upload-sessions/{upload_session_id}/parts/{part_number}`
+- `POST /api/v1/documents/upload-sessions/{upload_session_id}/complete`
 - `GET /api/v1/processing-jobs/{job_id}`
 - `POST /api/v1/processing-jobs/{job_id}/run`
 - `POST /api/v1/processing-jobs/{job_id}/retry`
@@ -158,7 +162,7 @@ The upload endpoint accepts multipart browser uploads and is the preferred local
 
 Browser uploads are guarded by configurable extension and size limits. Defaults are `ALLOWED_UPLOAD_EXTENSIONS=.pdf,.txt,.md,.csv,.tsv,.docx,.xlsx,.pptx,.png,.jpg,.jpeg,.tiff,.bmp` and `MAX_UPLOAD_BYTES=536870912` (512 MiB). Unsupported formats return `415`; oversized files return `413`.
 
-The async upload endpoint returns `202 Accepted` with a `job_id` and `document_id`. Docker Compose includes a default `worker` service for normal ingestion and a `worker-ocr` service for forced OCR jobs. Both poll Redis, process queued files, update `processing_jobs`, and transition documents from `pending` to `embedded` or `failed`. Failed jobs can be retried through the processing job retry API or the UI retry action.
+The async upload endpoint returns `202 Accepted` with a `job_id` and `document_id`. The resumable upload-session endpoints add chunked large-file groundwork: create a session, upload numbered parts, inspect uploaded parts, then complete the session into the same async processing queue. Sessions are bound to the tenant and uploader subject. Docker Compose includes a default `worker` service for normal ingestion and a `worker-ocr` service for forced OCR jobs. Both poll Redis, process queued files, update `processing_jobs`, and transition documents from `pending` to `embedded` or `failed`. Failed jobs can be retried through the processing job retry API or the UI retry action.
 
 Supported POC intake formats:
 
@@ -174,7 +178,7 @@ The backend image installs English OCR data by default. Additional Tesseract lan
 
 Legacy binary Office formats such as DOC, XLS, and PPT should be converted to DOCX, XLSX, or PPTX before ingestion.
 
-The Dockerized frontend nginx proxy allows uploads up to `2g` via `client_max_body_size`. Production deployments should use direct-to-object-storage multipart/resumable uploads for very large files.
+The Dockerized frontend nginx proxy allows uploads up to `2g` via `client_max_body_size`. Production deployments should move upload-session part storage from the local filesystem to direct-to-object-storage multipart uploads for very large files.
 
 ## Document Management UI
 
@@ -216,7 +220,7 @@ Username: rag
 Password: rag
 ```
 
-The query endpoint uses an in-process development store and the local model provider abstraction. The default configuration keeps demos deterministic with hashing embeddings and extractive answer generation. For local semantic embeddings or local answer generation, set the corresponding runtime to `ollama` with a running Ollama service. Production should persist chunks/embeddings in PostgreSQL/Qdrant and serve open source embedding/LLM models through workers, Ollama, or vLLM adapters.
+The query endpoint uses the local model provider abstraction plus a vector index boundary. The default configuration keeps demos deterministic with hashing embeddings, the in-memory vector index, no reranker, and extractive answer generation. `VECTOR_INDEX_BACKEND=pgvector` enables the PostgreSQL/pgvector adapter when DB persistence is on. For local semantic embeddings or local answer generation, set the corresponding runtime to `ollama` with a running Ollama service. Production can still add Qdrant and stronger local reranker/vLLM adapters behind the existing boundaries.
 
 Run the offline retrieval quality gate:
 

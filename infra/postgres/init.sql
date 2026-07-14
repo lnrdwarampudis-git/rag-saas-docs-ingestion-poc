@@ -81,6 +81,8 @@ CREATE TABLE IF NOT EXISTS document_chunks (
 CREATE INDEX IF NOT EXISTS idx_chunks_tenant_document ON document_chunks (tenant_id, document_id);
 CREATE INDEX IF NOT EXISTS idx_chunks_rbac ON document_chunks USING GIN (allowed_role_names);
 CREATE INDEX IF NOT EXISTS idx_chunks_metadata ON document_chunks USING GIN (source_metadata);
+CREATE INDEX IF NOT EXISTS idx_chunks_embedding_hnsw
+  ON document_chunks USING hnsw (embedding vector_cosine_ops);
 
 CREATE TABLE IF NOT EXISTS processing_jobs (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),

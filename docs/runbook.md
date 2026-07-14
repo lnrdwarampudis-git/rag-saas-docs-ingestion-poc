@@ -120,6 +120,12 @@ LOCAL_EMBEDDING_MODEL_NAME=hashing-384
 EMBEDDING_DIMENSIONS=384
 LOCAL_EMBEDDING_BASE_URL=http://localhost:11434
 LOCAL_MODEL_REQUEST_TIMEOUT_SECONDS=30
+VECTOR_INDEX_BACKEND=memory
+PGVECTOR_DIMENSIONS=1024
+RERANKER_PROVIDER=none
+LOCAL_RERANKER_RUNTIME=none
+LOCAL_RERANKER_MODEL_NAME=none
+RERANKER_CANDIDATE_MULTIPLIER=4
 LLM_PROVIDER=local
 LOCAL_LLM_RUNTIME=extractive
 LOCAL_LLM_MODEL_NAME=extractive
@@ -128,6 +134,14 @@ PUBLIC_LLM_ENABLED=false
 ```
 
 See [Model Providers](model-providers.md) for the full setting list, cache behavior, and adapter contract.
+
+Confirm large-file and retrieval settings inside the backend container:
+
+```bash
+docker compose exec backend python -c "import os; keys=['UPLOAD_SESSION_PART_BYTES','VECTOR_INDEX_BACKEND','PGVECTOR_DIMENSIONS','RERANKER_PROVIDER','LOCAL_RERANKER_RUNTIME']; print({k: os.environ.get(k) for k in keys})"
+```
+
+Use `VECTOR_INDEX_BACKEND=pgvector` only with `ENABLE_DB_PERSISTENCE=true`. The default `RERANKER_PROVIDER=none` is intentional until a local reranker adapter is added.
 
 ## OCR Runtime Check
 

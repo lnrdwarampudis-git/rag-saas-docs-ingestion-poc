@@ -69,3 +69,20 @@ class ProcessingJobStatus(BaseModel):
     created_at: datetime | None = None
     started_at: datetime | None = None
     finished_at: datetime | None = None
+
+
+class UploadSessionCreateRequest(BaseModel):
+    file_name: str
+    byte_size: int = Field(gt=0)
+    visibility: str = Field(default="tenant", pattern="^(private|tenant|role)$")
+    allowed_role_names: list[str] = Field(default_factory=list)
+    force_ocr: bool = False
+
+
+class UploadSessionStatus(BaseModel):
+    upload_session_id: UUID
+    file_name: str
+    byte_size: int
+    part_size_bytes: int
+    uploaded_parts: list[int] = Field(default_factory=list)
+    complete: bool = False

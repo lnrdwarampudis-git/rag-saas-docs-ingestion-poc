@@ -22,6 +22,7 @@ class Settings(BaseSettings):
     chunk_overlap_tokens: int = 120
     upload_dir: str = "/tmp/rag-uploads"
     max_upload_bytes: int = 536_870_912
+    upload_session_part_bytes: int = 8_388_608
     allowed_upload_extensions: str = ".pdf,.txt,.md,.csv,.tsv,.docx,.xlsx,.pptx,.png,.jpg,.jpeg,.tiff,.bmp"
     ocr_language: str = "eng"
     ocr_pdf_dpi: int = 200
@@ -30,6 +31,12 @@ class Settings(BaseSettings):
     host_mount_source_prefix: str = ""
     retrieval_min_score: float = 0.12
     retrieval_min_keyword_overlap: float = 0.20
+    vector_index_backend: str = "memory"
+    pgvector_dimensions: int = 1024
+    reranker_provider: str = "none"
+    local_reranker_runtime: str = "none"
+    local_reranker_model_name: str = "none"
+    reranker_candidate_multiplier: int = 4
     llm_provider: str = "local"
     local_llm_runtime: str = "extractive"
     local_llm_model_name: str = "extractive"

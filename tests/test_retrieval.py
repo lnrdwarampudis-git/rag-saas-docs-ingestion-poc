@@ -1,4 +1,6 @@
+from app.rag.embeddings import HashingEmbeddingModel
 from app.rag.retrieval import HybridRetriever, RetrievalRequest
+from app.rag.vector_index import InMemoryVectorIndex
 from app.schemas.documents import ChunkDTO
 
 
@@ -111,3 +113,45 @@ def test_retrieval_matches_pdf_split_words() -> None:
     )
 
     assert results[0].chunk.chunk_index == 0
+
+
+def test_memory_vector_index_filters_candidates_by_tenant_and_role() -> None:
+    index = InMemoryVectorIndex()
+    embedding_model = HashingEmbeddingModel()
+    chunks = [
+        ChunkDTO(
+            chunk_index=0,
+            text="Finance revenue forecast uses vector search.",
+            token_count=6,
+            metadata={
+                "tenant_id": "tenant-1",
+                "document_id": "doc-1",
+                "visibility": "role",
+                "allowed_role_names": ["finance"],
+            },
+        ),
+        ChunkDTO(
+            chunk_index=0,
+            text="Other tenant revenue forecast should never leak.",
+            token_count=7,
+            metadata={
+                "tenant_id": "tenant-2",
+                "document_id": "doc-2",
+                "visibility": "tenant",
+                "allowed_role_names": [],
+            },
+        ),
+    ]
+    index.upsert_chunks(chunks, embedding_model)
+
+    results = index.search(
+        RetrievalRequest(
+            query="revenue forecast",
+            tenant_id="tenant-1",
+            role_names=["finance"],
+        ),
+        embedding_model,
+        candidate_limit=10,
+    )
+
+    assert [result.metadata["document_id"] for result in results] == ["doc-1"]

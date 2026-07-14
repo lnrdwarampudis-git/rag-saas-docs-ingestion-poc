@@ -192,6 +192,27 @@ ALLOWED_UPLOAD_EXTENSIONS=.pdf,.txt,.md,.csv,.tsv,.docx,.xlsx,.pptx,.png,.jpg,.j
 
 The frontend mirrors the 512 MiB default for immediate feedback. The API remains the source of truth and returns `415` for unsupported extensions or `413` when the upload exceeds `MAX_UPLOAD_BYTES`.
 
+Resumable upload-session defaults:
+
+```text
+UPLOAD_SESSION_PART_BYTES=8388608
+```
+
+The upload-session API stores numbered parts under `UPLOAD_DIR/sessions`, reports uploaded part numbers for resume clients, and completes the assembled file into the existing async processing queue. Sessions are scoped to the authenticated tenant and uploader subject. For production-scale files, replace the local part store with direct MinIO multipart/presigned uploads and lifecycle cleanup.
+
+Vector and reranker defaults:
+
+```text
+VECTOR_INDEX_BACKEND=memory
+PGVECTOR_DIMENSIONS=1024
+RERANKER_PROVIDER=none
+LOCAL_RERANKER_RUNTIME=none
+LOCAL_RERANKER_MODEL_NAME=none
+RERANKER_CANDIDATE_MULTIPLIER=4
+```
+
+Use `VECTOR_INDEX_BACKEND=pgvector` with `ENABLE_DB_PERSISTENCE=true` to store chunk embeddings in PostgreSQL and retrieve vector candidates through pgvector before hybrid scoring. The default `RERANKER_PROVIDER=none` keeps ranking deterministic while preserving the adapter boundary for local cross-encoder or vLLM rerankers.
+
 OCR defaults:
 
 ```text

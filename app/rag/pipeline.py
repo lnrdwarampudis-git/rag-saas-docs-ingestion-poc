@@ -1,4 +1,5 @@
 from dataclasses import dataclass
+from dataclasses import replace
 import hashlib
 import time
 
@@ -6,8 +7,10 @@ from app.rag.analytics import record_query_event
 from app.rag.cache import QueryCache, cache_key
 from app.rag.model_providers import ModelProvider, build_model_provider
 from app.rag.persistence import load_persisted_chunks
+from app.rag.reranking import Reranker, build_reranker
 from app.rag.retrieval import HybridRetriever, RetrievalRequest, RetrievalResult
 from app.rag.store import document_store
+from app.rag.vector_index import configured_vector_index
 
 
 @dataclass(frozen=True)
@@ -24,12 +27,14 @@ class RagPipeline:
         retriever: HybridRetriever | None = None,
         cache: QueryCache | None = None,
         model_provider: ModelProvider | None = None,
+        reranker: Reranker | None = None,
     ) -> None:
         self.model_provider = model_provider or build_model_provider()
         self.retriever = retriever or HybridRetriever(
             embedding_model=self.model_provider.embedding_model
         )
         self.cache = cache or QueryCache()
+        self.reranker = reranker or build_reranker()
 
     def answer(
         self,
@@ -53,6 +58,9 @@ class RagPipeline:
                 "embedding_provider": self.model_provider.embedding_provider,
                 "local_embedding_runtime": self.model_provider.embedding_runtime,
                 "embedding_model": self.model_provider.embedding_model_name,
+                "reranker_provider": self.reranker.provider_name,
+                "local_reranker_runtime": self.reranker.runtime,
+                "reranker_model": self.reranker.model_name,
             }
         )
         cached = self.cache.get(key)
@@ -67,17 +75,26 @@ class RagPipeline:
             return RagAnswer(**cached)
 
         retrieval_started = time.perf_counter()
-        chunks = _dedupe_chunks([*document_store.all_chunks(), *load_persisted_chunks()])
+        request = RetrievalRequest(
+            query=query,
+            tenant_id=tenant_id,
+            role_names=role_names,
+            requester_subject=requester_subject,
+            top_k=top_k,
+        )
+        candidate_limit = max(top_k, top_k * max(1, self.reranker.candidate_multiplier))
+        vector_index = configured_vector_index()
+        indexed_chunks = vector_index.search(
+            request,
+            self.model_provider.embedding_model,
+            candidate_limit=candidate_limit,
+        )
+        chunks = indexed_chunks or _dedupe_chunks([*document_store.all_chunks(), *load_persisted_chunks()])
         results = self.retriever.retrieve(
             chunks,
-            RetrievalRequest(
-                query=query,
-                tenant_id=tenant_id,
-                role_names=role_names,
-                requester_subject=requester_subject,
-                top_k=top_k,
-            ),
+            replace(request, top_k=candidate_limit),
         )
+        results = self.reranker.rerank(query, results, top_k)
         retrieval_ms = (time.perf_counter() - retrieval_started) * 1000
         answer = self.model_provider.answer_generator.generate(query, results)
         citations = [_citation(result) for result in results]
@@ -94,6 +111,10 @@ class RagPipeline:
                 "top_score": round(results[0].score, 4) if results else 0,
                 "retrieval_min_score": self.retriever.min_score,
                 "retrieval_min_keyword_overlap": self.retriever.min_keyword_overlap,
+                "vector_index_backend": vector_index.backend_name,
+                "reranker_provider": self.reranker.provider_name,
+                "local_reranker_runtime": self.reranker.runtime,
+                "reranker_model": self.reranker.model_name,
                 "llm_provider": self.model_provider.provider_name,
                 "local_llm_runtime": self.model_provider.answer_runtime,
                 "embedding_provider": self.model_provider.embedding_provider,

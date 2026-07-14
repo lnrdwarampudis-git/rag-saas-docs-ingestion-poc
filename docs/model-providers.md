@@ -18,6 +18,12 @@ LOCAL_EMBEDDING_MODEL_NAME=hashing-384
 EMBEDDING_DIMENSIONS=384
 LOCAL_EMBEDDING_BASE_URL=http://localhost:11434
 LOCAL_MODEL_REQUEST_TIMEOUT_SECONDS=30
+VECTOR_INDEX_BACKEND=memory
+PGVECTOR_DIMENSIONS=1024
+RERANKER_PROVIDER=none
+LOCAL_RERANKER_RUNTIME=none
+LOCAL_RERANKER_MODEL_NAME=none
+RERANKER_CANDIDATE_MULTIPLIER=4
 LLM_PROVIDER=local
 LOCAL_LLM_RUNTIME=extractive
 LOCAL_LLM_MODEL_NAME=extractive
@@ -35,6 +41,12 @@ PUBLIC_LLM_ENABLED=false
 | `LOCAL_EMBEDDING_RUNTIME` | `hashing`, `ollama` | `vllm` | `hashing` uses the deterministic in-process baseline; `ollama` calls `/api/embed` on `LOCAL_EMBEDDING_BASE_URL`. |
 | `LOCAL_EMBEDDING_MODEL_NAME` | `hashing-384`, any installed Ollama embedding model | BGE, E5, Mixedbread, or adapter model names | Informational for hashing; sent as `model` for Ollama; included in metrics/cache keys. |
 | `EMBEDDING_DIMENSIONS` | integer dimension count practical for local ranking | adapter-specific dimensions | Default is `384`; keep it greater than zero for hashing embeddings. |
+| `VECTOR_INDEX_BACKEND` | `memory`, `pgvector` | `qdrant` | `memory` keeps tests/local demos deterministic; `pgvector` stores embeddings in PostgreSQL when DB persistence is enabled. |
+| `PGVECTOR_DIMENSIONS` | `1024` | adapter-specific dimensions | Matches the current `document_chunks.embedding vector(1024)` column. Shorter embeddings are padded for pgvector storage. |
+| `RERANKER_PROVIDER` | `none` | `local` | `none` leaves hybrid retrieval order unchanged. |
+| `LOCAL_RERANKER_RUNTIME` | `none` | `cross-encoder`, `vllm` | Future local reranker adapters will plug into the existing reranker boundary. |
+| `LOCAL_RERANKER_MODEL_NAME` | `none` | local reranker model names | Included in cache keys/metrics when reranking is enabled later. |
+| `RERANKER_CANDIDATE_MULTIPLIER` | positive integer | adapter-tuned values | Controls how many initial candidates are retrieved before final top-k reranking. |
 | `LOCAL_MODEL_REQUEST_TIMEOUT_SECONDS` | positive number | adapter-specific timeouts | Used by Ollama HTTP clients. |
 | `LLM_PROVIDER` | `local` | public token-based providers | Public providers require `PUBLIC_LLM_ENABLED=true` and adapter code. |
 | `LOCAL_LLM_RUNTIME` | `extractive`, `ollama` | `vllm` | `extractive` selects sentences from authorized chunks; `ollama` calls `/api/generate` on `LOCAL_LLM_BASE_URL`. |
@@ -42,6 +54,14 @@ PUBLIC_LLM_ENABLED=false
 | `PUBLIC_LLM_ENABLED` | `false` | `true` after policy approval and adapter implementation | Keeps external API usage opt-in. |
 
 If `LOCAL_EMBEDDING_RUNTIME=vllm` or `LOCAL_LLM_RUNTIME=vllm` is set before those adapters exist, startup/query construction raises `ModelProviderConfigurationError`. That failure is deliberate: it prevents silently falling back to a different model path.
+
+If `RERANKER_PROVIDER=local` is selected before a `cross-encoder` or `vllm` adapter is implemented, query construction raises `RerankerConfigurationError` for the same reason.
+
+## Vector Indexing And Reranking
+
+The query pipeline asks the configured vector index for tenant-safe candidates before hybrid scoring. Defaults use the in-memory vector index and deterministic hashing embeddings. When `VECTOR_INDEX_BACKEND=pgvector` and `ENABLE_DB_PERSISTENCE=true`, ingestion writes chunk embeddings to `document_chunks.embedding`, and query retrieval orders candidates with pgvector before the existing keyword/early-term/hybrid score is applied.
+
+The reranker boundary runs after initial retrieval. The current default `RERANKER_PROVIDER=none` returns the existing order unchanged while adding provider/runtime/model names to cache keys and metrics. This keeps today stable and leaves a direct adapter point for local cross-encoder or vLLM reranking.
 
 ## Ollama Embeddings
 
