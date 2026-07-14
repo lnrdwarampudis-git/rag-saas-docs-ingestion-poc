@@ -1,8 +1,10 @@
 from uuid import UUID, uuid4
 
+import httpx
 from sqlalchemy import create_engine, text
 
 from app.auth.models import AuthenticatedUser
+from app.eval.history import record_evaluation_run
 from app.rag import analytics
 from app.rag.pipeline import RagPipeline
 from app.rag.store import document_store
@@ -143,6 +145,132 @@ def test_persistent_query_analytics_rolls_up_recent_events(monkeypatch) -> None:
     assert report.p95_retrieval_ms == 25.0
     assert report.p95_total_ms == 80.0
     assert report.recent_average_total_ms == 39.333
+
+
+def test_persistent_model_latency_buckets_roll_up_by_model_key(monkeypatch) -> None:
+    tenant_id = UUID("00000000-0000-4000-8000-000000000027")
+    engine = create_engine("sqlite+pysqlite:///:memory:")
+    with engine.begin() as connection:
+        connection.execute(
+            text(
+                """
+                CREATE TABLE model_latency_events (
+                  tenant_id TEXT NOT NULL,
+                  cached BOOLEAN NOT NULL,
+                  retrieval_ms FLOAT NOT NULL,
+                  total_ms FLOAT NOT NULL,
+                  embedding_model TEXT,
+                  answer_model TEXT,
+                  vector_index_backend TEXT,
+                  reranker_runtime TEXT,
+                  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+                )
+                """
+            )
+        )
+        connection.execute(
+            text(
+                """
+                INSERT INTO model_latency_events (
+                  tenant_id, cached, retrieval_ms, total_ms, embedding_model,
+                  answer_model, vector_index_backend, reranker_runtime
+                )
+                VALUES
+                  (:tenant_id, 0, 5.0, 20.0, 'hashing-384', 'extractive', 'memory', 'none'),
+                  (:tenant_id, 1, 4.0, 40.0, 'hashing-384', 'extractive', 'memory', 'none')
+                """
+            ),
+            {"tenant_id": str(tenant_id)},
+        )
+
+    monkeypatch.setattr(analytics.get_settings(), "enable_db_persistence", True)
+    monkeypatch.setattr(analytics, "_model_latency_events_table_ready", True)
+    import app.db as db
+
+    monkeypatch.setattr(db, "engine", engine)
+
+    buckets = analytics._persistent_model_latency_buckets(
+        AuthenticatedUser(
+            keycloak_subject="analytics-subject",
+            tenant_id=tenant_id,
+            roles=["admin"],
+        )
+    )
+
+    assert len(buckets) == 1
+    assert buckets[0].model_key == "hashing-384 / extractive / memory / none"
+    assert buckets[0].total == 2
+    assert buckets[0].average_total_ms == 30.0
+    assert buckets[0].p95_total_ms == 40.0
+
+
+def test_evaluation_run_history_is_persisted_and_read_for_trends(monkeypatch) -> None:
+    engine = create_engine("sqlite+pysqlite:///:memory:")
+    monkeypatch.setattr(analytics.get_settings(), "enable_db_persistence", True)
+    monkeypatch.setattr(analytics, "_evaluation_runs_table_ready", False)
+    import app.db as db
+
+    monkeypatch.setattr(db, "engine", engine)
+
+    record_evaluation_run(
+        {
+            "summary": {
+                "cases": 5,
+                "passed": 5,
+                "failed": 0,
+                "context_precision": 1.0,
+                "context_recall": 1.0,
+                "answer_relevance": 1.0,
+                "answer_groundedness": 0.967,
+            },
+            "results": [],
+        }
+    )
+
+    trend = analytics._persistent_evaluation_trend()
+
+    assert len(trend) == 1
+    assert trend[0].cases == 5
+    assert trend[0].failed == 0
+    assert trend[0].answer_groundedness == 0.967
+
+
+def test_qdrant_analytics_reports_collection_health(monkeypatch) -> None:
+    original_client = httpx.Client
+    monkeypatch.setattr(
+        httpx,
+        "Client",
+        lambda **kwargs: original_client(
+            **kwargs,
+            transport=httpx.MockTransport(
+                lambda request: httpx.Response(
+                    200,
+                    json={
+                        "result": {
+                            "points_count": 42,
+                            "indexed_vectors_count": 40,
+                            "segments_count": 2,
+                            "status": "green",
+                            "optimizer_status": "ok",
+                        }
+                    },
+                )
+            ),
+        ),
+    )
+    settings = analytics.get_settings()
+    monkeypatch.setattr(settings, "vector_index_backend", "qdrant")
+    monkeypatch.setattr(settings, "qdrant_collection_name", "rag_chunks")
+    monkeypatch.setattr(settings, "qdrant_url", "http://qdrant.test")
+
+    report = analytics._qdrant_analytics(settings)
+
+    assert report is not None
+    assert report.ready is True
+    assert report.points_count == 42
+    assert report.indexed_vectors_count == 40
+    assert report.segments_count == 2
+    assert report.optimizer_status == "ok"
 
 
 def test_persistent_audit_events_return_recent_tenant_history(monkeypatch) -> None:

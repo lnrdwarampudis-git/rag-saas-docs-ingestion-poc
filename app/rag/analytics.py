@@ -4,6 +4,7 @@ import hashlib
 import json
 from statistics import mean
 
+import httpx
 from sqlalchemy import text
 from sqlalchemy.engine import Connection
 from sqlalchemy.exc import SQLAlchemyError
@@ -17,8 +18,11 @@ from app.schemas.analytics import (
     AuditEvent,
     DocumentAnalytics,
     EvaluationAnalytics,
+    EvaluationTrendPoint,
     JobAnalytics,
+    ModelLatencyBucket,
     QueryAnalytics,
+    QdrantAnalytics,
     RetrievalAnalytics,
 )
 
@@ -33,6 +37,9 @@ class QueryEvent:
 
 _query_events: deque[QueryEvent] = deque(maxlen=500)
 _query_events_table_ready = False
+_model_latency_events_table_ready = False
+_processing_job_events_table_ready = False
+_evaluation_runs_table_ready = False
 
 
 def record_query_event(
@@ -41,6 +48,7 @@ def record_query_event(
     cached: bool,
     retrieval_ms: float | int | None,
     total_ms: float | int | None,
+    metrics: dict | None = None,
 ) -> None:
     _query_events.append(
         QueryEvent(
@@ -55,6 +63,13 @@ def record_query_event(
         cached=cached,
         retrieval_ms=float(retrieval_ms or 0),
         total_ms=float(total_ms or 0),
+    )
+    _record_persistent_model_latency_event(
+        tenant_id=tenant_id,
+        cached=cached,
+        retrieval_ms=float(retrieval_ms or 0),
+        total_ms=float(total_ms or 0),
+        metrics=metrics or {},
     )
 
 
@@ -169,6 +184,49 @@ def record_job_cancel_audit_event(
     )
 
 
+def record_processing_job_event(
+    *,
+    tenant_id,
+    job_id,
+    document_id,
+    event: str,
+    status: str,
+    attempts: int,
+    metadata: dict | None = None,
+) -> None:
+    if not get_settings().enable_db_persistence:
+        return
+    try:
+        from app.db import engine
+
+        with engine.begin() as connection:
+            _ensure_processing_job_events_table(connection)
+            connection.execute(
+                text(
+                    f"""
+                    INSERT INTO processing_job_events (
+                      tenant_id, job_id, document_id, event, status, attempts, metadata
+                    )
+                    VALUES (
+                      :tenant_id, :job_id, :document_id, :event, :status, :attempts,
+                      {_metadata_sql_expression(connection)}
+                    )
+                    """
+                ),
+                {
+                    "tenant_id": str(tenant_id),
+                    "job_id": str(job_id),
+                    "document_id": str(document_id),
+                    "event": event,
+                    "status": status,
+                    "attempts": attempts,
+                    "metadata": json.dumps(metadata or {}),
+                },
+            )
+    except SQLAlchemyError:
+        return
+
+
 def _record_processing_job_audit_event(
     *,
     current_user: AuthenticatedUser,
@@ -277,6 +335,49 @@ def _record_persistent_query_event(
         return
 
 
+def _record_persistent_model_latency_event(
+    *,
+    tenant_id: str,
+    cached: bool,
+    retrieval_ms: float,
+    total_ms: float,
+    metrics: dict,
+) -> None:
+    if not get_settings().enable_db_persistence:
+        return
+    try:
+        from app.db import engine
+
+        with engine.begin() as connection:
+            _ensure_model_latency_events_table(connection)
+            connection.execute(
+                text(
+                    """
+                    INSERT INTO model_latency_events (
+                      tenant_id, cached, retrieval_ms, total_ms, embedding_model,
+                      answer_model, vector_index_backend, reranker_runtime
+                    )
+                    VALUES (
+                      :tenant_id, :cached, :retrieval_ms, :total_ms, :embedding_model,
+                      :answer_model, :vector_index_backend, :reranker_runtime
+                    )
+                    """
+                ),
+                {
+                    "tenant_id": tenant_id,
+                    "cached": cached,
+                    "retrieval_ms": retrieval_ms,
+                    "total_ms": total_ms,
+                    "embedding_model": metrics.get("embedding_model"),
+                    "answer_model": metrics.get("answer_model"),
+                    "vector_index_backend": metrics.get("vector_index_backend"),
+                    "reranker_runtime": metrics.get("local_reranker_runtime"),
+                },
+            )
+    except SQLAlchemyError:
+        return
+
+
 def _persistent_operational_analytics(
     current_user: AuthenticatedUser,
 ) -> tuple[DocumentAnalytics | None, JobAnalytics | None]:
@@ -348,6 +449,23 @@ def _persistent_operational_analytics(
                 {"tenant_id": str(current_user.tenant_id)},
             ).mappings()
             recent_failures = [str(row["file_name"]) for row in failure_rows]
+            _ensure_processing_job_events_table(connection)
+            event_rows = connection.execute(
+                text(
+                    """
+                    SELECT event, status, attempts, created_at
+                    FROM processing_job_events
+                    WHERE tenant_id = :tenant_id
+                    ORDER BY created_at DESC
+                    LIMIT 8
+                    """
+                ),
+                {"tenant_id": str(current_user.tenant_id)},
+            ).mappings()
+            recent_events = [
+                f"{_datetime_string(row['created_at'])} {row['event']} {row['status']} attempt={row['attempts']}"
+                for row in event_rows
+            ]
 
         return (
             DocumentAnalytics(
@@ -367,6 +485,7 @@ def _persistent_operational_analytics(
                 cancelled=int(job_row["cancelled"] or 0),
                 dead_lettered=int(job_row["dead_lettered"] or 0),
                 recent_failures=recent_failures,
+                recent_events=recent_events,
             ),
         )
     except SQLAlchemyError:
@@ -399,7 +518,7 @@ def _persistent_query_analytics(current_user: AuthenticatedUser) -> QueryAnalyti
     except SQLAlchemyError:
         return None
 
-    return _query_analytics_from_events(
+    analytics = _query_analytics_from_events(
         [
             QueryEvent(
                 tenant_id=str(current_user.tenant_id),
@@ -410,6 +529,53 @@ def _persistent_query_analytics(current_user: AuthenticatedUser) -> QueryAnalyti
             for row in rows
         ]
     )
+    analytics.model_latency_buckets = _persistent_model_latency_buckets(current_user)
+    return analytics
+
+
+def _persistent_model_latency_buckets(current_user: AuthenticatedUser) -> list[ModelLatencyBucket]:
+    if not get_settings().enable_db_persistence:
+        return []
+    try:
+        from app.db import engine
+
+        with engine.begin() as connection:
+            _ensure_model_latency_events_table(connection)
+            rows = connection.execute(
+                text(
+                    """
+                    SELECT embedding_model, answer_model, vector_index_backend, reranker_runtime, total_ms
+                    FROM model_latency_events
+                    WHERE tenant_id = :tenant_id
+                    ORDER BY created_at DESC
+                    LIMIT 500
+                    """
+                ),
+                {"tenant_id": str(current_user.tenant_id)},
+            ).mappings()
+    except SQLAlchemyError:
+        return []
+
+    buckets: dict[str, list[float]] = {}
+    for row in rows:
+        key = " / ".join(
+            [
+                str(row["embedding_model"] or "unknown-embedding"),
+                str(row["answer_model"] or "unknown-answer"),
+                str(row["vector_index_backend"] or "unknown-vector"),
+                str(row["reranker_runtime"] or "none"),
+            ]
+        )
+        buckets.setdefault(key, []).append(float(row["total_ms"] or 0))
+    return [
+        ModelLatencyBucket(
+            model_key=key,
+            total=len(values),
+            average_total_ms=round(mean(values), 3),
+            p95_total_ms=round(_percentile(values, 0.95), 3),
+        )
+        for key, values in sorted(buckets.items())
+    ]
 
 
 def _persistent_audit_events(
@@ -496,6 +662,77 @@ def _ensure_query_events_table(connection: Connection) -> None:
     _query_events_table_ready = True
 
 
+def _ensure_model_latency_events_table(connection: Connection) -> None:
+    global _model_latency_events_table_ready
+    if _model_latency_events_table_ready:
+        return
+    id_column = _id_column_sql(connection)
+    created_at_column = _created_at_column_sql(connection)
+    connection.execute(
+        text(
+            f"""
+            CREATE TABLE IF NOT EXISTS model_latency_events (
+              {id_column},
+              tenant_id UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+              cached BOOLEAN NOT NULL DEFAULT FALSE,
+              retrieval_ms DOUBLE PRECISION NOT NULL DEFAULT 0,
+              total_ms DOUBLE PRECISION NOT NULL DEFAULT 0,
+              embedding_model TEXT,
+              answer_model TEXT,
+              vector_index_backend TEXT,
+              reranker_runtime TEXT,
+              {created_at_column}
+            )
+            """
+        )
+    )
+    connection.execute(
+        text(
+            """
+            CREATE INDEX IF NOT EXISTS idx_model_latency_events_tenant_time
+            ON model_latency_events (tenant_id, created_at DESC)
+            """
+        )
+    )
+    _model_latency_events_table_ready = True
+
+
+def _ensure_processing_job_events_table(connection: Connection) -> None:
+    global _processing_job_events_table_ready
+    if _processing_job_events_table_ready:
+        return
+    id_column = _id_column_sql(connection)
+    created_at_column = _created_at_column_sql(connection)
+    metadata_type = "JSONB" if connection.dialect.name == "postgresql" else "TEXT"
+    metadata_default = "'{}'::JSONB" if connection.dialect.name == "postgresql" else "'{}'"
+    connection.execute(
+        text(
+            f"""
+            CREATE TABLE IF NOT EXISTS processing_job_events (
+              {id_column},
+              tenant_id UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+              job_id UUID NOT NULL,
+              document_id UUID NOT NULL,
+              event TEXT NOT NULL,
+              status TEXT NOT NULL,
+              attempts INTEGER NOT NULL DEFAULT 0,
+              metadata {metadata_type} NOT NULL DEFAULT {metadata_default},
+              {created_at_column}
+            )
+            """
+        )
+    )
+    connection.execute(
+        text(
+            """
+            CREATE INDEX IF NOT EXISTS idx_processing_job_events_tenant_time
+            ON processing_job_events (tenant_id, created_at DESC)
+            """
+        )
+    )
+    _processing_job_events_table_ready = True
+
+
 def _in_memory_document_analytics(current_user: AuthenticatedUser) -> DocumentAnalytics:
     documents = [
         document
@@ -553,6 +790,44 @@ def _retrieval_analytics(queries: QueryAnalytics) -> RetrievalAnalytics:
                 or queries.p95_retrieval_ms > settings.retrieval_latency_warning_ms
             )
         ),
+        qdrant=_qdrant_analytics(settings),
+    )
+
+
+def _qdrant_analytics(settings) -> QdrantAnalytics | None:
+    if settings.vector_index_backend.lower() != "qdrant":
+        return None
+    try:
+        with httpx.Client(
+            base_url=settings.qdrant_url.rstrip("/"),
+            timeout=min(settings.qdrant_request_timeout_seconds, 5.0),
+        ) as client:
+            response = client.get(f"/collections/{settings.qdrant_collection_name}")
+    except httpx.HTTPError as exc:
+        return QdrantAnalytics(
+            ready=False,
+            collection_name=settings.qdrant_collection_name,
+            message=f"Qdrant is not reachable: {exc.__class__.__name__}",
+        )
+    if response.status_code != 200:
+        return QdrantAnalytics(
+            ready=False,
+            collection_name=settings.qdrant_collection_name,
+            message=f"Qdrant collection check returned HTTP {response.status_code}",
+        )
+    result = response.json().get("result", {})
+    optimizer_status = result.get("optimizer_status")
+    if isinstance(optimizer_status, dict):
+        optimizer_status = optimizer_status.get("status") or json.dumps(optimizer_status)
+    return QdrantAnalytics(
+        ready=True,
+        collection_name=settings.qdrant_collection_name,
+        points_count=int(result.get("points_count") or 0),
+        indexed_vectors_count=int(result.get("indexed_vectors_count") or 0),
+        segments_count=int(result.get("segments_count") or 0),
+        status=str(result.get("status") or "unknown"),
+        optimizer_status=str(optimizer_status or "unknown"),
+        message="Qdrant collection health loaded.",
     )
 
 
@@ -591,6 +866,7 @@ def _datetime_string(value) -> str:
 
 def _evaluation_analytics() -> EvaluationAnalytics:
     summary = run_eval()["summary"]
+    trend = _persistent_evaluation_trend()
     return EvaluationAnalytics(
         cases=summary["cases"],
         passed=summary["passed"],
@@ -599,7 +875,78 @@ def _evaluation_analytics() -> EvaluationAnalytics:
         context_recall=summary["context_recall"],
         answer_relevance=summary["answer_relevance"],
         answer_groundedness=summary["answer_groundedness"],
+        last_run_at=trend[0].created_at if trend else None,
+        trend=trend,
     )
+
+
+def _persistent_evaluation_trend() -> list[EvaluationTrendPoint]:
+    if not get_settings().enable_db_persistence:
+        return []
+    try:
+        from app.db import engine
+
+        with engine.begin() as connection:
+            _ensure_evaluation_runs_table(connection)
+            rows = connection.execute(
+                text(
+                    """
+                    SELECT created_at, cases, failed, context_precision, answer_groundedness
+                    FROM evaluation_runs
+                    ORDER BY created_at DESC
+                    LIMIT 10
+                    """
+                )
+            ).mappings()
+            return [
+                EvaluationTrendPoint(
+                    created_at=_datetime_string(row["created_at"]),
+                    cases=int(row["cases"] or 0),
+                    failed=int(row["failed"] or 0),
+                    context_precision=float(row["context_precision"] or 0),
+                    answer_groundedness=float(row["answer_groundedness"] or 0),
+                )
+                for row in rows
+            ]
+    except SQLAlchemyError:
+        return []
+
+
+def _ensure_evaluation_runs_table(connection: Connection) -> None:
+    global _evaluation_runs_table_ready
+    if _evaluation_runs_table_ready:
+        return
+    id_column = _id_column_sql(connection)
+    created_at_column = _created_at_column_sql(connection)
+    report_type = "JSONB" if connection.dialect.name == "postgresql" else "TEXT"
+    report_default = "'{}'::JSONB" if connection.dialect.name == "postgresql" else "'{}'"
+    connection.execute(
+        text(
+            f"""
+            CREATE TABLE IF NOT EXISTS evaluation_runs (
+              {id_column},
+              cases INTEGER NOT NULL,
+              passed INTEGER NOT NULL,
+              failed INTEGER NOT NULL,
+              context_precision DOUBLE PRECISION NOT NULL DEFAULT 0,
+              context_recall DOUBLE PRECISION NOT NULL DEFAULT 0,
+              answer_relevance DOUBLE PRECISION NOT NULL DEFAULT 0,
+              answer_groundedness DOUBLE PRECISION NOT NULL DEFAULT 0,
+              report {report_type} NOT NULL DEFAULT {report_default},
+              {created_at_column}
+            )
+            """
+        )
+    )
+    connection.execute(
+        text(
+            """
+            CREATE INDEX IF NOT EXISTS idx_evaluation_runs_created_at
+            ON evaluation_runs (created_at DESC)
+            """
+        )
+    )
+    _evaluation_runs_table_ready = True
 
 
 def _percentile(values: list[float], percentile: float) -> float:
@@ -608,3 +955,15 @@ def _percentile(values: list[float], percentile: float) -> float:
     ordered = sorted(values)
     index = min(len(ordered) - 1, max(0, round((len(ordered) - 1) * percentile)))
     return ordered[index]
+
+
+def _id_column_sql(connection: Connection) -> str:
+    if connection.dialect.name == "postgresql":
+        return "id UUID PRIMARY KEY DEFAULT gen_random_uuid()"
+    return "id TEXT PRIMARY KEY DEFAULT (lower(hex(randomblob(16))))"
+
+
+def _created_at_column_sql(connection: Connection) -> str:
+    if connection.dialect.name == "postgresql":
+        return "created_at TIMESTAMPTZ NOT NULL DEFAULT now()"
+    return "created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP"

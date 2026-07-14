@@ -32,6 +32,19 @@ Validate locally:
 docker compose -f docker-compose.yml -f infra/deploy/docker-compose.prod.example.yml config
 ```
 
+## Kubernetes Starter
+
+The Kubernetes starter manifest is [infra/k8s/rag-saas.example.yaml](../infra/k8s/rag-saas.example.yaml). It includes:
+
+- namespace
+- secret placeholders
+- shared ConfigMap
+- backend deployment and service
+- worker deployment
+- frontend deployment and LoadBalancer service
+
+It expects managed or separately deployed Postgres, Redis, MinIO, Qdrant, and Keycloak endpoints to match the ConfigMap values. Replace image names, secrets, issuer URLs, and storage/networking before use.
+
 Start with the overlay after preparing a real environment file:
 
 ```bash
@@ -131,3 +144,13 @@ Before production traffic:
 3. Confirm `/api/v1/analytics` shows normal retrieval status and no unexpected dead-letter backlog.
 4. Confirm the retrieval evaluation gate has zero failed cases.
 5. Confirm backups exist for Postgres, MinIO, Qdrant, and Redis.
+
+## Durable Operations Tables
+
+The app now records durable operational history when `ENABLE_DB_PERSISTENCE=true`:
+
+- `processing_job_events`: created/retry/cancel/dead-letter job lifecycle events.
+- `model_latency_events`: model/vector/reranker latency buckets by query runtime shape.
+- `evaluation_runs`: persisted retrieval quality-gate reports for trend history.
+
+The Admin Analytics API rolls these into recent job events, model latency buckets, and evaluation trend points.

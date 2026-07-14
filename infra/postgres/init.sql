@@ -125,6 +125,53 @@ CREATE TABLE IF NOT EXISTS query_events (
 
 CREATE INDEX IF NOT EXISTS idx_query_events_tenant_time ON query_events (tenant_id, created_at DESC);
 
+CREATE TABLE IF NOT EXISTS model_latency_events (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  tenant_id UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+  cached BOOLEAN NOT NULL DEFAULT FALSE,
+  retrieval_ms DOUBLE PRECISION NOT NULL DEFAULT 0,
+  total_ms DOUBLE PRECISION NOT NULL DEFAULT 0,
+  embedding_model TEXT,
+  answer_model TEXT,
+  vector_index_backend TEXT,
+  reranker_runtime TEXT,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS idx_model_latency_events_tenant_time
+  ON model_latency_events (tenant_id, created_at DESC);
+
+CREATE TABLE IF NOT EXISTS processing_job_events (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  tenant_id UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+  job_id UUID NOT NULL,
+  document_id UUID NOT NULL,
+  event TEXT NOT NULL,
+  status TEXT NOT NULL,
+  attempts INTEGER NOT NULL DEFAULT 0,
+  metadata JSONB NOT NULL DEFAULT '{}'::JSONB,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS idx_processing_job_events_tenant_time
+  ON processing_job_events (tenant_id, created_at DESC);
+
+CREATE TABLE IF NOT EXISTS evaluation_runs (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  cases INTEGER NOT NULL,
+  passed INTEGER NOT NULL,
+  failed INTEGER NOT NULL,
+  context_precision DOUBLE PRECISION NOT NULL DEFAULT 0,
+  context_recall DOUBLE PRECISION NOT NULL DEFAULT 0,
+  answer_relevance DOUBLE PRECISION NOT NULL DEFAULT 0,
+  answer_groundedness DOUBLE PRECISION NOT NULL DEFAULT 0,
+  report JSONB NOT NULL DEFAULT '{}'::JSONB,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS idx_evaluation_runs_created_at
+  ON evaluation_runs (created_at DESC);
+
 INSERT INTO tenants (id, name, slug)
 VALUES ('00000000-0000-4000-8000-000000000001', 'Demo Tenant', 'demo')
 ON CONFLICT (slug) DO UPDATE SET

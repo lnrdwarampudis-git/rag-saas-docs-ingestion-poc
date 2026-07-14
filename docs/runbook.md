@@ -552,6 +552,22 @@ select cached, retrieval_ms, total_ms, created_at
 from query_events
 order by created_at desc
 limit 10;
+
+select event, status, attempts, metadata, created_at
+from processing_job_events
+order by created_at desc
+limit 20;
+
+select embedding_model, answer_model, vector_index_backend, reranker_runtime,
+       avg(total_ms) as avg_total_ms, max(total_ms) as max_total_ms, count(*) as samples
+from model_latency_events
+group by embedding_model, answer_model, vector_index_backend, reranker_runtime
+order by samples desc;
+
+select cases, failed, context_precision, answer_groundedness, created_at
+from evaluation_runs
+order by created_at desc
+limit 10;
 ```
 
 ## Troubleshooting

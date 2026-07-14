@@ -8,6 +8,7 @@ import logging
 
 from app.auth.models import AuthenticatedUser
 from app.config import get_settings
+from app.rag.analytics import record_processing_job_event
 from app.rag.ingestion import process_document_path
 from app.rag.persistence import (
     get_persisted_processing_job,
@@ -253,6 +254,18 @@ def _dead_letter_processing_job(job: ProcessingJob) -> None:
 def _record_job_event(job_id: UUID, event: str) -> None:
     events = _job_events.setdefault(job_id, [])
     events.append(f"{_utcnow().isoformat()} {event}")
+    job = _jobs.get(job_id)
+    if job is None:
+        return
+    record_processing_job_event(
+        tenant_id=job.tenant_id,
+        job_id=job.job_id,
+        document_id=job.document_id,
+        event=event,
+        status=job.status,
+        attempts=job.attempts,
+        metadata={"stage": job.stage, "file_name": job.file_name},
+    )
 
 
 def _queue_name_for_job(job_id: UUID) -> str:

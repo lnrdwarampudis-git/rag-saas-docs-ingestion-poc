@@ -71,6 +71,7 @@ class RagPipeline:
                 cached=True,
                 retrieval_ms=cached.get("metrics", {}).get("retrieval_ms"),
                 total_ms=cached.get("metrics", {}).get("total_ms"),
+                metrics=cached.get("metrics", {}),
             )
             return RagAnswer(**cached)
 
@@ -129,6 +130,7 @@ class RagPipeline:
             cached=False,
             retrieval_ms=payload["metrics"]["retrieval_ms"],
             total_ms=payload["metrics"]["total_ms"],
+            metrics=payload["metrics"],
         )
         return RagAnswer(**payload)
 

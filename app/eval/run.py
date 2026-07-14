@@ -115,6 +115,10 @@ def main() -> None:
     args = parser.parse_args()
 
     report = run_eval(args.dataset)
+    if not args.json:
+        from app.eval.history import record_evaluation_run
+
+        record_evaluation_run(report)
     if args.json:
         print(json.dumps(report, indent=2))
         return

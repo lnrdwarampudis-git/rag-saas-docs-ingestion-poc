@@ -1,0 +1,148 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: rag-saas
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: rag-secrets
+  namespace: rag-saas
+type: Opaque
+stringData:
+  DATABASE_URL: postgresql+psycopg://rag:change-me@postgres:5432/rag
+  MINIO_ACCESS_KEY: minio
+  MINIO_SECRET_KEY: change-me
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: rag-config
+  namespace: rag-saas
+data:
+  ENVIRONMENT: production
+  ENABLE_DB_PERSISTENCE: "true"
+  REDIS_URL: redis://redis:6379/0
+  MINIO_ENDPOINT: http://minio:9000
+  MINIO_PUBLIC_ENDPOINT: https://minio.example.com
+  QDRANT_URL: http://qdrant:6333
+  VECTOR_INDEX_BACKEND: qdrant
+  QDRANT_COLLECTION_NAME: rag_chunks
+  PROCESSING_QUEUE_NAME: rag:processing-jobs
+  OCR_PROCESSING_QUEUE_NAME: rag:processing-jobs:ocr
+  PROCESSING_DEAD_LETTER_QUEUE_NAME: rag:processing-jobs:dead-letter
+  WORKER_QUEUE_NAMES: rag:processing-jobs,rag:processing-jobs:ocr
+  UPLOAD_SESSION_STORAGE_BACKEND: minio
+  LOCAL_MODEL_PROFILE: local-default
+  PUBLIC_LLM_ENABLED: "false"
+  KEYCLOAK_ISSUER: https://keycloak.example.com/realms/rag
+  KEYCLOAK_INTERNAL_ISSUER: http://keycloak:8080/realms/rag
+  KEYCLOAK_AUDIENCE: rag-api
+  KEYCLOAK_CLIENT_ID: rag-frontend
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: backend
+  namespace: rag-saas
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: backend
+  template:
+    metadata:
+      labels:
+        app: backend
+    spec:
+      containers:
+        - name: backend
+          image: ghcr.io/your-org/rag-saas-backend:latest
+          ports:
+            - containerPort: 8000
+          envFrom:
+            - configMapRef:
+                name: rag-config
+            - secretRef:
+                name: rag-secrets
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            periodSeconds: 30
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: worker
+  namespace: rag-saas
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: worker
+  template:
+    metadata:
+      labels:
+        app: worker
+    spec:
+      containers:
+        - name: worker
+          image: ghcr.io/your-org/rag-saas-backend:latest
+          command: ["python", "-m", "app.worker"]
+          envFrom:
+            - configMapRef:
+                name: rag-config
+            - secretRef:
+                name: rag-secrets
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: frontend
+  namespace: rag-saas
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: frontend
+  template:
+    metadata:
+      labels:
+        app: frontend
+    spec:
+      containers:
+        - name: frontend
+          image: ghcr.io/your-org/rag-saas-frontend:latest
+          ports:
+            - containerPort: 80
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: backend
+  namespace: rag-saas
+spec:
+  selector:
+    app: backend
+  ports:
+    - port: 8000
+      targetPort: 8000
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: frontend
+  namespace: rag-saas
+spec:
+  type: LoadBalancer
+  selector:
+    app: frontend
+  ports:
+    - port: 80
+      targetPort: 80

@@ -217,6 +217,7 @@ type AnalyticsReport = {
     cancelled: number;
     dead_lettered: number;
     recent_failures: string[];
+    recent_events: string[];
   };
   queries: {
     total: number;
@@ -228,6 +229,12 @@ type AnalyticsReport = {
     p95_retrieval_ms: number;
     p95_total_ms: number;
     recent_average_total_ms: number;
+    model_latency_buckets: Array<{
+      model_key: string;
+      total: number;
+      average_total_ms: number;
+      p95_total_ms: number;
+    }>;
   };
   retrieval: {
     vector_index_backend: string;
@@ -236,6 +243,16 @@ type AnalyticsReport = {
     p95_retrieval_ms: number;
     retrieval_warning_ms: number;
     retrieval_attention: boolean;
+    qdrant: null | {
+      ready: boolean;
+      collection_name: string;
+      points_count: number;
+      indexed_vectors_count: number;
+      segments_count: number;
+      status: string;
+      optimizer_status: string;
+      message: string;
+    };
   };
   evaluation: {
     cases: number;
@@ -245,6 +262,14 @@ type AnalyticsReport = {
     context_recall: number;
     answer_relevance: number;
     answer_groundedness: number;
+    last_run_at: string | null;
+    trend: Array<{
+      created_at: string;
+      cases: number;
+      failed: number;
+      context_precision: number;
+      answer_groundedness: number;
+    }>;
   };
   recent_events: Array<{
     action: string;
@@ -1533,12 +1558,47 @@ function AnalyticsPanel({
               : "Loading"
           }
         />
+        <StatusItem
+          label="Eval trend"
+          value={
+            report?.evaluation.last_run_at
+              ? `${report.evaluation.trend.length} run(s) / ${formatDate(report.evaluation.last_run_at)}`
+              : "No persisted runs"
+          }
+        />
+        <StatusItem
+          label="Qdrant health"
+          value={
+            report?.retrieval.qdrant
+              ? `${report.retrieval.qdrant.status} / ${report.retrieval.qdrant.points_count} points`
+              : "Not selected"
+          }
+        />
       </div>
+
+      {report?.queries.model_latency_buckets.length ? (
+        <div className="failure-list" aria-label="Model latency buckets">
+          {report.queries.model_latency_buckets.slice(0, 4).map((bucket) => (
+            <Badge
+              key={bucket.model_key}
+              label={`${bucket.model_key}: ${formatMilliseconds(bucket.p95_total_ms)} p95`}
+            />
+          ))}
+        </div>
+      ) : null}
 
       {report?.jobs.recent_failures.length ? (
         <div className="failure-list">
           {report.jobs.recent_failures.map((fileName) => (
             <Badge key={fileName} label={fileName} />
+          ))}
+        </div>
+      ) : null}
+
+      {report?.jobs.recent_events.length ? (
+        <div className="failure-list" aria-label="Recent job events">
+          {report.jobs.recent_events.slice(0, 4).map((event) => (
+            <Badge key={event} label={event} />
           ))}
         </div>
       ) : null}
