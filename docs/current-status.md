@@ -9,7 +9,7 @@ This page is the short handoff for what the POC supports today, how to run it, a
 - Docker Compose stack for backend, frontend, default worker, OCR worker, Postgres/pgvector, Redis, MinIO, Qdrant, and Keycloak.
 - Background ingestion through `POST /api/v1/documents/upload-async`, Redis queues, and `python -m app.worker`.
 - Configurable upload guardrails for browser uploads: allowed extensions and maximum byte size are enforced by the API and pre-checked in the UI.
-- Resumable upload-session API for large files with tenant/uploader-bound sessions, filesystem or MinIO part storage, presigned MinIO part URLs, browser upload progress, and async completion.
+- Resumable upload-session API for large files with tenant/uploader-bound sessions, filesystem or MinIO part storage, presigned MinIO part URLs, browser upload progress, async completion, completed-session cleanup, and stale-session cleanup command.
 - Processing job status, local run, and retry controls through `GET /api/v1/processing-jobs/{job_id}`, `POST /api/v1/processing-jobs/{job_id}/run`, and `POST /api/v1/processing-jobs/{job_id}/retry`.
 - Tenant-scoped document inventory, chunk preview, query pipeline, citations, Redis query cache, and cache/model-aware query metrics.
 - Offline retrieval quality gate through `python -m app.eval.run` and authenticated UI/API evaluation status.
@@ -118,7 +118,7 @@ git diff --check
 
 Recommended next implementation slices:
 
-1. Finish large-file ingestion ops: stale-session cleanup, object-storage lifecycle cleanup, direct presigned upload UI mode, and production multipart tuning.
+1. Finish large-file ingestion ops: object-storage lifecycle policy automation, direct presigned upload UI mode, and production multipart tuning.
 2. Deepen persistent vector retrieval operations: production migration checks for existing databases, index backfill runbook automation, Qdrant payload/index tuning, and retrieval dashboards.
 3. Add stronger local model options: local cross-encoder reranker adapter, vLLM embedding/generation/reranking path, model health dashboards, and performance thresholds.
 4. Improve operations controls: job cancel/retry history, dead-letter queue, worker concurrency controls, and richer audit event filtering.

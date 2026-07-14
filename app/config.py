@@ -18,6 +18,7 @@ class Settings(BaseSettings):
     upload_session_storage_backend: str = "filesystem"
     upload_session_bucket: str = "rag-upload-sessions"
     upload_session_presign_expiry_seconds: int = 3600
+    upload_session_cleanup_max_age_hours: int = 24
     qdrant_url: str = "http://localhost:6333"
     qdrant_collection_name: str = "rag_chunks"
     qdrant_request_timeout_seconds: float = 10.0

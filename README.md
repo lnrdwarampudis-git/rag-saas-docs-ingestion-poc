@@ -166,6 +166,8 @@ Browser uploads are guarded by configurable extension and size limits. Defaults 
 
 The async upload endpoint returns `202 Accepted` with a `job_id` and `document_id`. The resumable upload-session endpoints create a session, upload numbered parts, inspect uploaded parts, and complete the session into the same async processing queue. Sessions are bound to the tenant and uploader subject. By default parts use local filesystem storage under `UPLOAD_DIR`; `UPLOAD_SESSION_STORAGE_BACKEND=minio` stores parts in MinIO and exposes presigned part URLs for direct browser-to-object-storage uploads. Docker Compose includes a default `worker` service for normal ingestion and a `worker-ocr` service for forced OCR jobs. Both poll Redis, process queued files, update `processing_jobs`, and transition documents from `pending` to `embedded` or `failed`. Failed jobs can be retried through the processing job retry API or the UI retry action.
 
+Completed upload sessions remove temporary part storage after the final file is assembled. Abandoned sessions can be cleaned up with `python -m app.rag.cleanup_upload_sessions --max-age-hours 24`.
+
 Supported POC intake formats:
 
 - PDF

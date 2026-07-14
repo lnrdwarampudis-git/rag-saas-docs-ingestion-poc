@@ -199,9 +199,14 @@ UPLOAD_SESSION_PART_BYTES=8388608
 UPLOAD_SESSION_STORAGE_BACKEND=filesystem
 UPLOAD_SESSION_BUCKET=rag-upload-sessions
 UPLOAD_SESSION_PRESIGN_EXPIRY_SECONDS=3600
+UPLOAD_SESSION_CLEANUP_MAX_AGE_HOURS=24
 ```
 
-The upload-session API stores numbered parts, reports uploaded part numbers for resume clients, and completes the assembled file into the existing async processing queue. Sessions are scoped to the authenticated tenant and uploader subject. The default `filesystem` backend stores parts under `UPLOAD_DIR/sessions`. Use `UPLOAD_SESSION_STORAGE_BACKEND=minio` to store parts in MinIO and enable presigned part URLs for direct browser-to-object-storage upload. Production still needs stale-session and object lifecycle cleanup tuned for the deployment.
+The upload-session API stores numbered parts, reports uploaded part numbers for resume clients, and completes the assembled file into the existing async processing queue. Sessions are scoped to the authenticated tenant and uploader subject. The default `filesystem` backend stores parts under `UPLOAD_DIR/sessions`. Use `UPLOAD_SESSION_STORAGE_BACKEND=minio` to store parts in MinIO and enable presigned part URLs for direct browser-to-object-storage upload. Completed sessions delete their temporary parts after assembly. Stale abandoned sessions can be removed with:
+
+```bash
+python -m app.rag.cleanup_upload_sessions --max-age-hours 24
+```
 
 Vector and reranker defaults:
 

@@ -280,6 +280,7 @@ def test_resumable_upload_session_completes_to_processing_job(
     payload = complete_response.json()
     assert payload["file_name"] == "large-policy.txt"
     assert payload["status"] == "queued"
+    assert not (tmp_path / "sessions" / session["upload_session_id"]).exists()
 
 
 def test_resumable_upload_session_returns_minio_presigned_part_url(

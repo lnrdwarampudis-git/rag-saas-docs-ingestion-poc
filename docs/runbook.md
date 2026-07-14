@@ -141,10 +141,16 @@ See [Model Providers](model-providers.md) for the full setting list, cache behav
 Confirm large-file and retrieval settings inside the backend container:
 
 ```bash
-docker compose exec backend python -c "import os; keys=['UPLOAD_SESSION_PART_BYTES','UPLOAD_SESSION_STORAGE_BACKEND','VECTOR_INDEX_BACKEND','PGVECTOR_DIMENSIONS','QDRANT_COLLECTION_NAME','RERANKER_PROVIDER','LOCAL_RERANKER_RUNTIME']; print({k: os.environ.get(k) for k in keys})"
+docker compose exec backend python -c "import os; keys=['UPLOAD_SESSION_PART_BYTES','UPLOAD_SESSION_STORAGE_BACKEND','UPLOAD_SESSION_CLEANUP_MAX_AGE_HOURS','VECTOR_INDEX_BACKEND','PGVECTOR_DIMENSIONS','QDRANT_COLLECTION_NAME','RERANKER_PROVIDER','LOCAL_RERANKER_RUNTIME']; print({k: os.environ.get(k) for k in keys})"
 ```
 
 Use `VECTOR_INDEX_BACKEND=pgvector` only with `ENABLE_DB_PERSISTENCE=true`. Use `VECTOR_INDEX_BACKEND=qdrant` for the Qdrant adapter, then run `python -m app.rag.backfill_vectors` after changing vector backend or embedding model. The default `RERANKER_PROVIDER=none` can be changed to `RERANKER_PROVIDER=local` and `LOCAL_RERANKER_RUNTIME=keyword` for deterministic local reranking.
+
+Clean up abandoned upload sessions and temporary parts:
+
+```bash
+docker compose exec backend python -m app.rag.cleanup_upload_sessions --max-age-hours 24
+```
 
 ## OCR Runtime Check
 

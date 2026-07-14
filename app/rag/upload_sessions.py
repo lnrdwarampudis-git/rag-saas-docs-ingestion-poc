@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 from uuid import UUID, uuid4
-from datetime import timedelta
+from datetime import datetime, timedelta, timezone
 import json
 import shutil
 import tempfile
@@ -37,6 +37,13 @@ class UploadSession:
             for path in _session_dir(self.upload_session_id).glob("*.part")
             if path.stem.isdigit()
         )
+
+
+@dataclass(frozen=True)
+class UploadSessionCleanupResult:
+    sessions_removed: int = 0
+    parts_removed: int = 0
+    bytes_removed: int = 0
 
 
 def create_upload_session(
@@ -80,6 +87,7 @@ def create_upload_session(
                 "allowed_role_names": session.allowed_role_names,
                 "force_ocr": session.force_ocr,
                 "uploaded_parts": [],
+                "created_at": datetime.now(timezone.utc).isoformat(),
             }
         ),
         encoding="utf-8",
@@ -103,6 +111,35 @@ def get_upload_session(upload_session_id: UUID) -> UploadSession:
         force_ocr=bool(data.get("force_ocr", False)),
         uploaded_parts_manifest=list(data.get("uploaded_parts", [])),
     )
+
+
+def delete_upload_session(upload_session_id: UUID) -> UploadSessionCleanupResult:
+    return _delete_session(get_upload_session(upload_session_id))
+
+
+def cleanup_stale_upload_sessions(max_age_hours: int | None = None) -> UploadSessionCleanupResult:
+    settings = get_settings()
+    max_age = max_age_hours if max_age_hours is not None else settings.upload_session_cleanup_max_age_hours
+    cutoff = datetime.now(timezone.utc) - timedelta(hours=max(1, max_age))
+    sessions_root = Path(settings.upload_dir) / "sessions"
+    if not sessions_root.exists():
+        return UploadSessionCleanupResult()
+
+    total = UploadSessionCleanupResult()
+    for manifest in sessions_root.glob("*/manifest.json"):
+        try:
+            upload_session_id = UUID(manifest.parent.name)
+            if _session_created_at(manifest) > cutoff:
+                continue
+            result = delete_upload_session(upload_session_id)
+        except (HTTPException, OSError, ValueError, json.JSONDecodeError):
+            continue
+        total = UploadSessionCleanupResult(
+            sessions_removed=total.sessions_removed + result.sessions_removed,
+            parts_removed=total.parts_removed + result.parts_removed,
+            bytes_removed=total.bytes_removed + result.bytes_removed,
+        )
+    return total
 
 
 def save_upload_part(upload_session_id: UUID, part_number: int, file: UploadFile) -> UploadSession:
@@ -191,7 +228,30 @@ def assemble_upload_session(upload_session_id: UUID) -> tuple[UploadSession, Pat
             else:
                 with (_session_dir(upload_session_id) / f"{part_number:08d}.part").open("rb") as part:
                     shutil.copyfileobj(part, output, length=PART_COPY_CHUNK_SIZE)
+    delete_upload_session(upload_session_id)
     return session, target
+
+
+def _delete_session(session: UploadSession) -> UploadSessionCleanupResult:
+    if _storage_backend() == "minio":
+        parts_removed = 0
+        bytes_removed = 0
+        client = _minio_client()
+        bucket = get_settings().upload_session_bucket
+        for item in _minio_session_objects(session):
+            bytes_removed += int(getattr(item, "size", 0) or 0)
+            client.remove_object(bucket, item.object_name)
+            parts_removed += 1
+    else:
+        part_paths = list(_session_dir(session.upload_session_id).glob("*.part"))
+        parts_removed = len(part_paths)
+        bytes_removed = sum(path.stat().st_size for path in part_paths)
+    shutil.rmtree(_session_dir(session.upload_session_id), ignore_errors=True)
+    return UploadSessionCleanupResult(
+        sessions_removed=1,
+        parts_removed=parts_removed,
+        bytes_removed=bytes_removed,
+    )
 
 
 def _uploaded_bytes(upload_session_id: UUID) -> int:
@@ -214,6 +274,17 @@ def _session_dir(upload_session_id: UUID) -> Path:
 
 def _manifest_path(upload_session_id: UUID) -> Path:
     return _session_dir(upload_session_id) / "manifest.json"
+
+
+def _session_created_at(manifest: Path) -> datetime:
+    try:
+        data = json.loads(manifest.read_text(encoding="utf-8"))
+        raw_created_at = data.get("created_at")
+        if isinstance(raw_created_at, str):
+            return datetime.fromisoformat(raw_created_at)
+    except (OSError, ValueError, json.JSONDecodeError):
+        pass
+    return datetime.fromtimestamp(manifest.stat().st_mtime, timezone.utc)
 
 
 def _storage_backend() -> str:
@@ -258,6 +329,18 @@ def _update_manifest(upload_session_id: UUID, updates: dict) -> None:
 
 def _part_object_name(session: UploadSession, part_number: int) -> str:
     return f"{session.tenant_id}/{session.upload_session_id}/parts/{part_number:08d}.part"
+
+
+def _session_object_prefix(session: UploadSession) -> str:
+    return f"{session.tenant_id}/{session.upload_session_id}/"
+
+
+def _minio_session_objects(session: UploadSession):
+    return _minio_client().list_objects(
+        get_settings().upload_session_bucket,
+        prefix=_session_object_prefix(session),
+        recursive=True,
+    )
 
 
 def _remove_minio_part(session: UploadSession, part_number: int) -> None:
