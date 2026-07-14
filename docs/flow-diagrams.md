@@ -201,29 +201,31 @@ flowchart LR
   embeddingProvider --> localEmbedding{"local"}
   localEmbedding --> hashing["Default hashing embeddings"]
   localEmbedding --> ollamaEmbedding["Optional Ollama embeddings"]
-  localEmbedding --> futureEmbedding["Future vLLM or BGE/E5 adapter"]
+  localEmbedding --> vllmEmbedding["vLLM-compatible embeddings"]
   vectorIndex --> memoryIndex["Default in-memory vector index"]
   vectorIndex --> pgvectorIndex["Optional pgvector index"]
   vectorIndex --> qdrantIndex["Optional Qdrant index"]
   rerankerProvider --> noReranker["Default no reranker"]
   rerankerProvider --> keywordReranker["Optional local keyword reranker"]
-  rerankerProvider --> futureReranker["Future local cross-encoder / vLLM reranker"]
+  rerankerProvider --> httpReranker["HTTP cross-encoder / vLLM reranker"]
   llmProvider --> localLlm{"local"}
   localLlm --> extractive["Default extractive generator"]
   localLlm --> ollamaLlm["Optional Ollama generator"]
-  localLlm --> futureLlm["Future vLLM generator"]
+  localLlm --> vllmLlm["vLLM-compatible generator"]
   llmProvider --> public{"public provider later"}
   public --> gate["PUBLIC_LLM_ENABLED=true required"]
   gate --> tokenApi["Token/API-based LLM provider"]
   hashing --> cacheKey["Provider/runtime/model names<br/>included in cache key + metrics"]
   extractive --> cacheKey
   ollamaEmbedding --> cacheKey
+  vllmEmbedding --> cacheKey
   ollamaLlm --> cacheKey
+  vllmLlm --> cacheKey
   pgvectorIndex --> cacheKey
   qdrantIndex --> cacheKey
   noReranker --> cacheKey
   keywordReranker --> cacheKey
-  futureReranker --> cacheKey
+  httpReranker --> cacheKey
 ```
 
 ## Model Status Flow

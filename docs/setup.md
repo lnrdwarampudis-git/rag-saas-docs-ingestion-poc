@@ -48,7 +48,7 @@ LOCAL_LLM_BASE_URL=http://localhost:11434
 PUBLIC_LLM_ENABLED=false
 ```
 
-No model download or public LLM token is required for the default stack. See [Model Providers](model-providers.md) before changing these values. `LOCAL_EMBEDDING_RUNTIME=ollama` and `LOCAL_LLM_RUNTIME=ollama` are supported when Ollama is running locally; vLLM embeddings and generation are reserved until their adapters are implemented.
+No model download or public LLM token is required for the default stack. See [Model Providers](model-providers.md) before changing these values. `LOCAL_EMBEDDING_RUNTIME=ollama` and `LOCAL_LLM_RUNTIME=ollama` are supported when Ollama is running locally; `LOCAL_EMBEDDING_RUNTIME=vllm` and `LOCAL_LLM_RUNTIME=vllm` are available for OpenAI-compatible local vLLM services.
 
 ## Optional Mac-Host Ollama For Docker Backend
 
@@ -200,6 +200,7 @@ UPLOAD_SESSION_STORAGE_BACKEND=filesystem
 UPLOAD_SESSION_BUCKET=rag-upload-sessions
 UPLOAD_SESSION_PRESIGN_EXPIRY_SECONDS=3600
 UPLOAD_SESSION_CLEANUP_MAX_AGE_HOURS=24
+UPLOAD_SESSION_LIFECYCLE_EXPIRATION_DAYS=7
 MINIO_PUBLIC_ENDPOINT=http://localhost:9000
 ```
 
@@ -207,6 +208,12 @@ The upload-session API stores numbered parts, reports uploaded part numbers for 
 
 ```bash
 python -m app.rag.cleanup_upload_sessions --max-age-hours 24
+```
+
+For MinIO-backed upload sessions, apply object-store lifecycle expiration for abandoned parts:
+
+```bash
+python -m app.rag.minio_lifecycle
 ```
 
 Vector and reranker defaults:
@@ -220,6 +227,8 @@ QDRANT_REQUEST_TIMEOUT_SECONDS=10
 RERANKER_PROVIDER=none
 LOCAL_RERANKER_RUNTIME=none
 LOCAL_RERANKER_MODEL_NAME=none
+LOCAL_RERANKER_BASE_URL=http://localhost:8081
+LOCAL_RERANKER_REQUEST_TIMEOUT_SECONDS=30
 RERANKER_CANDIDATE_MULTIPLIER=4
 RETRIEVAL_LATENCY_WARNING_MS=1500
 TOTAL_LATENCY_WARNING_MS=5000
@@ -228,10 +237,10 @@ TOTAL_LATENCY_WARNING_MS=5000
 Use `VECTOR_INDEX_BACKEND=pgvector` with `ENABLE_DB_PERSISTENCE=true` to store chunk embeddings in PostgreSQL and retrieve vector candidates through pgvector before hybrid scoring. Use `VECTOR_INDEX_BACKEND=qdrant` to write/search vectors in Qdrant. After changing vector backends or embedding models, backfill persisted chunks:
 
 ```bash
-python -m app.rag.backfill_vectors
+python -m app.rag.vector_ops
 ```
 
-The default `RERANKER_PROVIDER=none` keeps ranking deterministic. Use `RERANKER_PROVIDER=local` and `LOCAL_RERANKER_RUNTIME=keyword` for the deterministic local keyword reranker. Cross-encoder and vLLM reranker runtimes remain reserved until their adapters are implemented. `RETRIEVAL_LATENCY_WARNING_MS` and `TOTAL_LATENCY_WARNING_MS` drive model-status and analytics warning surfaces; they do not fail requests.
+The default `RERANKER_PROVIDER=none` keeps ranking deterministic. Use `RERANKER_PROVIDER=local` and `LOCAL_RERANKER_RUNTIME=keyword` for the deterministic local keyword reranker, or `LOCAL_RERANKER_RUNTIME=cross-encoder` / `vllm` with `LOCAL_RERANKER_BASE_URL` pointing to a local HTTP service that accepts `POST /rerank`. `RETRIEVAL_LATENCY_WARNING_MS` and `TOTAL_LATENCY_WARNING_MS` drive model-status and analytics warning surfaces; they do not fail requests.
 
 OCR defaults:
 

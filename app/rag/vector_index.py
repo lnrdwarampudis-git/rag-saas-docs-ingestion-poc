@@ -162,6 +162,13 @@ class PgVectorIndex:
 
 class QdrantVectorIndex:
     backend_name = "qdrant"
+    payload_indexes = {
+        "tenant_id": "keyword",
+        "document_id": "keyword",
+        "visibility": "keyword",
+        "uploaded_by": "keyword",
+        "allowed_role_names": "keyword",
+    }
 
     def __init__(self, settings: Settings | None = None, client: httpx.Client | None = None) -> None:
         self.settings = settings or get_settings()
@@ -236,6 +243,7 @@ class QdrantVectorIndex:
     def _ensure_collection(self) -> None:
         response = self._client.get(f"/collections/{self.settings.qdrant_collection_name}")
         if response.status_code == 200:
+            self.ensure_payload_indexes()
             return
         if response.status_code != 404:
             response.raise_for_status()
@@ -249,6 +257,21 @@ class QdrantVectorIndex:
             },
         )
         create_response.raise_for_status()
+        self.ensure_payload_indexes()
+
+    def ensure_payload_indexes(self) -> int:
+        ensured = 0
+        for field_name, field_schema in self.payload_indexes.items():
+            response = self._client.put(
+                f"/collections/{self.settings.qdrant_collection_name}/index",
+                json={"field_name": field_name, "field_schema": field_schema},
+            )
+            if response.status_code in {200, 201, 202, 409}:
+                ensured += 1
+                continue
+            response.raise_for_status()
+            ensured += 1
+        return ensured
 
 
 memory_vector_index = InMemoryVectorIndex()

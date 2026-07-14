@@ -9,6 +9,8 @@ from app.rag.model_providers import (
     ModelProviderRequestError,
     OllamaAnswerGenerator,
     OllamaEmbeddingModel,
+    VllmAnswerGenerator,
+    VllmEmbeddingModel,
     build_model_provider,
 )
 from app.rag.retrieval import RetrievalResult
@@ -258,14 +260,104 @@ def test_ollama_answer_generator_reports_invalid_json() -> None:
         )
 
 
-def test_future_local_embedding_runtimes_are_reserved_until_adapter_is_implemented() -> None:
-    with pytest.raises(ModelProviderConfigurationError, match="future adapter"):
-        build_model_provider(Settings(_env_file=None, local_embedding_runtime="vllm"))
+def test_vllm_embedding_runtime_is_available() -> None:
+    provider = build_model_provider(
+        Settings(
+            _env_file=None,
+            local_embedding_runtime="vllm",
+            local_embedding_model_name="BAAI/bge-small-en-v1.5",
+            local_embedding_base_url="http://vllm:8000",
+        )
+    )
+
+    assert provider.embedding_runtime == "vllm"
+    assert isinstance(provider.embedding_model, VllmEmbeddingModel)
 
 
-def test_future_local_generation_runtimes_are_reserved_until_adapter_is_implemented() -> None:
-    with pytest.raises(ModelProviderConfigurationError, match="future adapter"):
-        build_model_provider(Settings(_env_file=None, local_llm_runtime="vllm"))
+def test_vllm_embedding_model_posts_to_openai_compatible_endpoint() -> None:
+    requests: list[httpx.Request] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        requests.append(request)
+        return httpx.Response(200, json={"data": [{"embedding": [5, 12]}]})
+
+    client = httpx.Client(
+        base_url="http://vllm.test",
+        transport=httpx.MockTransport(handler),
+    )
+    model = VllmEmbeddingModel(
+        base_url="http://vllm.test",
+        model_name="BAAI/bge-small-en-v1.5",
+        client=client,
+    )
+
+    embedding = model.embed("Redis vector retrieval")
+
+    assert requests[0].url.path == "/v1/embeddings"
+    assert _request_json(requests[0]) == {
+        "model": "BAAI/bge-small-en-v1.5",
+        "input": "Redis vector retrieval",
+    }
+    assert embedding == [5 / 13, 12 / 13]
+
+
+def test_vllm_generation_runtime_is_available() -> None:
+    provider = build_model_provider(
+        Settings(
+            _env_file=None,
+            local_llm_runtime="vllm",
+            local_llm_model_name="mistralai/Mistral-7B-Instruct-v0.3",
+            local_llm_base_url="http://vllm:8000",
+        )
+    )
+
+    assert provider.answer_runtime == "vllm"
+    assert isinstance(provider.answer_generator, VllmAnswerGenerator)
+
+
+def test_vllm_answer_generator_posts_chat_completion() -> None:
+    requests: list[httpx.Request] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        requests.append(request)
+        return httpx.Response(
+            200,
+            json={"choices": [{"message": {"content": "Redis lowers repeated query latency."}}]},
+        )
+
+    client = httpx.Client(
+        base_url="http://vllm.test",
+        transport=httpx.MockTransport(handler),
+    )
+    generator = VllmAnswerGenerator(
+        base_url="http://vllm.test",
+        model_name="mistralai/Mistral-7B-Instruct-v0.3",
+        client=client,
+    )
+
+    answer = generator.generate(
+        "How does Redis help?",
+        [
+            RetrievalResult(
+                chunk=ChunkDTO(
+                    chunk_index=0,
+                    text="Redis cache improves repeated RAG query latency.",
+                    token_count=7,
+                    metadata={"file_name": "architecture.md"},
+                ),
+                score=1.0,
+                keyword_score=1.0,
+                vector_score=1.0,
+                early_score=1.0,
+            )
+        ],
+    )
+
+    payload = _request_json(requests[0])
+    assert requests[0].url.path == "/v1/chat/completions"
+    assert payload["model"] == "mistralai/Mistral-7B-Instruct-v0.3"
+    assert payload["temperature"] == 0
+    assert answer == "Redis lowers repeated query latency."
 
 
 def _request_json(request: httpx.Request) -> dict:

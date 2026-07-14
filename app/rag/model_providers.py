@@ -138,6 +138,82 @@ class OllamaAnswerGenerator:
         return answer.strip()
 
 
+class VllmEmbeddingModel:
+    def __init__(
+        self,
+        base_url: str,
+        model_name: str,
+        timeout_seconds: float = 30.0,
+        client: httpx.Client | None = None,
+    ) -> None:
+        self.model_name = model_name
+        self.base_url = base_url.rstrip("/")
+        self._client = client or httpx.Client(
+            base_url=self.base_url,
+            timeout=timeout_seconds,
+        )
+
+    def embed(self, text: str) -> list[float]:
+        response = _post_json(
+            client=self._client,
+            endpoint="/v1/embeddings",
+            payload={"model": self.model_name, "input": text},
+            provider="vLLM",
+            model_name=self.model_name,
+            base_url=self.base_url,
+            operation="embedding",
+        )
+        embedding = _openai_embedding_from_response(response.json())
+        return _normalize_embedding(embedding)
+
+
+class VllmAnswerGenerator:
+    def __init__(
+        self,
+        base_url: str,
+        model_name: str,
+        timeout_seconds: float = 30.0,
+        client: httpx.Client | None = None,
+    ) -> None:
+        self.model_name = model_name
+        self.base_url = base_url.rstrip("/")
+        self._client = client or httpx.Client(
+            base_url=self.base_url,
+            timeout=timeout_seconds,
+        )
+
+    def generate(self, query: str, results: list[RetrievalResult]) -> str:
+        if not results:
+            return ExtractiveAnswerGenerator().generate(query, results)
+
+        response = _post_json(
+            client=self._client,
+            endpoint="/v1/chat/completions",
+            payload={
+                "model": self.model_name,
+                "messages": [
+                    {
+                        "role": "system",
+                        "content": (
+                            "Answer using only the authorized context. If there is not enough "
+                            "authorized evidence, say so. Keep the answer concise."
+                        ),
+                    },
+                    {"role": "user", "content": _answer_prompt(query, results)},
+                ],
+                "temperature": 0,
+            },
+            provider="vLLM",
+            model_name=self.model_name,
+            base_url=self.base_url,
+            operation="answer generation",
+        )
+        answer = _openai_chat_answer_from_response(response.json())
+        if not answer:
+            raise ModelProviderRequestError("vLLM generation response did not include answer text.")
+        return answer
+
+
 def build_model_provider(settings: Settings | None = None) -> ModelProvider:
     settings = settings or get_settings()
     provider_name = settings.llm_provider.lower()
@@ -179,8 +255,10 @@ def _build_local_embedding_model(settings: Settings) -> EmbeddingModel:
             timeout_seconds=settings.local_model_request_timeout_seconds,
         )
     if runtime == "vllm":
-        raise ModelProviderConfigurationError(
-            f"LOCAL_EMBEDDING_RUNTIME '{settings.local_embedding_runtime}' is reserved for a future adapter."
+        return VllmEmbeddingModel(
+            base_url=settings.local_embedding_base_url,
+            model_name=settings.local_embedding_model_name,
+            timeout_seconds=settings.local_model_request_timeout_seconds,
         )
     raise ModelProviderConfigurationError(
         f"Unsupported LOCAL_EMBEDDING_RUNTIME '{settings.local_embedding_runtime}'."
@@ -198,8 +276,10 @@ def _build_local_answer_generator(settings: Settings) -> AnswerGenerator:
             timeout_seconds=settings.local_model_request_timeout_seconds,
         )
     if runtime == "vllm":
-        raise ModelProviderConfigurationError(
-            f"LOCAL_LLM_RUNTIME '{settings.local_llm_runtime}' is reserved for a future adapter."
+        return VllmAnswerGenerator(
+            base_url=settings.local_llm_base_url,
+            model_name=settings.local_llm_model_name,
+            timeout_seconds=settings.local_model_request_timeout_seconds,
         )
     raise ModelProviderConfigurationError(
         f"Unsupported LOCAL_LLM_RUNTIME '{settings.local_llm_runtime}'."
@@ -246,10 +326,51 @@ def _ollama_embedding_from_response(data: dict) -> list[float]:
     return [float(value) for value in embedding]
 
 
+def _openai_embedding_from_response(data: dict) -> list[float]:
+    items = data.get("data")
+    if not isinstance(items, list) or not items or not isinstance(items[0], dict):
+        raise ModelProviderRequestError("vLLM embedding response did not include data[0].embedding.")
+    embedding = items[0].get("embedding")
+    if not isinstance(embedding, list) or not all(isinstance(value, (int, float)) for value in embedding):
+        raise ModelProviderRequestError("vLLM embedding response did not include a numeric vector.")
+    return [float(value) for value in embedding]
+
+
+def _openai_chat_answer_from_response(data: dict) -> str:
+    choices = data.get("choices")
+    if not isinstance(choices, list) or not choices or not isinstance(choices[0], dict):
+        return ""
+    message = choices[0].get("message")
+    if isinstance(message, dict) and isinstance(message.get("content"), str):
+        return message["content"].strip()
+    text = choices[0].get("text")
+    return text.strip() if isinstance(text, str) else ""
+
+
 def _post_ollama_json(
     client: httpx.Client,
     endpoint: str,
     payload: dict,
+    model_name: str,
+    base_url: str,
+    operation: str,
+) -> httpx.Response:
+    return _post_json(
+        client=client,
+        endpoint=endpoint,
+        payload=payload,
+        provider="Ollama",
+        model_name=model_name,
+        base_url=base_url,
+        operation=operation,
+    )
+
+
+def _post_json(
+    client: httpx.Client,
+    endpoint: str,
+    payload: dict,
+    provider: str,
     model_name: str,
     base_url: str,
     operation: str,
@@ -260,27 +381,27 @@ def _post_ollama_json(
         response.json()
     except httpx.TimeoutException as exc:
         raise ModelProviderRequestError(
-            f"Ollama {operation} timed out for model '{model_name}' at {base_url}{endpoint}."
+            f"{provider} {operation} timed out for model '{model_name}' at {base_url}{endpoint}."
         ) from exc
     except httpx.HTTPStatusError as exc:
-        detail = _ollama_error_detail(exc.response)
+        detail = _provider_error_detail(exc.response)
         raise ModelProviderRequestError(
-            f"Ollama {operation} failed for model '{model_name}' at {base_url}{endpoint} "
+            f"{provider} {operation} failed for model '{model_name}' at {base_url}{endpoint} "
             f"with HTTP {exc.response.status_code}: {detail}"
         ) from exc
     except httpx.HTTPError as exc:
         raise ModelProviderRequestError(
-            f"Ollama {operation} request failed for model '{model_name}' at {base_url}{endpoint}: "
+            f"{provider} {operation} request failed for model '{model_name}' at {base_url}{endpoint}: "
             f"{exc.__class__.__name__}."
         ) from exc
     except (JSONDecodeError, ValueError) as exc:
         raise ModelProviderRequestError(
-            f"Ollama {operation} response for model '{model_name}' was not valid JSON."
+            f"{provider} {operation} response for model '{model_name}' was not valid JSON."
         ) from exc
     return response
 
 
-def _ollama_error_detail(response: httpx.Response) -> str:
+def _provider_error_detail(response: httpx.Response) -> str:
     try:
         data = response.json()
     except (JSONDecodeError, ValueError):

@@ -6,9 +6,9 @@ from app.config import Settings, get_settings
 from app.schemas.model_status import ModelPerformanceStatus, ModelRuntimeStatus, ModelStatusResponse
 
 
-SUPPORTED_EMBEDDING_RUNTIMES = {"hashing", "ollama"}
-SUPPORTED_ANSWER_RUNTIMES = {"extractive", "ollama"}
-SUPPORTED_RERANKER_RUNTIMES = {"none", "keyword"}
+SUPPORTED_EMBEDDING_RUNTIMES = {"hashing", "ollama", "vllm"}
+SUPPORTED_ANSWER_RUNTIMES = {"extractive", "ollama", "vllm"}
+SUPPORTED_RERANKER_RUNTIMES = {"none", "keyword", "cross-encoder", "vllm"}
 
 
 def get_model_status(settings: Settings | None = None) -> ModelStatusResponse:
@@ -61,6 +61,16 @@ def _embedding_status(
             base_url=settings.local_embedding_base_url,
             timeout_seconds=settings.local_model_request_timeout_seconds,
         )
+    if runtime == "vllm":
+        return _http_health_status(
+            provider=embedding_provider,
+            runtime=runtime,
+            model_name=settings.local_embedding_model_name,
+            base_url=settings.local_embedding_base_url,
+            timeout_seconds=settings.local_model_request_timeout_seconds,
+            ready_message="vLLM-compatible embedding endpoint is reachable.",
+            attention_message="vLLM-compatible embedding endpoint health check needs attention",
+        )
     return _unsupported_runtime_status(
         provider=embedding_provider,
         runtime=runtime,
@@ -97,6 +107,16 @@ def _answer_status(settings: Settings, llm_provider: str, runtime: str) -> Model
             model_name=settings.local_llm_model_name,
             base_url=settings.local_llm_base_url,
             timeout_seconds=settings.local_model_request_timeout_seconds,
+        )
+    if runtime == "vllm":
+        return _http_health_status(
+            provider=llm_provider,
+            runtime=runtime,
+            model_name=settings.local_llm_model_name,
+            base_url=settings.local_llm_base_url,
+            timeout_seconds=settings.local_model_request_timeout_seconds,
+            ready_message="vLLM-compatible generation endpoint is reachable.",
+            attention_message="vLLM-compatible generation endpoint health check needs attention",
         )
     return _unsupported_runtime_status(
         provider=llm_provider,
@@ -204,12 +224,14 @@ def _reranker_status(settings: Settings) -> ModelRuntimeStatus:
             message="Deterministic local keyword reranker is ready.",
         )
     if provider == "local" and runtime in {"cross-encoder", "vllm"}:
-        return ModelRuntimeStatus(
+        return _http_health_status(
             provider=provider,
             runtime=runtime,
             model_name=settings.local_reranker_model_name,
-            ready=False,
-            message="This local reranker runtime is reserved until its adapter is implemented.",
+            base_url=settings.local_reranker_base_url,
+            timeout_seconds=settings.local_reranker_request_timeout_seconds,
+            ready_message=f"Local {runtime} reranker endpoint is reachable.",
+            attention_message=f"Local {runtime} reranker endpoint health check needs attention",
         )
     return _unsupported_runtime_status(
         provider=provider,
@@ -266,6 +288,48 @@ def _ollama_status(
         model_name=model_name,
         ready=False,
         message="Ollama is reachable, but the configured model is not installed.",
+        base_url=base_url,
+    )
+
+
+def _http_health_status(
+    *,
+    provider: str,
+    runtime: str,
+    model_name: str,
+    base_url: str,
+    timeout_seconds: float,
+    ready_message: str,
+    attention_message: str,
+) -> ModelRuntimeStatus:
+    try:
+        with httpx.Client(base_url=base_url.rstrip("/"), timeout=min(timeout_seconds, 5.0)) as client:
+            response = client.get("/health")
+    except httpx.HTTPError as exc:
+        return ModelRuntimeStatus(
+            provider=provider,
+            runtime=runtime,
+            model_name=model_name,
+            ready=False,
+            message=f"{attention_message}: {exc.__class__.__name__}.",
+            base_url=base_url,
+        )
+
+    if response.status_code < 400:
+        return ModelRuntimeStatus(
+            provider=provider,
+            runtime=runtime,
+            model_name=model_name,
+            ready=True,
+            message=ready_message,
+            base_url=base_url,
+        )
+    return ModelRuntimeStatus(
+        provider=provider,
+        runtime=runtime,
+        model_name=model_name,
+        ready=False,
+        message=f"{attention_message}: HTTP {response.status_code}.",
         base_url=base_url,
     )
 

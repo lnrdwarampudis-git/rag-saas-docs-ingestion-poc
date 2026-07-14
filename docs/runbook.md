@@ -141,15 +141,27 @@ See [Model Providers](model-providers.md) for the full setting list, cache behav
 Confirm large-file and retrieval settings inside the backend container:
 
 ```bash
-docker compose exec backend python -c "import os; keys=['UPLOAD_SESSION_PART_BYTES','UPLOAD_SESSION_STORAGE_BACKEND','UPLOAD_SESSION_CLEANUP_MAX_AGE_HOURS','VECTOR_INDEX_BACKEND','PGVECTOR_DIMENSIONS','QDRANT_COLLECTION_NAME','RERANKER_PROVIDER','LOCAL_RERANKER_RUNTIME','RETRIEVAL_LATENCY_WARNING_MS','TOTAL_LATENCY_WARNING_MS']; print({k: os.environ.get(k) for k in keys})"
+docker compose exec backend python -c "import os; keys=['UPLOAD_SESSION_PART_BYTES','UPLOAD_SESSION_STORAGE_BACKEND','UPLOAD_SESSION_CLEANUP_MAX_AGE_HOURS','UPLOAD_SESSION_LIFECYCLE_EXPIRATION_DAYS','VECTOR_INDEX_BACKEND','PGVECTOR_DIMENSIONS','QDRANT_COLLECTION_NAME','RERANKER_PROVIDER','LOCAL_RERANKER_RUNTIME','LOCAL_RERANKER_BASE_URL','RETRIEVAL_LATENCY_WARNING_MS','TOTAL_LATENCY_WARNING_MS']; print({k: os.environ.get(k) for k in keys})"
 ```
 
-Use `VECTOR_INDEX_BACKEND=pgvector` only with `ENABLE_DB_PERSISTENCE=true`. Use `VECTOR_INDEX_BACKEND=qdrant` for the Qdrant adapter, then run `python -m app.rag.backfill_vectors` after changing vector backend or embedding model. The default `RERANKER_PROVIDER=none` can be changed to `RERANKER_PROVIDER=local` and `LOCAL_RERANKER_RUNTIME=keyword` for deterministic local reranking. Check `/api/v1/model-status` or the UI model panel after changes; it reports vector-index readiness, reranker readiness, and the configured latency warning thresholds.
+Use `VECTOR_INDEX_BACKEND=pgvector` only with `ENABLE_DB_PERSISTENCE=true`. Use `VECTOR_INDEX_BACKEND=qdrant` for the Qdrant adapter, then run `python -m app.rag.vector_ops` after changing vector backend or embedding model. The default `RERANKER_PROVIDER=none` can be changed to `RERANKER_PROVIDER=local` and `LOCAL_RERANKER_RUNTIME=keyword` for deterministic local reranking, or `cross-encoder` / `vllm` for a local HTTP reranker. Check `/api/v1/model-status` or the UI model panel after changes; it reports vector-index readiness, reranker readiness, and the configured latency warning thresholds.
+
+Run the vector ops check/backfill command after changing vector backend or embedding model:
+
+```bash
+docker compose exec backend python -m app.rag.vector_ops
+```
 
 Clean up abandoned upload sessions and temporary parts:
 
 ```bash
 docker compose exec backend python -m app.rag.cleanup_upload_sessions --max-age-hours 24
+```
+
+Apply MinIO lifecycle expiration for abandoned upload-session objects:
+
+```bash
+docker compose exec backend python -m app.rag.minio_lifecycle
 ```
 
 For browser-driven large files, sign in to the UI, choose a file, and use `Upload session`. With `UPLOAD_SESSION_STORAGE_BACKEND=filesystem`, parts stream through the backend. With `UPLOAD_SESSION_STORAGE_BACKEND=minio`, the UI requests a presigned URL per part, uploads directly to MinIO, marks the part complete, and then completes the session into the async queue. In Docker, use `MINIO_ENDPOINT=http://minio:9000` for service-to-service calls and `MINIO_PUBLIC_ENDPOINT=http://localhost:9000` for browser-reachable presigned URLs.
@@ -521,7 +533,7 @@ limit 10;
 - If upload returns `413 Request Entity Too Large`, confirm the frontend nginx config includes `client_max_body_size 2g` and rebuild the frontend.
 - If any `/api/v1/*` call returns `401 Unauthorized`, your token is missing, expired, or was issued before `docker compose down -v` reseeded a new realm/tenant -- sign out and back in (or re-fetch a token per the smoke test above).
 - If queries return no context, confirm the uploaded chunks are in `document_chunks` and that you're signed in as a user in the same tenant that uploaded them (the default demo tenant is `00000000-0000-4000-8000-000000000001`).
-- If query construction fails with `ModelProviderConfigurationError`, check `.env` for unsupported provider values. Today the implemented runtimes are `EMBEDDING_PROVIDER=local`, `LOCAL_EMBEDDING_RUNTIME=hashing` or `ollama`, `LLM_PROVIDER=local`, and `LOCAL_LLM_RUNTIME=extractive` or `ollama`; vLLM embeddings and generation are reserved until adapters are added.
+- If query construction fails with `ModelProviderConfigurationError`, check `.env` for unsupported provider values. Today the implemented runtimes are `EMBEDDING_PROVIDER=local`, `LOCAL_EMBEDDING_RUNTIME=hashing`, `ollama`, or `vllm`, `LLM_PROVIDER=local`, and `LOCAL_LLM_RUNTIME=extractive`, `ollama`, or `vllm`.
 - If `LOCAL_EMBEDDING_RUNTIME=ollama` fails with `ModelProviderRequestError`, confirm Ollama is running, `LOCAL_EMBEDDING_BASE_URL` is reachable from the backend process, and `LOCAL_EMBEDDING_MODEL_NAME` has been pulled locally. For Docker Compose with Ollama on the host machine, use `LOCAL_EMBEDDING_BASE_URL=http://host.docker.internal:11434`.
 - If `LOCAL_LLM_RUNTIME=ollama` fails with `ModelProviderRequestError`, confirm Ollama is running, `LOCAL_LLM_BASE_URL` is reachable from the backend process, and `LOCAL_LLM_MODEL_NAME` has been pulled locally. For Docker Compose with Ollama on the host machine, use `LOCAL_LLM_BASE_URL=http://host.docker.internal:11434`.
 - If `/api/v1/model-status` says Ollama is reachable but a configured model is missing, run `ollama list` on the Mac or `docker compose --profile local-models exec ollama ollama list` for the Compose service. Pull the exact model name shown in `.env`; examples are `nomic-embed-text:latest` and `llama3.1:8b`.

@@ -23,9 +23,9 @@ This page is the short handoff for what the POC supports today, how to run it, a
 
 ## Recently Completed Ops Extensions
 
-- Large-file ingestion ops now include the React `Upload session` action, tenant/uploader-bound resumable sessions, filesystem or MinIO part storage, direct browser-to-MinIO presigned uploads, completed-session cleanup, stale-session cleanup, `MINIO_PUBLIC_ENDPOINT` for browser-reachable presigned URLs, and local MinIO CORS setup guidance.
-- Persistent vector retrieval operations now include pgvector and Qdrant adapter paths, a vector backfill command, vector backend metrics in query responses, vector-index readiness in `/api/v1/model-status`, and retrieval backend/reranker warning state in `/api/v1/analytics`.
-- Stronger local model foundations now include Ollama embedding and answer-generation paths, model-status checks for embedding/answer/vector/reranker runtimes, deterministic local keyword reranking, latency warning threshold config, and UI surfaces for active model, vector, reranker, and threshold state.
+- Large-file ingestion ops now include the React `Upload session` action, tenant/uploader-bound resumable sessions, filesystem or MinIO part storage, direct browser-to-MinIO presigned uploads, completed-session cleanup, stale-session cleanup, MinIO lifecycle policy automation, `MINIO_PUBLIC_ENDPOINT` for browser-reachable presigned URLs, and local MinIO CORS setup guidance.
+- Persistent vector retrieval operations now include pgvector and Qdrant adapter paths, vector ops check/backfill automation, Qdrant payload indexes for RBAC filter fields, vector backend metrics in query responses, vector-index readiness in `/api/v1/model-status`, and retrieval backend/reranker warning state in `/api/v1/analytics`.
+- Stronger local model foundations now include Ollama and vLLM-compatible embedding/answer-generation paths, model-status checks for embedding/answer/vector/reranker runtimes, deterministic local keyword reranking, HTTP-backed cross-encoder/vLLM reranking, latency warning threshold config, and UI surfaces for active model, vector, reranker, and threshold state.
 
 ## Supported Document Intake Today
 
@@ -124,9 +124,9 @@ git diff --check
 
 Recommended next implementation slices:
 
-1. Finish large-file ingestion ops: object-storage lifecycle policy automation and production multipart tuning.
-2. Deepen persistent vector retrieval operations: production migration checks for existing databases, index backfill runbook automation, and Qdrant payload/index tuning.
-3. Add stronger local model options: local cross-encoder reranker adapter, vLLM embedding/generation/reranking path, and deeper model health dashboards.
+1. Finish large-file ingestion ops: production multipart tuning and deployment-specific lifecycle retention values.
+2. Deepen persistent vector retrieval operations: production migration checks for existing databases and higher-scale Qdrant payload/index tuning based on live data volume.
+3. Add stronger local model options: packaged local model profiles, GPU-specific deployment examples, and deeper model health dashboards.
 4. Improve operations controls: job cancel/retry history, dead-letter queue, worker concurrency controls, and richer audit event filtering.
 5. Add deployment hardening: environment-specific Compose/prod manifests, secrets handling, backup/restore runbooks, and CI quality gates.
 6. Expand evaluation: more tenant/role fixtures, answer-groundedness checks, negative/no-answer cases, and regression trend history.

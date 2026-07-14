@@ -26,6 +26,8 @@ QDRANT_REQUEST_TIMEOUT_SECONDS=10
 RERANKER_PROVIDER=none
 LOCAL_RERANKER_RUNTIME=none
 LOCAL_RERANKER_MODEL_NAME=none
+LOCAL_RERANKER_BASE_URL=http://localhost:8081
+LOCAL_RERANKER_REQUEST_TIMEOUT_SECONDS=30
 RERANKER_CANDIDATE_MULTIPLIER=4
 RETRIEVAL_LATENCY_WARNING_MS=1500
 TOTAL_LATENCY_WARNING_MS=5000
@@ -43,41 +45,61 @@ PUBLIC_LLM_ENABLED=false
 | Setting | Supported now | Reserved for later | Notes |
 | --- | --- | --- | --- |
 | `EMBEDDING_PROVIDER` | `local` | public/provider-specific services | Non-local values fail fast today. |
-| `LOCAL_EMBEDDING_RUNTIME` | `hashing`, `ollama` | `vllm` | `hashing` uses the deterministic in-process baseline; `ollama` calls `/api/embed` on `LOCAL_EMBEDDING_BASE_URL`. |
+| `LOCAL_EMBEDDING_RUNTIME` | `hashing`, `ollama`, `vllm` | adapter-specific runtimes | `hashing` uses the deterministic in-process baseline; `ollama` calls `/api/embed`; `vllm` calls OpenAI-compatible `/v1/embeddings`. |
 | `LOCAL_EMBEDDING_MODEL_NAME` | `hashing-384`, any installed Ollama embedding model | BGE, E5, Mixedbread, or adapter model names | Informational for hashing; sent as `model` for Ollama; included in metrics/cache keys. |
 | `EMBEDDING_DIMENSIONS` | integer dimension count practical for local ranking | adapter-specific dimensions | Default is `384`; keep it greater than zero for hashing embeddings. |
 | `VECTOR_INDEX_BACKEND` | `memory`, `pgvector`, `qdrant` | additional managed vector stores | `memory` keeps tests/local demos deterministic; `pgvector` stores embeddings in PostgreSQL; `qdrant` writes/searches the configured Qdrant collection. |
 | `PGVECTOR_DIMENSIONS` | `1024` | adapter-specific dimensions | Matches the current `document_chunks.embedding vector(1024)` column. Shorter embeddings are padded for pgvector storage. |
-| `VECTOR_BACKFILL_BATCH_SIZE` | positive integer | adapter-tuned values | Used by `python -m app.rag.backfill_vectors`. |
+| `VECTOR_BACKFILL_BATCH_SIZE` | positive integer | adapter-tuned values | Used by `python -m app.rag.vector_ops` and `python -m app.rag.backfill_vectors`. |
 | `QDRANT_COLLECTION_NAME` | collection name | deployment-specific names | Default collection is `rag_chunks`. |
 | `QDRANT_REQUEST_TIMEOUT_SECONDS` | positive number | deployment-specific values | Used by the Qdrant HTTP adapter. |
 | `RERANKER_PROVIDER` | `none`, `local` | managed/provider-specific rerankers | `none` leaves hybrid retrieval order unchanged; `local` enables local runtimes. |
-| `LOCAL_RERANKER_RUNTIME` | `none`, `keyword` | `cross-encoder`, `vllm` | `keyword` is deterministic and local; heavier runtimes remain reserved. |
-| `LOCAL_RERANKER_MODEL_NAME` | `none`, `keyword-overlap` | local reranker model names | Included in cache keys/metrics when reranking is enabled. |
+| `LOCAL_RERANKER_RUNTIME` | `none`, `keyword`, `cross-encoder`, `vllm` | adapter-specific runtimes | `keyword` is deterministic; `cross-encoder` and `vllm` call a local HTTP `/rerank` endpoint. |
+| `LOCAL_RERANKER_MODEL_NAME` | `none`, `keyword-overlap`, local reranker model names | deployment-specific model names | Included in cache keys/metrics when reranking is enabled. |
+| `LOCAL_RERANKER_BASE_URL` | local HTTP URL | deployment-specific endpoints | Used when `LOCAL_RERANKER_RUNTIME=cross-encoder` or `vllm`. |
+| `LOCAL_RERANKER_REQUEST_TIMEOUT_SECONDS` | positive number | adapter-specific timeouts | Used by local HTTP reranker clients. |
 | `RERANKER_CANDIDATE_MULTIPLIER` | positive integer | adapter-tuned values | Controls how many initial candidates are retrieved before final top-k reranking. |
 | `RETRIEVAL_LATENCY_WARNING_MS` | positive number | deployment-specific SLOs | Drives analytics/model-status warning displays for retrieval latency. |
 | `TOTAL_LATENCY_WARNING_MS` | positive number | deployment-specific SLOs | Drives model-status warning displays for end-to-end query latency. |
 | `LOCAL_MODEL_REQUEST_TIMEOUT_SECONDS` | positive number | adapter-specific timeouts | Used by Ollama HTTP clients. |
 | `LLM_PROVIDER` | `local` | public token-based providers | Public providers require `PUBLIC_LLM_ENABLED=true` and adapter code. |
-| `LOCAL_LLM_RUNTIME` | `extractive`, `ollama` | `vllm` | `extractive` selects sentences from authorized chunks; `ollama` calls `/api/generate` on `LOCAL_LLM_BASE_URL`. |
+| `LOCAL_LLM_RUNTIME` | `extractive`, `ollama`, `vllm` | adapter-specific runtimes | `extractive` selects sentences from authorized chunks; `ollama` calls `/api/generate`; `vllm` calls OpenAI-compatible `/v1/chat/completions`. |
 | `LOCAL_LLM_MODEL_NAME` | `extractive`, any installed Ollama generation model | local model names | Sent as `model` for Ollama; included in metrics/cache keys. |
 | `PUBLIC_LLM_ENABLED` | `false` | `true` after policy approval and adapter implementation | Keeps external API usage opt-in. |
 
-If `LOCAL_EMBEDDING_RUNTIME=vllm` or `LOCAL_LLM_RUNTIME=vllm` is set before those adapters exist, startup/query construction raises `ModelProviderConfigurationError`. That failure is deliberate: it prevents silently falling back to a different model path.
-
-If `RERANKER_PROVIDER=local` is selected with `LOCAL_RERANKER_RUNTIME=cross-encoder` or `vllm` before those adapters exist, query construction raises `RerankerConfigurationError` for the same reason.
+If `RERANKER_PROVIDER=local` is selected with `LOCAL_RERANKER_RUNTIME=cross-encoder` or `vllm`, the app expects `LOCAL_RERANKER_BASE_URL` to expose `POST /rerank` with `query`, `documents`, `model`, and `top_n`, returning either `results` entries with `index` and `relevance_score` or a numeric `scores` array.
 
 ## Vector Indexing And Reranking
 
 The query pipeline asks the configured vector index for tenant-safe candidates before hybrid scoring. Defaults use the in-memory vector index and deterministic hashing embeddings. When `VECTOR_INDEX_BACKEND=pgvector` and `ENABLE_DB_PERSISTENCE=true`, ingestion writes chunk embeddings to `document_chunks.embedding`, and query retrieval orders candidates with pgvector before the existing keyword/early-term/hybrid score is applied. `VECTOR_INDEX_BACKEND=qdrant` writes/searches vectors in Qdrant using RBAC metadata payload filters plus the application-level authorization check.
 
-Backfill persisted chunks after changing vector backends or embedding models:
+Check and backfill persisted chunks after changing vector backends or embedding models:
 
 ```bash
-python -m app.rag.backfill_vectors
+python -m app.rag.vector_ops
 ```
 
-The reranker boundary runs after initial retrieval. The default `RERANKER_PROVIDER=none` returns the existing order unchanged while adding provider/runtime/model names to cache keys and metrics. `RERANKER_PROVIDER=local` with `LOCAL_RERANKER_RUNTIME=keyword` applies a deterministic local keyword-overlap rerank step. This keeps today stable and leaves a direct adapter point for local cross-encoder or vLLM reranking.
+The reranker boundary runs after initial retrieval. The default `RERANKER_PROVIDER=none` returns the existing order unchanged while adding provider/runtime/model names to cache keys and metrics. `RERANKER_PROVIDER=local` with `LOCAL_RERANKER_RUNTIME=keyword` applies a deterministic local keyword-overlap rerank step. `LOCAL_RERANKER_RUNTIME=cross-encoder` and `LOCAL_RERANKER_RUNTIME=vllm` call a local HTTP rerank service so heavier local rerankers can be added without public token-based providers.
+
+## vLLM-Compatible Local Services
+
+For embeddings through an OpenAI-compatible local server:
+
+```text
+LOCAL_EMBEDDING_RUNTIME=vllm
+LOCAL_EMBEDDING_MODEL_NAME=BAAI/bge-small-en-v1.5
+LOCAL_EMBEDDING_BASE_URL=http://localhost:8000
+```
+
+For answer generation:
+
+```text
+LOCAL_LLM_RUNTIME=vllm
+LOCAL_LLM_MODEL_NAME=mistralai/Mistral-7B-Instruct-v0.3
+LOCAL_LLM_BASE_URL=http://localhost:8000
+```
+
+The embedding adapter calls `POST /v1/embeddings`; the answer adapter calls `POST /v1/chat/completions`.
 
 ## Ollama Embeddings
 

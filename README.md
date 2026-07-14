@@ -11,7 +11,7 @@ The implemented milestone path is:
 - Week 5: Keycloak OIDC login (Authorization Code + PKCE), JWT validation middleware, Postgres-backed RBAC, and stateless-JWT session management.
 - Week 6: background document ingestion with queued upload, Redis worker polling, processing job status APIs, and UI job status polling.
 - Week 7: retrieval evaluation, precision thresholds, and local/open-source model strategy.
-- Current ops extensions: resumable upload sessions with filesystem or MinIO part storage, direct browser-to-MinIO presigned upload mode, upload-session cleanup, pgvector/Qdrant vector-index adapters, deterministic local keyword reranking, model/runtime readiness status, and retrieval ops analytics.
+- Current ops extensions: resumable upload sessions with filesystem or MinIO part storage, direct browser-to-MinIO presigned upload mode, upload-session cleanup, MinIO lifecycle automation, pgvector/Qdrant vector-index adapters, vector ops check/backfill automation, Qdrant payload indexes, deterministic local keyword or HTTP reranking, vLLM-compatible local model adapters, model/runtime readiness status, and retrieval ops analytics.
 
 ## Quick Start
 
@@ -88,9 +88,9 @@ For full setup, execution, test, and GitHub export instructions, see:
 - Week 6 background ingestion path with queued upload, Redis-backed worker polling, processing job status/retry APIs, and UI job polling
 - Week 7 offline retrieval evaluation dataset and runner with context precision, context recall, and answer relevance checks
 - Authenticated retrieval evaluation API and UI quality gate panel
-- Resumable upload-session API and UI action with filesystem part uploads, MinIO part storage, presigned browser-direct MinIO uploads, completed-session cleanup, stale-session cleanup, public MinIO presign endpoint config, and bucket CORS guidance
-- Vector retrieval operations with in-memory default, pgvector and Qdrant adapters, vector backfill command, vector/reranker query metrics, model-status readiness checks, and analytics warning thresholds
-- Local/open-source model provider abstraction for deterministic hashing embeddings, optional Ollama embeddings, extractive answer generation, optional Ollama answer generation, model/runtime readiness checks, and later adapter paths for vLLM and gated public providers
+- Resumable upload-session API and UI action with filesystem part uploads, MinIO part storage, presigned browser-direct MinIO uploads, completed-session cleanup, stale-session cleanup, MinIO lifecycle automation, public MinIO presign endpoint config, and bucket CORS guidance
+- Vector retrieval operations with in-memory default, pgvector and Qdrant adapters, vector backfill/check command, Qdrant payload indexes for RBAC filters, vector/reranker query metrics, model-status readiness checks, and analytics warning thresholds
+- Local/open-source model provider abstraction for deterministic hashing embeddings, optional Ollama embeddings, vLLM-compatible embeddings/generation, extractive answer generation, optional Ollama answer generation, deterministic keyword reranking, HTTP cross-encoder/vLLM reranking, model/runtime readiness checks, and later gated public providers
 - Authenticated admin analytics API and UI summary for document ingestion, processing jobs, persisted query cache/latency, vector/reranker retrieval state, recent audit operations, and retrieval evaluation health
 
 ## Recommended Week 1 Commands
@@ -227,7 +227,7 @@ Username: rag
 Password: rag
 ```
 
-The query endpoint uses the local model provider abstraction plus a vector index boundary. The default configuration keeps demos deterministic with hashing embeddings, the in-memory vector index, no reranker, and extractive answer generation. `VECTOR_INDEX_BACKEND=pgvector` enables the PostgreSQL/pgvector adapter when DB persistence is on, and `VECTOR_INDEX_BACKEND=qdrant` enables the Qdrant adapter for higher-scale vector experiments. `python -m app.rag.backfill_vectors` backfills persisted chunks into the selected vector backend. For local semantic embeddings or local answer generation, set the corresponding runtime to `ollama` with a running Ollama service. `RERANKER_PROVIDER=local` plus `LOCAL_RERANKER_RUNTIME=keyword` enables a deterministic local reranker; cross-encoder and vLLM rerankers remain reserved for later adapters. `/api/v1/model-status` and the UI model/status panels report embedding, answer, vector-index, reranker, and latency-threshold readiness.
+The query endpoint uses the local model provider abstraction plus a vector index boundary. The default configuration keeps demos deterministic with hashing embeddings, the in-memory vector index, no reranker, and extractive answer generation. `VECTOR_INDEX_BACKEND=pgvector` enables the PostgreSQL/pgvector adapter when DB persistence is on, and `VECTOR_INDEX_BACKEND=qdrant` enables the Qdrant adapter for higher-scale vector experiments. `python -m app.rag.vector_ops` checks the selected vector backend, ensures Qdrant payload indexes when needed, and runs vector backfill. For local semantic embeddings or local answer generation, set the corresponding runtime to `ollama` or `vllm` with a running local service. `RERANKER_PROVIDER=local` plus `LOCAL_RERANKER_RUNTIME=keyword`, `cross-encoder`, or `vllm` enables deterministic or HTTP-backed local reranking. `/api/v1/model-status` and the UI model/status panels report embedding, answer, vector-index, reranker, and latency-threshold readiness.
 
 Run the offline retrieval quality gate:
 
@@ -251,7 +251,7 @@ LOCAL_LLM_BASE_URL=http://localhost:11434
 PUBLIC_LLM_ENABLED=false
 ```
 
-`app/rag/model_providers.py` defines the embedding and answer-generation interfaces. `LOCAL_EMBEDDING_RUNTIME=ollama` is available for local Ollama embeddings, and `LOCAL_LLM_RUNTIME=ollama` is available for local Ollama answer generation. Later phases can add vLLM-backed embeddings or generation. Public token-based LLM providers remain blocked unless `PUBLIC_LLM_ENABLED=true`. See [Model Providers](docs/model-providers.md) for the full configuration reference and adapter contract.
+`app/rag/model_providers.py` defines the embedding and answer-generation interfaces. `LOCAL_EMBEDDING_RUNTIME=ollama` or `vllm` is available for local semantic embeddings, and `LOCAL_LLM_RUNTIME=ollama` or `vllm` is available for local answer generation. Public token-based LLM providers remain blocked unless `PUBLIC_LLM_ENABLED=true`. See [Model Providers](docs/model-providers.md) for the full configuration reference and adapter contract.
 
 ## Architecture
 

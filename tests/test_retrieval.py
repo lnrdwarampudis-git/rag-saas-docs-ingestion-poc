@@ -216,3 +216,11 @@ def test_qdrant_vector_index_upserts_and_searches_with_tenant_filter() -> None:
     search_payload = requests[-1].read()
     assert b'"tenant_id"' in search_payload
     assert b'"tenant-1"' in search_payload
+    index_requests = [
+        request for request in requests if request.url.path.endswith("/index")
+    ]
+    assert {request.read() for request in index_requests} >= {
+        b'{"field_name":"tenant_id","field_schema":"keyword"}',
+        b'{"field_name":"visibility","field_schema":"keyword"}',
+        b'{"field_name":"allowed_role_names","field_schema":"keyword"}',
+    }

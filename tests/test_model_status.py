@@ -75,19 +75,59 @@ def test_qdrant_status_reports_collection_readiness(monkeypatch) -> None:
     assert "collection exists" in status.vector_index.message
 
 
-def test_reserved_local_reranker_reports_attention() -> None:
+def test_vllm_runtime_reports_ready_when_health_endpoint_is_ready(monkeypatch) -> None:
+    original_client = httpx.Client
+    monkeypatch.setattr(
+        httpx,
+        "Client",
+        lambda **kwargs: original_client(
+            **kwargs,
+            transport=httpx.MockTransport(lambda request: httpx.Response(200, json={"status": "ok"})),
+        ),
+    )
+
+    status = get_model_status(
+        Settings(
+            _env_file=None,
+            local_embedding_runtime="vllm",
+            local_embedding_model_name="BAAI/bge-small-en-v1.5",
+            local_embedding_base_url="http://vllm.test",
+            local_llm_runtime="vllm",
+            local_llm_model_name="mistralai/Mistral-7B-Instruct-v0.3",
+            local_llm_base_url="http://vllm.test",
+        )
+    )
+
+    assert status.embedding.ready is True
+    assert status.embedding.runtime == "vllm"
+    assert status.answer.ready is True
+    assert status.answer.runtime == "vllm"
+
+
+def test_local_cross_encoder_reranker_reports_ready_when_health_endpoint_is_ready(monkeypatch) -> None:
+    original_client = httpx.Client
+    monkeypatch.setattr(
+        httpx,
+        "Client",
+        lambda **kwargs: original_client(
+            **kwargs,
+            transport=httpx.MockTransport(lambda request: httpx.Response(200, json={"status": "ok"})),
+        ),
+    )
+
     status = get_model_status(
         Settings(
             _env_file=None,
             reranker_provider="local",
             local_reranker_runtime="cross-encoder",
             local_reranker_model_name="cross-encoder/ms-marco-MiniLM-L-6-v2",
+            local_reranker_base_url="http://reranker.test",
         )
     )
 
-    assert status.reranker.ready is False
+    assert status.reranker.ready is True
     assert status.reranker.runtime == "cross-encoder"
-    assert "reserved" in status.reranker.message
+    assert status.reranker.base_url == "http://reranker.test"
 
 
 def test_ollama_status_accepts_model_field_from_tags(monkeypatch) -> None:

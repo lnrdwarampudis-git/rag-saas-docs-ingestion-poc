@@ -20,6 +20,7 @@ class Settings(BaseSettings):
     upload_session_bucket: str = "rag-upload-sessions"
     upload_session_presign_expiry_seconds: int = 3600
     upload_session_cleanup_max_age_hours: int = 24
+    upload_session_lifecycle_expiration_days: int = 7
     qdrant_url: str = "http://localhost:6333"
     qdrant_collection_name: str = "rag_chunks"
     qdrant_request_timeout_seconds: float = 10.0
@@ -47,6 +48,8 @@ class Settings(BaseSettings):
     reranker_provider: str = "none"
     local_reranker_runtime: str = "none"
     local_reranker_model_name: str = "none"
+    local_reranker_base_url: str = "http://localhost:8081"
+    local_reranker_request_timeout_seconds: float = 30.0
     reranker_candidate_multiplier: int = 4
     retrieval_latency_warning_ms: float = 1500.0
     total_latency_warning_ms: float = 5000.0
