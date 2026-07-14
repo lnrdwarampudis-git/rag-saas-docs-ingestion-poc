@@ -170,6 +170,8 @@ Supported POC intake formats:
 - PNG, JPG/JPEG, TIFF, BMP through OCR
 - Scanned/image-backed PDFs through PyMuPDF page rendering plus Tesseract OCR
 
+The backend image installs English OCR data by default. Additional Tesseract language packs can be added in `Dockerfile.backend` and selected with `OCR_LANGUAGE`, for example `OCR_LANGUAGE=eng+spa` when both packs are installed.
+
 Legacy binary Office formats such as DOC, XLS, and PPT should be converted to DOCX, XLSX, or PPTX before ingestion.
 
 The Dockerized frontend nginx proxy allows uploads up to `2g` via `client_max_body_size`. Production deployments should use direct-to-object-storage multipart/resumable uploads for very large files.

@@ -151,6 +151,22 @@ OCR_PDF_DPI=200
 OCR_MAX_PDF_PAGES=20
 ```
 
+Confirm installed Tesseract language packs:
+
+```bash
+docker compose exec backend tesseract --list-langs
+```
+
+The default backend image installs English (`eng`) through `tesseract-ocr-eng`. To add another language, add the matching Debian package to `Dockerfile.backend`, rebuild backend/worker images, and set `OCR_LANGUAGE` to the matching Tesseract code. Examples:
+
+```text
+tesseract-ocr-spa -> OCR_LANGUAGE=spa
+tesseract-ocr-fra -> OCR_LANGUAGE=fra
+tesseract-ocr-deu -> OCR_LANGUAGE=deu
+```
+
+Tesseract also accepts combined language codes when every pack is installed, for example `OCR_LANGUAGE=eng+spa`.
+
 Scanned PDFs are rendered page-by-page with PyMuPDF before Tesseract OCR. Increase `OCR_MAX_PDF_PAGES` for longer scanned documents, and tune `OCR_PDF_DPI` when OCR quality or memory usage needs adjustment.
 
 ## Ollama Container Check

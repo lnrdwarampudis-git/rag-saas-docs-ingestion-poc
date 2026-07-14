@@ -32,7 +32,7 @@ This page is the short handoff for what the POC supports today, how to run it, a
 | PNG, JPG/JPEG, TIFF, BMP | Supported with OCR | Uses Tesseract through `pytesseract`; local machines/containers must have the Tesseract binary available for real OCR. |
 | DOC, XLS, PPT | Not supported directly | Convert legacy binary Office files to DOCX, XLSX, or PPTX first. |
 
-OCR is wired in the parser layer and can be forced from the API/UI with `force_ocr`. The backend Docker image includes Tesseract, PyMuPDF, and Pillow so image OCR and scanned-PDF OCR work in containers. If OCR dependencies are missing in a local non-Docker environment, extraction records a warning and returns empty OCR text rather than crashing the whole app path.
+OCR is wired in the parser layer and can be forced from the API/UI with `force_ocr`. The backend Docker image includes Tesseract, English OCR data, PyMuPDF, and Pillow so image OCR and scanned-PDF OCR work in containers. Additional Tesseract language packs can be added through `Dockerfile.backend` and selected with `OCR_LANGUAGE`. If OCR dependencies are missing in a local non-Docker environment, extraction records a warning and returns empty OCR text rather than crashing the whole app path.
 
 ## Default Execution Path
 
@@ -117,11 +117,10 @@ git diff --check
 Recommended next implementation slices:
 
 1. Harden ingestion for large files: direct-to-object-storage multipart uploads, upload progress, resumable upload behavior, and object-storage lifecycle cleanup. Basic API/UI size and extension limits are now in place.
-2. Add richer parser/OCR operations: language pack documentation. Container Tesseract packaging, OCR language configuration, scanned-PDF OCR, UI-visible parser warnings, OCR duration/page metrics, and dedicated OCR-heavy worker queues are now in place.
-3. Persist vector retrieval beyond the current POC baseline: pgvector/Qdrant write/read integration for embeddings, migration checks, and tenant-safe vector filtering.
-4. Add reranking and stronger local model options: local cross-encoder or reranker adapter, vLLM adapter path, model health dashboards, and performance thresholds.
-5. Improve operations controls: job cancel/retry history, dead-letter queue, worker concurrency controls, and richer audit event filtering.
-6. Add deployment hardening: environment-specific Compose/prod manifests, secrets handling, backup/restore runbooks, and CI quality gates.
-7. Expand evaluation: more tenant/role fixtures, answer-groundedness checks, negative/no-answer cases, and regression trend history.
+2. Persist vector retrieval beyond the current POC baseline: pgvector/Qdrant write/read integration for embeddings, migration checks, and tenant-safe vector filtering.
+3. Add reranking and stronger local model options: local cross-encoder or reranker adapter, vLLM adapter path, model health dashboards, and performance thresholds.
+4. Improve operations controls: job cancel/retry history, dead-letter queue, worker concurrency controls, and richer audit event filtering.
+5. Add deployment hardening: environment-specific Compose/prod manifests, secrets handling, backup/restore runbooks, and CI quality gates.
+6. Expand evaluation: more tenant/role fixtures, answer-groundedness checks, negative/no-answer cases, and regression trend history.
 
 Public token-based LLM providers remain intentionally deferred. They should stay behind explicit provider configuration and `PUBLIC_LLM_ENABLED=true`.
