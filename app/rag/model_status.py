@@ -3,11 +3,12 @@ from json import JSONDecodeError
 import httpx
 
 from app.config import Settings, get_settings
-from app.schemas.model_status import ModelRuntimeStatus, ModelStatusResponse
+from app.schemas.model_status import ModelPerformanceStatus, ModelRuntimeStatus, ModelStatusResponse
 
 
 SUPPORTED_EMBEDDING_RUNTIMES = {"hashing", "ollama"}
 SUPPORTED_ANSWER_RUNTIMES = {"extractive", "ollama"}
+SUPPORTED_RERANKER_RUNTIMES = {"none", "keyword"}
 
 
 def get_model_status(settings: Settings | None = None) -> ModelStatusResponse:
@@ -22,6 +23,12 @@ def get_model_status(settings: Settings | None = None) -> ModelStatusResponse:
         embedding_provider=embedding_provider,
         embedding=_embedding_status(settings, embedding_provider, embedding_runtime),
         answer=_answer_status(settings, llm_provider, answer_runtime),
+        vector_index=_vector_index_status(settings),
+        reranker=_reranker_status(settings),
+        performance=ModelPerformanceStatus(
+            retrieval_warning_ms=settings.retrieval_latency_warning_ms,
+            total_warning_ms=settings.total_latency_warning_ms,
+        ),
     )
 
 
@@ -96,6 +103,119 @@ def _answer_status(settings: Settings, llm_provider: str, runtime: str) -> Model
         runtime=runtime,
         model_name=settings.local_llm_model_name,
         supported_runtimes=SUPPORTED_ANSWER_RUNTIMES,
+    )
+
+
+def _vector_index_status(settings: Settings) -> ModelRuntimeStatus:
+    backend = settings.vector_index_backend.lower()
+    if backend == "memory":
+        return ModelRuntimeStatus(
+            provider="local",
+            runtime=backend,
+            model_name="in-process",
+            ready=True,
+            message="In-memory vector index is ready for local deterministic runs.",
+        )
+    if backend == "pgvector":
+        return ModelRuntimeStatus(
+            provider="postgres",
+            runtime=backend,
+            model_name=f"{settings.pgvector_dimensions}d",
+            ready=settings.enable_db_persistence,
+            message=(
+                "pgvector retrieval is configured with database persistence enabled."
+                if settings.enable_db_persistence
+                else "pgvector retrieval requires ENABLE_DB_PERSISTENCE=true."
+            ),
+        )
+    if backend == "qdrant":
+        return _qdrant_status(settings)
+    return ModelRuntimeStatus(
+        provider="vector-index",
+        runtime=backend,
+        model_name="unknown",
+        ready=False,
+        message="Unsupported vector index backend. Supported backends: memory, pgvector, qdrant.",
+    )
+
+
+def _qdrant_status(settings: Settings) -> ModelRuntimeStatus:
+    try:
+        with httpx.Client(
+            base_url=settings.qdrant_url.rstrip("/"),
+            timeout=min(settings.qdrant_request_timeout_seconds, 5.0),
+        ) as client:
+            response = client.get(f"/collections/{settings.qdrant_collection_name}")
+    except httpx.HTTPError as exc:
+        return ModelRuntimeStatus(
+            provider="qdrant",
+            runtime="qdrant",
+            model_name=settings.qdrant_collection_name,
+            ready=False,
+            message=f"Qdrant is not reachable: {exc.__class__.__name__}.",
+            base_url=settings.qdrant_url,
+        )
+
+    if response.status_code == 200:
+        return ModelRuntimeStatus(
+            provider="qdrant",
+            runtime="qdrant",
+            model_name=settings.qdrant_collection_name,
+            ready=True,
+            message="Qdrant is reachable and the configured collection exists.",
+            base_url=settings.qdrant_url,
+        )
+    if response.status_code == 404:
+        return ModelRuntimeStatus(
+            provider="qdrant",
+            runtime="qdrant",
+            model_name=settings.qdrant_collection_name,
+            ready=False,
+            message="Qdrant is reachable, but the collection has not been created or backfilled yet.",
+            base_url=settings.qdrant_url,
+        )
+    return ModelRuntimeStatus(
+        provider="qdrant",
+        runtime="qdrant",
+        model_name=settings.qdrant_collection_name,
+        ready=False,
+        message=f"Qdrant collection check returned HTTP {response.status_code}.",
+        base_url=settings.qdrant_url,
+    )
+
+
+def _reranker_status(settings: Settings) -> ModelRuntimeStatus:
+    provider = settings.reranker_provider.lower()
+    runtime = settings.local_reranker_runtime.lower()
+    if provider == "none" or runtime == "none":
+        return ModelRuntimeStatus(
+            provider=provider,
+            runtime="none",
+            model_name=settings.local_reranker_model_name,
+            ready=True,
+            message="Reranking is disabled; hybrid retrieval ranking is active.",
+        )
+    if provider == "local" and runtime == "keyword":
+        return ModelRuntimeStatus(
+            provider=provider,
+            runtime=runtime,
+            model_name=settings.local_reranker_model_name,
+            ready=True,
+            message="Deterministic local keyword reranker is ready.",
+        )
+    if provider == "local" and runtime in {"cross-encoder", "vllm"}:
+        return ModelRuntimeStatus(
+            provider=provider,
+            runtime=runtime,
+            model_name=settings.local_reranker_model_name,
+            ready=False,
+            message="This local reranker runtime is reserved until its adapter is implemented.",
+        )
+    return _unsupported_runtime_status(
+        provider=provider,
+        runtime=runtime,
+        model_name=settings.local_reranker_model_name,
+        supported_runtimes=SUPPORTED_RERANKER_RUNTIMES,
     )
 
 

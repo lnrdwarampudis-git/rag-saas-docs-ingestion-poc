@@ -28,6 +28,14 @@ class QueryAnalytics(BaseModel):
     average_total_ms: float = 0.0
 
 
+class RetrievalAnalytics(BaseModel):
+    vector_index_backend: str = "memory"
+    reranker_runtime: str = "none"
+    average_retrieval_ms: float = 0.0
+    retrieval_warning_ms: float = 1500.0
+    retrieval_attention: bool = False
+
+
 class EvaluationAnalytics(BaseModel):
     cases: int = 0
     passed: int = 0
@@ -50,5 +58,6 @@ class AnalyticsResponse(BaseModel):
     documents: DocumentAnalytics
     jobs: JobAnalytics
     queries: QueryAnalytics
+    retrieval: RetrievalAnalytics
     evaluation: EvaluationAnalytics
     recent_events: list[AuditEvent] = Field(default_factory=list)

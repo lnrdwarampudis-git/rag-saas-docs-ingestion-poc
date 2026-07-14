@@ -13,6 +13,11 @@ def test_default_model_status_reports_ready_local_runtimes() -> None:
     assert status.embedding.ready is True
     assert status.answer.runtime == "extractive"
     assert status.answer.ready is True
+    assert status.vector_index.runtime == "memory"
+    assert status.vector_index.ready is True
+    assert status.reranker.runtime == "none"
+    assert status.reranker.ready is True
+    assert status.performance.retrieval_warning_ms == 1500.0
 
 
 def test_ollama_status_reports_ready_when_model_is_installed(monkeypatch) -> None:
@@ -43,6 +48,46 @@ def test_ollama_status_reports_ready_when_model_is_installed(monkeypatch) -> Non
     assert status.embedding.ready is True
     assert status.embedding.base_url == "http://ollama.test"
     assert "configured model is installed" in status.embedding.message
+
+
+def test_qdrant_status_reports_collection_readiness(monkeypatch) -> None:
+    original_client = httpx.Client
+    monkeypatch.setattr(
+        httpx,
+        "Client",
+        lambda **kwargs: original_client(
+            **kwargs,
+            transport=httpx.MockTransport(lambda request: httpx.Response(200, json={"result": {}})),
+        ),
+    )
+
+    status = get_model_status(
+        Settings(
+            _env_file=None,
+            vector_index_backend="qdrant",
+            qdrant_url="http://qdrant.test",
+            qdrant_collection_name="rag_chunks",
+        )
+    )
+
+    assert status.vector_index.ready is True
+    assert status.vector_index.base_url == "http://qdrant.test"
+    assert "collection exists" in status.vector_index.message
+
+
+def test_reserved_local_reranker_reports_attention() -> None:
+    status = get_model_status(
+        Settings(
+            _env_file=None,
+            reranker_provider="local",
+            local_reranker_runtime="cross-encoder",
+            local_reranker_model_name="cross-encoder/ms-marco-MiniLM-L-6-v2",
+        )
+    )
+
+    assert status.reranker.ready is False
+    assert status.reranker.runtime == "cross-encoder"
+    assert "reserved" in status.reranker.message
 
 
 def test_ollama_status_accepts_model_field_from_tags(monkeypatch) -> None:
@@ -135,3 +180,6 @@ def test_model_status_endpoint_returns_authenticated_runtime_status(api_client_a
     assert payload["embedding"]["ready"] is True
     assert payload["answer"]["runtime"] == "extractive"
     assert payload["answer"]["ready"] is True
+    assert payload["vector_index"]["runtime"] == "memory"
+    assert payload["reranker"]["runtime"] == "none"
+    assert payload["performance"]["retrieval_warning_ms"] == 1500.0

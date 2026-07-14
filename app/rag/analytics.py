@@ -19,6 +19,7 @@ from app.schemas.analytics import (
     EvaluationAnalytics,
     JobAnalytics,
     QueryAnalytics,
+    RetrievalAnalytics,
 )
 
 
@@ -163,13 +164,12 @@ def get_analytics(current_user: AuthenticatedUser) -> AnalyticsResponse:
     if jobs is None:
         jobs = JobAnalytics()
 
+    queries = _persistent_query_analytics(current_user) or _query_analytics(str(current_user.tenant_id))
     return AnalyticsResponse(
         documents=documents,
         jobs=jobs,
-        queries=(
-            _persistent_query_analytics(current_user)
-            or _query_analytics(str(current_user.tenant_id))
-        ),
+        queries=queries,
+        retrieval=_retrieval_analytics(queries),
         evaluation=_evaluation_analytics(),
         recent_events=_persistent_audit_events(current_user),
     )
@@ -449,6 +449,19 @@ def _query_analytics(tenant_id: str) -> QueryAnalytics:
         cache_hit_rate=round(cache_hits / total, 4),
         average_retrieval_ms=round(mean(event.retrieval_ms for event in events), 3),
         average_total_ms=round(mean(event.total_ms for event in events), 3),
+    )
+
+
+def _retrieval_analytics(queries: QueryAnalytics) -> RetrievalAnalytics:
+    settings = get_settings()
+    return RetrievalAnalytics(
+        vector_index_backend=settings.vector_index_backend,
+        reranker_runtime=settings.local_reranker_runtime,
+        average_retrieval_ms=queries.average_retrieval_ms,
+        retrieval_warning_ms=settings.retrieval_latency_warning_ms,
+        retrieval_attention=(
+            queries.total > 0 and queries.average_retrieval_ms > settings.retrieval_latency_warning_ms
+        ),
     )
 
 

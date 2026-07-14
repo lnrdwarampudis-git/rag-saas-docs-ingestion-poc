@@ -12,8 +12,16 @@ class ModelRuntimeStatus(BaseModel):
     base_url: str | None = None
 
 
+class ModelPerformanceStatus(BaseModel):
+    retrieval_warning_ms: float
+    total_warning_ms: float
+
+
 class ModelStatusResponse(BaseModel):
     llm_provider: str
     embedding_provider: str
     embedding: ModelRuntimeStatus
     answer: ModelRuntimeStatus
+    vector_index: ModelRuntimeStatus
+    reranker: ModelRuntimeStatus
+    performance: ModelPerformanceStatus

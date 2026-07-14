@@ -12,6 +12,7 @@ class Settings(BaseSettings):
     ocr_processing_queue_name: str = "rag:processing-jobs:ocr"
     worker_queue_names: str = "rag:processing-jobs,rag:processing-jobs:ocr"
     minio_endpoint: str = "http://localhost:9000"
+    minio_public_endpoint: str = "http://localhost:9000"
     minio_access_key: str = "minio"
     minio_secret_key: str = "minio123"
     minio_secure: bool = False
@@ -47,6 +48,8 @@ class Settings(BaseSettings):
     local_reranker_runtime: str = "none"
     local_reranker_model_name: str = "none"
     reranker_candidate_multiplier: int = 4
+    retrieval_latency_warning_ms: float = 1500.0
+    total_latency_warning_ms: float = 5000.0
     llm_provider: str = "local"
     local_llm_runtime: str = "extractive"
     local_llm_model_name: str = "extractive"

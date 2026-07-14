@@ -200,9 +200,10 @@ UPLOAD_SESSION_STORAGE_BACKEND=filesystem
 UPLOAD_SESSION_BUCKET=rag-upload-sessions
 UPLOAD_SESSION_PRESIGN_EXPIRY_SECONDS=3600
 UPLOAD_SESSION_CLEANUP_MAX_AGE_HOURS=24
+MINIO_PUBLIC_ENDPOINT=http://localhost:9000
 ```
 
-The upload-session API stores numbered parts, reports uploaded part numbers for resume clients, and completes the assembled file into the existing async processing queue. Sessions are scoped to the authenticated tenant and uploader subject. The default `filesystem` backend stores parts under `UPLOAD_DIR/sessions`. Use `UPLOAD_SESSION_STORAGE_BACKEND=minio` to store parts in MinIO and enable presigned part URLs for direct browser-to-object-storage upload. Completed sessions delete their temporary parts after assembly. Stale abandoned sessions can be removed with:
+The upload-session API stores numbered parts, reports uploaded part numbers for resume clients, and completes the assembled file into the existing async processing queue. Sessions are scoped to the authenticated tenant and uploader subject. The default `filesystem` backend stores parts under `UPLOAD_DIR/sessions`. Use `UPLOAD_SESSION_STORAGE_BACKEND=minio` to store parts in MinIO and enable presigned part URLs for direct browser-to-object-storage upload. In Docker, keep `MINIO_ENDPOINT=http://minio:9000` for backend/worker storage calls and set `MINIO_PUBLIC_ENDPOINT=http://localhost:9000` so presigned URLs work from the host browser. Configure bucket CORS with [infra/minio/upload-session-cors.json](../infra/minio/upload-session-cors.json) when using direct browser-to-MinIO uploads from the UI. The React intake panel's `Upload session` action creates the session, uploads each part, calls the presigned complete endpoint when MinIO is active, and then queues processing. Completed sessions delete their temporary parts after assembly. Stale abandoned sessions can be removed with:
 
 ```bash
 python -m app.rag.cleanup_upload_sessions --max-age-hours 24
@@ -220,6 +221,8 @@ RERANKER_PROVIDER=none
 LOCAL_RERANKER_RUNTIME=none
 LOCAL_RERANKER_MODEL_NAME=none
 RERANKER_CANDIDATE_MULTIPLIER=4
+RETRIEVAL_LATENCY_WARNING_MS=1500
+TOTAL_LATENCY_WARNING_MS=5000
 ```
 
 Use `VECTOR_INDEX_BACKEND=pgvector` with `ENABLE_DB_PERSISTENCE=true` to store chunk embeddings in PostgreSQL and retrieve vector candidates through pgvector before hybrid scoring. Use `VECTOR_INDEX_BACKEND=qdrant` to write/search vectors in Qdrant. After changing vector backends or embedding models, backfill persisted chunks:
@@ -228,7 +231,7 @@ Use `VECTOR_INDEX_BACKEND=pgvector` with `ENABLE_DB_PERSISTENCE=true` to store c
 python -m app.rag.backfill_vectors
 ```
 
-The default `RERANKER_PROVIDER=none` keeps ranking deterministic. Use `RERANKER_PROVIDER=local` and `LOCAL_RERANKER_RUNTIME=keyword` for the deterministic local keyword reranker. Cross-encoder and vLLM reranker runtimes remain reserved until their adapters are implemented.
+The default `RERANKER_PROVIDER=none` keeps ranking deterministic. Use `RERANKER_PROVIDER=local` and `LOCAL_RERANKER_RUNTIME=keyword` for the deterministic local keyword reranker. Cross-encoder and vLLM reranker runtimes remain reserved until their adapters are implemented. `RETRIEVAL_LATENCY_WARNING_MS` and `TOTAL_LATENCY_WARNING_MS` drive model-status and analytics warning surfaces; they do not fail requests.
 
 OCR defaults:
 

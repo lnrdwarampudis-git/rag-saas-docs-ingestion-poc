@@ -180,7 +180,8 @@ def presign_upload_part(upload_session_id: UUID, part_number: int) -> str:
     if _storage_backend() != "minio":
         raise HTTPException(status_code=409, detail="Presigned part uploads require MinIO storage")
     session = get_upload_session(upload_session_id)
-    return _minio_client().presigned_put_object(
+    _ensure_minio_bucket()
+    return _minio_presign_client().presigned_put_object(
         get_settings().upload_session_bucket,
         _part_object_name(session, part_number),
         expires=timedelta(seconds=get_settings().upload_session_presign_expiry_seconds),
@@ -355,16 +356,26 @@ def _ensure_minio_bucket() -> None:
 
 
 def _minio_client():
+    return _build_minio_client(get_settings().minio_endpoint)
+
+
+def _minio_presign_client():
+    settings = get_settings()
+    return _build_minio_client(settings.minio_public_endpoint or settings.minio_endpoint)
+
+
+def _build_minio_client(endpoint_url: str):
     try:
         from minio import Minio
     except ImportError as exc:  # pragma: no cover
         raise HTTPException(status_code=500, detail="MinIO SDK is not installed") from exc
 
     settings = get_settings()
-    endpoint = settings.minio_endpoint.removeprefix("http://").removeprefix("https://")
+    secure = endpoint_url.startswith("https://")
+    endpoint = endpoint_url.removeprefix("http://").removeprefix("https://")
     return Minio(
         endpoint,
         access_key=settings.minio_access_key,
         secret_key=settings.minio_secret_key,
-        secure=settings.minio_secure,
+        secure=secure if endpoint_url.startswith(("http://", "https://")) else settings.minio_secure,
     )

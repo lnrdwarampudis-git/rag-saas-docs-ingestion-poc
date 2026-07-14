@@ -17,9 +17,10 @@ def test_analytics_endpoint_returns_operational_summary(api_client_as) -> None:
 
     assert response.status_code == 200
     payload = response.json()
-    assert set(payload) == {"documents", "jobs", "queries", "evaluation", "recent_events"}
+    assert set(payload) == {"documents", "jobs", "queries", "retrieval", "evaluation", "recent_events"}
     assert payload["evaluation"]["cases"] == 3
     assert payload["evaluation"]["failed"] == 0
+    assert payload["retrieval"]["vector_index_backend"] == "memory"
 
 
 def test_analytics_counts_in_memory_documents_and_query_events(api_client_as) -> None:
@@ -57,6 +58,18 @@ def test_analytics_counts_in_memory_documents_and_query_events(api_client_as) ->
     assert payload["queries"]["total"] >= 2
     assert payload["queries"]["cache_hits"] >= 1
     assert payload["queries"]["cache_hit_rate"] > 0
+    assert payload["retrieval"]["average_retrieval_ms"] >= 0
+
+
+def test_retrieval_analytics_flags_slow_average(monkeypatch) -> None:
+    monkeypatch.setattr(analytics.get_settings(), "retrieval_latency_warning_ms", 5.0)
+
+    report = analytics._retrieval_analytics(
+        analytics.QueryAnalytics(total=2, average_retrieval_ms=10.0)
+    )
+
+    assert report.retrieval_attention is True
+    assert report.retrieval_warning_ms == 5.0
 
 
 def test_persistent_query_analytics_rolls_up_recent_events(monkeypatch) -> None:

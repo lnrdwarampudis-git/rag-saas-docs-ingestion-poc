@@ -80,6 +80,10 @@ type QueryResult = {
     local_embedding_runtime?: string;
     embedding_model?: string;
     answer_model?: string;
+    vector_index_backend?: string;
+    reranker_provider?: string;
+    local_reranker_runtime?: string;
+    reranker_model?: string;
   };
 };
 
@@ -126,6 +130,24 @@ type ProcessingJobStatus = {
   finished_at?: string | null;
 };
 
+type UploadSessionStatus = {
+  upload_session_id: string;
+  file_name: string;
+  byte_size: number;
+  part_size_bytes: number;
+  uploaded_parts: number[];
+  complete: boolean;
+  storage_backend: string;
+};
+
+type UploadPartPresignResponse = {
+  upload_session_id: string;
+  part_number: number;
+  method: string;
+  url: string;
+  expires_in_seconds: number;
+};
+
 type ModelRuntimeStatus = {
   provider: string;
   runtime: string;
@@ -135,11 +157,19 @@ type ModelRuntimeStatus = {
   base_url?: string | null;
 };
 
+type ModelPerformanceStatus = {
+  retrieval_warning_ms: number;
+  total_warning_ms: number;
+};
+
 type ModelStatus = {
   llm_provider: string;
   embedding_provider: string;
   embedding: ModelRuntimeStatus;
   answer: ModelRuntimeStatus;
+  vector_index: ModelRuntimeStatus;
+  reranker: ModelRuntimeStatus;
+  performance: ModelPerformanceStatus;
 };
 
 type EvaluationReport = {
@@ -188,6 +218,13 @@ type AnalyticsReport = {
     cache_hit_rate: number;
     average_retrieval_ms: number;
     average_total_ms: number;
+  };
+  retrieval: {
+    vector_index_backend: string;
+    reranker_runtime: string;
+    average_retrieval_ms: number;
+    retrieval_warning_ms: number;
+    retrieval_attention: boolean;
   };
   evaluation: {
     cases: number;
@@ -552,6 +589,101 @@ function AuthenticatedApp() {
     }
   };
 
+  const uploadDocumentSession = async () => {
+    if (!selectedFile) {
+      return;
+    }
+    if (!validateSelectedFile(selectedFile)) {
+      return;
+    }
+    setBusy(true);
+    setError("");
+    setStatus("Creating upload session");
+    setUploadProgress(0);
+    try {
+      const createResponse = await apiFetch("/api/v1/documents/upload-sessions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          file_name: selectedFile.name,
+          byte_size: selectedFile.size,
+          visibility,
+          allowed_role_names: visibility === "role" ? allowedRoles : [],
+          force_ocr: forceOcr
+        })
+      });
+      if (!createResponse.ok) {
+        throw new Error(await readApiError(createResponse));
+      }
+      const session = (await createResponse.json()) as UploadSessionStatus;
+      const partCount = Math.ceil(selectedFile.size / session.part_size_bytes);
+      for (let partNumber = 1; partNumber <= partCount; partNumber += 1) {
+        const start = (partNumber - 1) * session.part_size_bytes;
+        const end = Math.min(start + session.part_size_bytes, selectedFile.size);
+        const blob = selectedFile.slice(start, end);
+        setStatus(`Uploading part ${partNumber}/${partCount}`);
+        if (session.storage_backend === "minio") {
+          const presignResponse = await apiFetch(
+            `/api/v1/documents/upload-sessions/${session.upload_session_id}/parts/${partNumber}/presign`,
+            { method: "POST" }
+          );
+          if (!presignResponse.ok) {
+            throw new Error(await readApiError(presignResponse));
+          }
+          const presign = (await presignResponse.json()) as UploadPartPresignResponse;
+          const objectResponse = await fetch(presign.url, { method: presign.method, body: blob });
+          if (!objectResponse.ok) {
+            throw new Error(`Object storage upload failed with HTTP ${objectResponse.status}`);
+          }
+          const completePartResponse = await apiFetch(
+            `/api/v1/documents/upload-sessions/${session.upload_session_id}/parts/${partNumber}/complete`,
+            { method: "POST" }
+          );
+          if (!completePartResponse.ok) {
+            throw new Error(await readApiError(completePartResponse));
+          }
+        } else {
+          const form = new FormData();
+          form.append("file", blob, `${selectedFile.name}.part-${partNumber}`);
+          const partResponse = await apiFetch(
+            `/api/v1/documents/upload-sessions/${session.upload_session_id}/parts/${partNumber}`,
+            {
+              method: "PUT",
+              body: form
+            }
+          );
+          if (!partResponse.ok) {
+            throw new Error(await readApiError(partResponse));
+          }
+        }
+        setUploadProgress(Math.round((partNumber / partCount) * 100));
+      }
+
+      setStatus("Completing upload session");
+      const completeResponse = await apiFetch(
+        `/api/v1/documents/upload-sessions/${session.upload_session_id}/complete`,
+        { method: "POST" }
+      );
+      if (!completeResponse.ok) {
+        throw new Error(await readApiError(completeResponse));
+      }
+      const payload = (await completeResponse.json()) as ProcessingJobStatus;
+      setProcessingJobs((items) => [payload, ...items]);
+      setStatus("Queued");
+      setUploadProgress(100);
+      loadDocuments();
+      loadAnalyticsReport();
+    } catch (caught) {
+      if (!handleAuthError(caught)) {
+        setError(caught instanceof Error ? caught.message : "Upload session failed");
+        setStatus("Needs attention");
+      }
+    } finally {
+      setBusy(false);
+      window.setTimeout(() => setUploadProgress(null), 800);
+    }
+  };
+
   const askQuestion = async () => {
     setBusy(true);
     setError("");
@@ -597,7 +729,12 @@ function AuthenticatedApp() {
     return true;
   };
 
-  const modelReady = Boolean(modelStatus?.embedding.ready && modelStatus.answer.ready);
+  const modelReady = Boolean(
+    modelStatus?.embedding.ready &&
+      modelStatus.answer.ready &&
+      modelStatus.vector_index.ready &&
+      modelStatus.reranker.ready
+  );
 
   return (
     <main className="app-shell">
@@ -691,6 +828,16 @@ function AuthenticatedApp() {
             label="Answer Model"
             value={formatAnswerRuntime(result, modelStatus)}
             icon={<MessageSquareText size={18} />}
+          />
+          <Metric
+            label="Vector Index"
+            value={formatVectorRuntime(result, modelStatus)}
+            icon={<Database size={18} />}
+          />
+          <Metric
+            label="Reranker"
+            value={formatRerankerRuntime(result, modelStatus)}
+            icon={<BadgeCheck size={18} />}
           />
         </section>
 
@@ -799,6 +946,16 @@ function AuthenticatedApp() {
             >
               <Activity size={18} />
               Upload to queue
+            </button>
+
+            <button
+              className="secondary-action"
+              type="button"
+              disabled={busy || !selectedFile}
+              onClick={uploadDocumentSession}
+            >
+              <UploadCloud size={18} />
+              Upload session
             </button>
 
             <button
@@ -1062,6 +1219,9 @@ function AuthenticatedApp() {
                 value={formatRuntimeDetail(modelStatus?.embedding)}
               />
               <StatusItem label="Answer runtime" value={formatRuntimeDetail(modelStatus?.answer)} />
+              <StatusItem label="Vector index" value={formatRuntimeDetail(modelStatus?.vector_index)} />
+              <StatusItem label="Reranker" value={formatRuntimeDetail(modelStatus?.reranker)} />
+              <StatusItem label="Latency thresholds" value={formatPerformanceThresholds(modelStatus)} />
             </div>
           </section>
 
@@ -1155,6 +1315,8 @@ function QueryRunDetails({
         <StatusItem label="Total" value={formatMilliseconds(result.metrics.total_ms)} />
         <StatusItem label="Embedding" value={formatEmbeddingRuntime(result, modelStatus)} />
         <StatusItem label="Answer" value={formatAnswerRuntime(result, modelStatus)} />
+        <StatusItem label="Vector index" value={formatVectorRuntime(result, modelStatus)} />
+        <StatusItem label="Reranker" value={formatRerankerRuntime(result, modelStatus)} />
         <StatusItem
           label="Thresholds"
           value={`${formatScore(result.metrics.retrieval_min_score)} score / ${formatScore(
@@ -1273,6 +1435,16 @@ function AnalyticsPanel({
           }
         />
         <StatusItem
+          label="Retrieval ops"
+          value={
+            report
+              ? `${report.retrieval.vector_index_backend} / ${report.retrieval.reranker_runtime} / ${
+                  report.retrieval.retrieval_attention ? "attention" : "normal"
+                }`
+              : "Loading"
+          }
+        />
+        <StatusItem
           label="Job queue"
           value={
             report
@@ -1363,6 +1535,27 @@ function formatAnswerRuntime(result?: QueryResult | null, modelStatus?: ModelSta
   const runtime = result?.metrics.local_llm_runtime ?? modelStatus?.answer.runtime;
   const model = result?.metrics.answer_model ?? modelStatus?.answer.model_name;
   return runtime && model ? `${runtime} / ${model}` : "Loading";
+}
+
+function formatVectorRuntime(result?: QueryResult | null, modelStatus?: ModelStatus | null) {
+  const runtime = result?.metrics.vector_index_backend ?? modelStatus?.vector_index.runtime;
+  const model = modelStatus?.vector_index.model_name;
+  return runtime ? (model ? `${runtime} / ${model}` : runtime) : "Loading";
+}
+
+function formatRerankerRuntime(result?: QueryResult | null, modelStatus?: ModelStatus | null) {
+  const runtime = result?.metrics.local_reranker_runtime ?? modelStatus?.reranker.runtime;
+  const model = result?.metrics.reranker_model ?? modelStatus?.reranker.model_name;
+  return runtime && model ? `${runtime} / ${model}` : "Loading";
+}
+
+function formatPerformanceThresholds(modelStatus?: ModelStatus | null) {
+  if (!modelStatus) {
+    return "Loading";
+  }
+  return `${formatMilliseconds(modelStatus.performance.retrieval_warning_ms)} retrieval / ${formatMilliseconds(
+    modelStatus.performance.total_warning_ms
+  )} total`;
 }
 
 function formatMilliseconds(value?: number) {

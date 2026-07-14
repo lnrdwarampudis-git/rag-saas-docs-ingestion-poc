@@ -154,7 +154,7 @@ docker compose up --build
 
 The document list/detail endpoints power the UI's Document Management panel. They apply the same tenant and RBAC rules as retrieval: users can inspect only documents and chunks their authenticated identity is authorized to see.
 
-The analytics endpoint powers the UI's Admin operations summary. It returns tenant-scoped document counts, processing job counts and recent failures, recent persisted query volume/cache/latency metrics, recent audit operations, and the current retrieval quality gate summary.
+The analytics endpoint powers the UI's Admin operations summary. It returns tenant-scoped document counts, processing job counts and recent failures, recent persisted query volume/cache/latency metrics, vector/reranker retrieval ops status, recent audit operations, and the current retrieval quality gate summary.
 
 Successful query requests also write `query.executed` audit events with safe metadata such as query hash, query length, cache state, latency, contexts used, models, and cited document ids. Raw query text is not stored in the audit log.
 
@@ -164,7 +164,7 @@ The upload endpoint accepts multipart browser uploads and is the preferred local
 
 Browser uploads are guarded by configurable extension and size limits. Defaults are `ALLOWED_UPLOAD_EXTENSIONS=.pdf,.txt,.md,.csv,.tsv,.docx,.xlsx,.pptx,.png,.jpg,.jpeg,.tiff,.bmp` and `MAX_UPLOAD_BYTES=536870912` (512 MiB). Unsupported formats return `415`; oversized files return `413`.
 
-The async upload endpoint returns `202 Accepted` with a `job_id` and `document_id`. The resumable upload-session endpoints create a session, upload numbered parts, inspect uploaded parts, and complete the session into the same async processing queue. Sessions are bound to the tenant and uploader subject. By default parts use local filesystem storage under `UPLOAD_DIR`; `UPLOAD_SESSION_STORAGE_BACKEND=minio` stores parts in MinIO and exposes presigned part URLs for direct browser-to-object-storage uploads. Docker Compose includes a default `worker` service for normal ingestion and a `worker-ocr` service for forced OCR jobs. Both poll Redis, process queued files, update `processing_jobs`, and transition documents from `pending` to `embedded` or `failed`. Failed jobs can be retried through the processing job retry API or the UI retry action.
+The async upload endpoint returns `202 Accepted` with a `job_id` and `document_id`. The resumable upload-session endpoints create a session, upload numbered parts, inspect uploaded parts, and complete the session into the same async processing queue. Sessions are bound to the tenant and uploader subject. By default parts use local filesystem storage under `UPLOAD_DIR`; `UPLOAD_SESSION_STORAGE_BACKEND=minio` stores parts in MinIO and exposes presigned part URLs for direct browser-to-object-storage uploads. `MINIO_ENDPOINT` is the backend/worker internal endpoint, while `MINIO_PUBLIC_ENDPOINT` is used when generating browser-reachable presigned URLs. The React intake panel includes an `Upload session` action that uses the same API and automatically chooses backend part uploads or presigned MinIO part uploads based on the session storage backend. Docker Compose includes a default `worker` service for normal ingestion and a `worker-ocr` service for forced OCR jobs. Both poll Redis, process queued files, update `processing_jobs`, and transition documents from `pending` to `embedded` or `failed`. Failed jobs can be retried through the processing job retry API or the UI retry action.
 
 Completed upload sessions remove temporary part storage after the final file is assembled. Abandoned sessions can be cleaned up with `python -m app.rag.cleanup_upload_sessions --max-age-hours 24`.
 
@@ -182,7 +182,7 @@ The backend image installs English OCR data by default. Additional Tesseract lan
 
 Legacy binary Office formats such as DOC, XLS, and PPT should be converted to DOCX, XLSX, or PPTX before ingestion.
 
-The Dockerized frontend nginx proxy allows uploads up to `2g` via `client_max_body_size`. The React UI shows upload progress for browser uploads. Production deployments should prefer `UPLOAD_SESSION_STORAGE_BACKEND=minio` with presigned part URLs and object lifecycle cleanup for very large files.
+The Dockerized frontend nginx proxy allows uploads up to `2g` via `client_max_body_size`. The React UI shows upload progress for browser uploads and upload-session part progress. Production deployments should prefer `UPLOAD_SESSION_STORAGE_BACKEND=minio` with presigned part URLs and object lifecycle cleanup for very large files.
 
 ## Document Management UI
 
@@ -194,7 +194,7 @@ After login, the frontend shows:
 - Chunk preview for the selected document, using the same RBAC checks as the query/retrieval path.
 - Queued upload status for background ingestion jobs, with automatic polling until completion or failure.
 - Retry action for failed background ingestion jobs.
-- Admin operations summary for ingestion totals, job queue state, failed jobs, query cache hit rate, query latency, recent audit operations, and retrieval evaluation pass rate.
+- Admin operations summary for ingestion totals, job queue state, failed jobs, query cache hit rate, query latency, vector/reranker retrieval status, recent audit operations, and retrieval evaluation pass rate.
 
 For the latest supported-format matrix, OCR notes, local-model switching instructions, validation checklist, and pending roadmap, see [Current Status And Roadmap](docs/current-status.md).
 
@@ -224,7 +224,7 @@ Username: rag
 Password: rag
 ```
 
-The query endpoint uses the local model provider abstraction plus a vector index boundary. The default configuration keeps demos deterministic with hashing embeddings, the in-memory vector index, no reranker, and extractive answer generation. `VECTOR_INDEX_BACKEND=pgvector` enables the PostgreSQL/pgvector adapter when DB persistence is on, and `VECTOR_INDEX_BACKEND=qdrant` enables the Qdrant adapter for higher-scale vector experiments. `python -m app.rag.backfill_vectors` backfills persisted chunks into the selected vector backend. For local semantic embeddings or local answer generation, set the corresponding runtime to `ollama` with a running Ollama service. `RERANKER_PROVIDER=local` plus `LOCAL_RERANKER_RUNTIME=keyword` enables a deterministic local reranker; cross-encoder and vLLM rerankers remain reserved for later adapters.
+The query endpoint uses the local model provider abstraction plus a vector index boundary. The default configuration keeps demos deterministic with hashing embeddings, the in-memory vector index, no reranker, and extractive answer generation. `VECTOR_INDEX_BACKEND=pgvector` enables the PostgreSQL/pgvector adapter when DB persistence is on, and `VECTOR_INDEX_BACKEND=qdrant` enables the Qdrant adapter for higher-scale vector experiments. `python -m app.rag.backfill_vectors` backfills persisted chunks into the selected vector backend. For local semantic embeddings or local answer generation, set the corresponding runtime to `ollama` with a running Ollama service. `RERANKER_PROVIDER=local` plus `LOCAL_RERANKER_RUNTIME=keyword` enables a deterministic local reranker; cross-encoder and vLLM rerankers remain reserved for later adapters. `/api/v1/model-status` and the UI model/status panels report embedding, answer, vector-index, reranker, and latency-threshold readiness.
 
 Run the offline retrieval quality gate:
 

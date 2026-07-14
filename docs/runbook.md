@@ -141,15 +141,25 @@ See [Model Providers](model-providers.md) for the full setting list, cache behav
 Confirm large-file and retrieval settings inside the backend container:
 
 ```bash
-docker compose exec backend python -c "import os; keys=['UPLOAD_SESSION_PART_BYTES','UPLOAD_SESSION_STORAGE_BACKEND','UPLOAD_SESSION_CLEANUP_MAX_AGE_HOURS','VECTOR_INDEX_BACKEND','PGVECTOR_DIMENSIONS','QDRANT_COLLECTION_NAME','RERANKER_PROVIDER','LOCAL_RERANKER_RUNTIME']; print({k: os.environ.get(k) for k in keys})"
+docker compose exec backend python -c "import os; keys=['UPLOAD_SESSION_PART_BYTES','UPLOAD_SESSION_STORAGE_BACKEND','UPLOAD_SESSION_CLEANUP_MAX_AGE_HOURS','VECTOR_INDEX_BACKEND','PGVECTOR_DIMENSIONS','QDRANT_COLLECTION_NAME','RERANKER_PROVIDER','LOCAL_RERANKER_RUNTIME','RETRIEVAL_LATENCY_WARNING_MS','TOTAL_LATENCY_WARNING_MS']; print({k: os.environ.get(k) for k in keys})"
 ```
 
-Use `VECTOR_INDEX_BACKEND=pgvector` only with `ENABLE_DB_PERSISTENCE=true`. Use `VECTOR_INDEX_BACKEND=qdrant` for the Qdrant adapter, then run `python -m app.rag.backfill_vectors` after changing vector backend or embedding model. The default `RERANKER_PROVIDER=none` can be changed to `RERANKER_PROVIDER=local` and `LOCAL_RERANKER_RUNTIME=keyword` for deterministic local reranking.
+Use `VECTOR_INDEX_BACKEND=pgvector` only with `ENABLE_DB_PERSISTENCE=true`. Use `VECTOR_INDEX_BACKEND=qdrant` for the Qdrant adapter, then run `python -m app.rag.backfill_vectors` after changing vector backend or embedding model. The default `RERANKER_PROVIDER=none` can be changed to `RERANKER_PROVIDER=local` and `LOCAL_RERANKER_RUNTIME=keyword` for deterministic local reranking. Check `/api/v1/model-status` or the UI model panel after changes; it reports vector-index readiness, reranker readiness, and the configured latency warning thresholds.
 
 Clean up abandoned upload sessions and temporary parts:
 
 ```bash
 docker compose exec backend python -m app.rag.cleanup_upload_sessions --max-age-hours 24
+```
+
+For browser-driven large files, sign in to the UI, choose a file, and use `Upload session`. With `UPLOAD_SESSION_STORAGE_BACKEND=filesystem`, parts stream through the backend. With `UPLOAD_SESSION_STORAGE_BACKEND=minio`, the UI requests a presigned URL per part, uploads directly to MinIO, marks the part complete, and then completes the session into the async queue. In Docker, use `MINIO_ENDPOINT=http://minio:9000` for service-to-service calls and `MINIO_PUBLIC_ENDPOINT=http://localhost:9000` for browser-reachable presigned URLs.
+
+Configure local MinIO CORS before using browser direct upload mode:
+
+```bash
+docker run --rm --network rag-saas-docs-ingestion-poc_default \
+  -v "$PWD/infra/minio/upload-session-cors.json:/cors.json:ro" \
+  minio/mc sh -c "mc alias set local http://minio:9000 minio minio123 && mc mb -p local/rag-upload-sessions && mc cors set local/rag-upload-sessions /cors.json"
 ```
 
 ## OCR Runtime Check

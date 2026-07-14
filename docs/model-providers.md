@@ -27,6 +27,8 @@ RERANKER_PROVIDER=none
 LOCAL_RERANKER_RUNTIME=none
 LOCAL_RERANKER_MODEL_NAME=none
 RERANKER_CANDIDATE_MULTIPLIER=4
+RETRIEVAL_LATENCY_WARNING_MS=1500
+TOTAL_LATENCY_WARNING_MS=5000
 LLM_PROVIDER=local
 LOCAL_LLM_RUNTIME=extractive
 LOCAL_LLM_MODEL_NAME=extractive
@@ -53,6 +55,8 @@ PUBLIC_LLM_ENABLED=false
 | `LOCAL_RERANKER_RUNTIME` | `none`, `keyword` | `cross-encoder`, `vllm` | `keyword` is deterministic and local; heavier runtimes remain reserved. |
 | `LOCAL_RERANKER_MODEL_NAME` | `none`, `keyword-overlap` | local reranker model names | Included in cache keys/metrics when reranking is enabled. |
 | `RERANKER_CANDIDATE_MULTIPLIER` | positive integer | adapter-tuned values | Controls how many initial candidates are retrieved before final top-k reranking. |
+| `RETRIEVAL_LATENCY_WARNING_MS` | positive number | deployment-specific SLOs | Drives analytics/model-status warning displays for retrieval latency. |
+| `TOTAL_LATENCY_WARNING_MS` | positive number | deployment-specific SLOs | Drives model-status warning displays for end-to-end query latency. |
 | `LOCAL_MODEL_REQUEST_TIMEOUT_SECONDS` | positive number | adapter-specific timeouts | Used by Ollama HTTP clients. |
 | `LLM_PROVIDER` | `local` | public token-based providers | Public providers require `PUBLIC_LLM_ENABLED=true` and adapter code. |
 | `LOCAL_LLM_RUNTIME` | `extractive`, `ollama` | `vllm` | `extractive` selects sentences from authorized chunks; `ollama` calls `/api/generate` on `LOCAL_LLM_BASE_URL`. |
@@ -230,9 +234,9 @@ Authenticated users can inspect the active model configuration through:
 GET /api/v1/model-status
 ```
 
-The response reports the configured embedding and answer providers, runtimes, model names, readiness, and Ollama base URLs when an Ollama runtime is active. Hashing embeddings and extractive answer generation report ready without network calls. Ollama runtimes perform a lightweight `GET /api/tags` readiness check and mark the component not ready when Ollama is unreachable or the configured model has not been pulled.
+The response reports the configured embedding, answer, vector-index, and reranker providers/runtimes, model names, readiness, local endpoint URLs when relevant, and performance warning thresholds. Hashing embeddings, extractive answer generation, the memory vector index, and disabled/keyword rerankers report ready without network calls. Ollama runtimes perform a lightweight `GET /api/tags` readiness check and mark the component not ready when Ollama is unreachable or the configured model has not been pulled. Qdrant vector-index status checks the configured collection and reports attention when Qdrant is unreachable or the collection has not been created/backfilled.
 
-The React console uses this endpoint to show the model readiness pill and the active embedding/answer runtime cards.
+The React console uses this endpoint to show the model readiness pill and the active embedding, answer, vector-index, reranker, and latency-threshold cards.
 
 Ollama query-time failures raise `ModelProviderRequestError` with the operation, model name, endpoint, and HTTP status or timeout class. The query API converts those provider errors into `503 Service Unavailable` responses so callers see a clear local-model readiness issue instead of a generic server failure.
 

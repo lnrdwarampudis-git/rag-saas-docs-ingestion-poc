@@ -291,6 +291,10 @@ def test_resumable_upload_session_returns_minio_presigned_part_url(
     import app.rag.upload_sessions as upload_sessions
 
     class FakeMinioClient:
+        def bucket_exists(self, bucket):
+            assert bucket == "rag-upload-sessions"
+            return True
+
         def presigned_put_object(self, bucket, object_name, expires):
             assert bucket == "rag-upload-sessions"
             assert object_name.endswith("/parts/00000001.part")
@@ -299,7 +303,9 @@ def test_resumable_upload_session_returns_minio_presigned_part_url(
     settings = get_settings()
     monkeypatch.setattr(settings, "upload_dir", str(tmp_path))
     monkeypatch.setattr(settings, "upload_session_storage_backend", "minio")
-    monkeypatch.setattr(upload_sessions, "_minio_client", lambda: FakeMinioClient())
+    fake_client = FakeMinioClient()
+    monkeypatch.setattr(upload_sessions, "_minio_client", lambda: fake_client)
+    monkeypatch.setattr(upload_sessions, "_minio_presign_client", lambda: fake_client)
     client = api_client_as("00000000-0000-4000-8000-000000000022", ["admin"])
 
     create_response = client.post(
