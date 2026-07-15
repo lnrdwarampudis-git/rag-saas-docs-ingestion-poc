@@ -251,6 +251,11 @@ type AnalyticsReport = {
       segments_count: number;
       status: string;
       optimizer_status: string;
+      indexed_payload_fields: string[];
+      required_payload_indexes: string[];
+      missing_payload_indexes: string[];
+      optimizer_attention: boolean;
+      index_attention: boolean;
       message: string;
     };
   };
@@ -1570,22 +1575,18 @@ function AnalyticsPanel({
           label="Qdrant health"
           value={
             report?.retrieval.qdrant
-              ? `${report.retrieval.qdrant.status} / ${report.retrieval.qdrant.points_count} points`
+              ? `${report.retrieval.qdrant.status} / ${report.retrieval.qdrant.points_count} points / ${
+                  report.retrieval.qdrant.index_attention ||
+                  report.retrieval.qdrant.optimizer_attention
+                    ? "attention"
+                    : "indexed"
+                }`
               : "Not selected"
           }
         />
       </div>
 
-      {report?.queries.model_latency_buckets.length ? (
-        <div className="failure-list" aria-label="Model latency buckets">
-          {report.queries.model_latency_buckets.slice(0, 4).map((bucket) => (
-            <Badge
-              key={bucket.model_key}
-              label={`${bucket.model_key}: ${formatMilliseconds(bucket.p95_total_ms)} p95`}
-            />
-          ))}
-        </div>
-      ) : null}
+      {report ? <OperationsDetail report={report} /> : null}
 
       {report?.jobs.recent_failures.length ? (
         <div className="failure-list">
@@ -1621,6 +1622,116 @@ function AnalyticsPanel({
         )}
       </div>
     </section>
+  );
+}
+
+function OperationsDetail({ report }: { report: AnalyticsReport }) {
+  return (
+    <div className="ops-detail-grid">
+      <div className="ops-detail-table" aria-label="Model latency detail">
+        <div className="ops-detail-header">
+          <strong>Model latency</strong>
+          <span>{report.queries.model_latency_buckets.length} runtime bucket(s)</span>
+        </div>
+        {report.queries.model_latency_buckets.length ? (
+          <div className="ops-table">
+            <div className="ops-table-row ops-table-head">
+              <span>Runtime</span>
+              <span>Count</span>
+              <span>Avg</span>
+              <span>P95</span>
+            </div>
+            {report.queries.model_latency_buckets.slice(0, 6).map((bucket) => (
+              <div className="ops-table-row" key={bucket.model_key}>
+                <span>{bucket.model_key}</span>
+                <span>{bucket.total}</span>
+                <span>{formatMilliseconds(bucket.average_total_ms)}</span>
+                <span>{formatMilliseconds(bucket.p95_total_ms)}</span>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="empty-state compact-empty">No model latency history yet.</div>
+        )}
+      </div>
+
+      <div className="ops-detail-table" aria-label="Evaluation run history">
+        <div className="ops-detail-header">
+          <strong>Evaluation runs</strong>
+          <span>{report.evaluation.trend.length} persisted run(s)</span>
+        </div>
+        {report.evaluation.trend.length ? (
+          <div className="ops-table">
+            <div className="ops-table-row ops-table-head evaluation-row">
+              <span>Run</span>
+              <span>Cases</span>
+              <span>Failed</span>
+              <span>Precision</span>
+              <span>Grounded</span>
+            </div>
+            {report.evaluation.trend.slice(0, 6).map((run) => (
+              <div className="ops-table-row evaluation-row" key={run.created_at}>
+                <span>{formatDate(run.created_at)}</span>
+                <span>{run.cases}</span>
+                <span>{run.failed}</span>
+                <span>{formatPercent(run.context_precision)}</span>
+                <span>{formatPercent(run.answer_groundedness)}</span>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="empty-state compact-empty">No evaluation trend history yet.</div>
+        )}
+      </div>
+
+      <div className="ops-detail-table" aria-label="Qdrant diagnostics">
+        <div className="ops-detail-header">
+          <strong>Qdrant diagnostics</strong>
+          <span>{report.retrieval.qdrant?.collection_name || "inactive"}</span>
+        </div>
+        {report.retrieval.qdrant ? (
+          <div className="qdrant-diagnostics">
+            <StatusItem label="Optimizer" value={report.retrieval.qdrant.optimizer_status} />
+            <StatusItem
+              label="Vectors"
+              value={`${report.retrieval.qdrant.indexed_vectors_count}/${report.retrieval.qdrant.points_count}`}
+            />
+            <StatusItem label="Segments" value={String(report.retrieval.qdrant.segments_count)} />
+            <StatusItem
+              label="Payload indexes"
+              value={`${report.retrieval.qdrant.indexed_payload_fields.length}/${report.retrieval.qdrant.required_payload_indexes.length}`}
+            />
+            {report.retrieval.qdrant.missing_payload_indexes.length ? (
+              <div className="failure-list">
+                {report.retrieval.qdrant.missing_payload_indexes.map((fieldName) => (
+                  <Badge key={fieldName} label={`Missing ${fieldName}`} />
+                ))}
+              </div>
+            ) : (
+              <span className="ops-muted">{report.retrieval.qdrant.message}</span>
+            )}
+          </div>
+        ) : (
+          <div className="empty-state compact-empty">Qdrant is not the selected vector backend.</div>
+        )}
+      </div>
+
+      <div className="ops-detail-table" aria-label="Processing job event history">
+        <div className="ops-detail-header">
+          <strong>Job events</strong>
+          <span>{report.jobs.recent_events.length} recent event(s)</span>
+        </div>
+        {report.jobs.recent_events.length ? (
+          <div className="ops-event-list">
+            {report.jobs.recent_events.slice(0, 8).map((event) => (
+              <span key={event}>{event}</span>
+            ))}
+          </div>
+        ) : (
+          <div className="empty-state compact-empty">No processing job event history yet.</div>
+        )}
+      </div>
+    </div>
   );
 }
 

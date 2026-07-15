@@ -252,6 +252,13 @@ def test_qdrant_analytics_reports_collection_health(monkeypatch) -> None:
                             "segments_count": 2,
                             "status": "green",
                             "optimizer_status": "ok",
+                            "payload_schema": {
+                                "tenant_id": {"data_type": "keyword"},
+                                "document_id": {"data_type": "keyword"},
+                                "visibility": {"data_type": "keyword"},
+                                "uploaded_by": {"data_type": "keyword"},
+                                "allowed_role_names": {"data_type": "keyword"},
+                            },
                         }
                     },
                 )
@@ -271,6 +278,62 @@ def test_qdrant_analytics_reports_collection_health(monkeypatch) -> None:
     assert report.indexed_vectors_count == 40
     assert report.segments_count == 2
     assert report.optimizer_status == "ok"
+    assert report.required_payload_indexes == [
+        "allowed_role_names",
+        "document_id",
+        "tenant_id",
+        "uploaded_by",
+        "visibility",
+    ]
+    assert report.indexed_payload_fields == report.required_payload_indexes
+    assert report.missing_payload_indexes == []
+    assert report.index_attention is False
+    assert report.optimizer_attention is False
+
+
+def test_qdrant_analytics_flags_missing_payload_indexes(monkeypatch) -> None:
+    original_client = httpx.Client
+    monkeypatch.setattr(
+        httpx,
+        "Client",
+        lambda **kwargs: original_client(
+            **kwargs,
+            transport=httpx.MockTransport(
+                lambda request: httpx.Response(
+                    200,
+                    json={
+                        "result": {
+                            "points_count": 10,
+                            "indexed_vectors_count": 8,
+                            "segments_count": 1,
+                            "status": "green",
+                            "optimizer_status": {"status": "yellow"},
+                            "payload_schema": {
+                                "tenant_id": {"data_type": "keyword"},
+                                "document_id": {"data_type": "keyword"},
+                            },
+                        }
+                    },
+                )
+            ),
+        ),
+    )
+    settings = analytics.get_settings()
+    monkeypatch.setattr(settings, "vector_index_backend", "qdrant")
+    monkeypatch.setattr(settings, "qdrant_collection_name", "rag_chunks")
+    monkeypatch.setattr(settings, "qdrant_url", "http://qdrant.test")
+
+    report = analytics._qdrant_analytics(settings)
+
+    assert report is not None
+    assert report.index_attention is True
+    assert report.optimizer_attention is True
+    assert report.missing_payload_indexes == [
+        "allowed_role_names",
+        "uploaded_by",
+        "visibility",
+    ]
+    assert "missing payload indexes" in report.message
 
 
 def test_persistent_audit_events_return_recent_tenant_history(monkeypatch) -> None:

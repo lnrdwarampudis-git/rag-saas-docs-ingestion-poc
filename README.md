@@ -93,8 +93,8 @@ For full setup, execution, test, and GitHub export instructions, see:
 - Resumable upload-session API and UI action with filesystem part uploads, MinIO part storage, presigned browser-direct MinIO uploads, completed-session cleanup, stale-session cleanup, MinIO lifecycle automation, public MinIO presign endpoint config, and bucket CORS guidance
 - Vector retrieval operations with in-memory default, pgvector and Qdrant adapters, vector backfill/check command, Qdrant payload indexes for RBAC filters, vector/reranker query metrics, model-status readiness checks, and analytics warning thresholds
 - Local/open-source model provider abstraction for deterministic hashing embeddings, optional Ollama embeddings, vLLM-compatible embeddings/generation, extractive answer generation, optional Ollama answer generation, deterministic keyword reranking, HTTP cross-encoder/vLLM reranking, model/runtime readiness checks, and later gated public providers
-- Authenticated admin analytics API and UI summary for document ingestion, processing jobs, persisted query cache/latency, vector/reranker retrieval state, recent audit operations, and retrieval evaluation health
-- Deployment hardening assets with CI quality gates, production Compose overlay example, Kubernetes starter manifest, production env checklist, backup/restore runbook, expanded evaluation gate, persisted eval trend history, durable job/model latency history, Qdrant live health, and local GPU model deployment examples
+- Authenticated admin analytics API and UI detail views for document ingestion, processing jobs, persisted query cache/latency, model latency buckets, Qdrant diagnostics, recent audit operations, and retrieval evaluation health
+- Deployment hardening assets with CI quality gates, production Compose overlay example, Kubernetes starter manifest, VM/systemd service examples, production env checklist, backup/restore runbook, expanded evaluation gate, persisted eval trend history, durable job/model latency history, Qdrant live health, and local GPU model deployment examples
 
 ## Recommended Week 1 Commands
 
@@ -257,7 +257,7 @@ LOCAL_LLM_BASE_URL=http://localhost:11434
 PUBLIC_LLM_ENABLED=false
 ```
 
-`app/rag/model_providers.py` defines the embedding and answer-generation interfaces. `LOCAL_EMBEDDING_RUNTIME=ollama` or `vllm` is available for local semantic embeddings, and `LOCAL_LLM_RUNTIME=ollama` or `vllm` is available for local answer generation. Public token-based LLM providers remain blocked unless `PUBLIC_LLM_ENABLED=true`. See [Model Providers](docs/model-providers.md) for the full configuration reference and adapter contract, [Local Model Deployment](docs/local-model-deployment.md) for host-Ollama/Compose-Ollama/vLLM examples, and [Deployment Hardening](docs/deployment-hardening.md) for CI, production overlay, and backup/restore guidance.
+`app/rag/model_providers.py` defines the embedding and answer-generation interfaces. `LOCAL_EMBEDDING_RUNTIME=ollama` or `vllm` is available for local semantic embeddings, and `LOCAL_LLM_RUNTIME=ollama` or `vllm` is available for local answer generation. Public token-based LLM providers remain blocked unless `PUBLIC_LLM_ENABLED=true`. See [Model Providers](docs/model-providers.md) for the full configuration reference and adapter contract, [Local Model Deployment](docs/local-model-deployment.md) for host-Ollama/Compose-Ollama/vLLM examples, and [Deployment Hardening](docs/deployment-hardening.md) for CI, production overlay, VM/systemd, Kubernetes, and backup/restore guidance.
 
 ## Architecture
 

@@ -797,6 +797,9 @@ def _retrieval_analytics(queries: QueryAnalytics) -> RetrievalAnalytics:
 def _qdrant_analytics(settings) -> QdrantAnalytics | None:
     if settings.vector_index_backend.lower() != "qdrant":
         return None
+    from app.rag.vector_index import QdrantVectorIndex
+
+    required_payload_indexes = sorted(QdrantVectorIndex.payload_indexes)
     try:
         with httpx.Client(
             base_url=settings.qdrant_url.rstrip("/"),
@@ -807,18 +810,33 @@ def _qdrant_analytics(settings) -> QdrantAnalytics | None:
         return QdrantAnalytics(
             ready=False,
             collection_name=settings.qdrant_collection_name,
+            required_payload_indexes=required_payload_indexes,
             message=f"Qdrant is not reachable: {exc.__class__.__name__}",
         )
     if response.status_code != 200:
         return QdrantAnalytics(
             ready=False,
             collection_name=settings.qdrant_collection_name,
+            required_payload_indexes=required_payload_indexes,
             message=f"Qdrant collection check returned HTTP {response.status_code}",
         )
     result = response.json().get("result", {})
     optimizer_status = result.get("optimizer_status")
     if isinstance(optimizer_status, dict):
         optimizer_status = optimizer_status.get("status") or json.dumps(optimizer_status)
+    optimizer_status_text = str(optimizer_status or "unknown")
+    payload_schema = result.get("payload_schema") or {}
+    indexed_payload_fields = sorted(payload_schema) if isinstance(payload_schema, dict) else []
+    missing_payload_indexes = [
+        field_name for field_name in required_payload_indexes if field_name not in indexed_payload_fields
+    ]
+    optimizer_attention = optimizer_status_text.lower() not in {"ok", "green", "unknown"}
+    index_attention = bool(missing_payload_indexes)
+    message = "Qdrant collection health loaded."
+    if missing_payload_indexes:
+        message = f"Qdrant missing payload indexes: {', '.join(missing_payload_indexes)}"
+    elif optimizer_attention:
+        message = f"Qdrant optimizer status needs attention: {optimizer_status_text}"
     return QdrantAnalytics(
         ready=True,
         collection_name=settings.qdrant_collection_name,
@@ -826,8 +844,13 @@ def _qdrant_analytics(settings) -> QdrantAnalytics | None:
         indexed_vectors_count=int(result.get("indexed_vectors_count") or 0),
         segments_count=int(result.get("segments_count") or 0),
         status=str(result.get("status") or "unknown"),
-        optimizer_status=str(optimizer_status or "unknown"),
-        message="Qdrant collection health loaded.",
+        optimizer_status=optimizer_status_text,
+        indexed_payload_fields=indexed_payload_fields,
+        required_payload_indexes=required_payload_indexes,
+        missing_payload_indexes=missing_payload_indexes,
+        optimizer_attention=optimizer_attention,
+        index_attention=index_attention,
+        message=message,
     )
 
 

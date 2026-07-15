@@ -338,6 +338,105 @@ button {
   gap: 8px;
 }
 
+.ops-detail-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.ops-detail-table {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+  padding: 12px;
+  border: 1px solid #dde8e2;
+  border-radius: 8px;
+  background: #fbfcfb;
+}
+
+.ops-detail-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.ops-detail-header strong {
+  color: #17201b;
+  font-size: 14px;
+}
+
+.ops-detail-header span,
+.ops-muted {
+  color: #60746c;
+  font-size: 12px;
+}
+
+.ops-table {
+  display: grid;
+  gap: 6px;
+  overflow-x: auto;
+}
+
+.ops-table-row {
+  display: grid;
+  grid-template-columns: minmax(220px, 1fr) 64px 80px 80px;
+  gap: 8px;
+  align-items: center;
+  min-width: 510px;
+  padding: 7px 8px;
+  border: 1px solid #e2ebe6;
+  border-radius: 8px;
+  color: #22302a;
+  background: #ffffff;
+  font-size: 12px;
+}
+
+.ops-table-row span:first-child {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ops-table-row.ops-table-head {
+  color: #60746c;
+  background: #f2f6f4;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.ops-table-row.evaluation-row {
+  grid-template-columns: minmax(160px, 1fr) 64px 64px 86px 86px;
+}
+
+.qdrant-diagnostics {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.qdrant-diagnostics .failure-list,
+.qdrant-diagnostics .ops-muted {
+  grid-column: 1 / -1;
+}
+
+.ops-event-list {
+  display: grid;
+  gap: 7px;
+  max-height: 190px;
+  overflow: auto;
+}
+
+.ops-event-list span {
+  padding: 7px 8px;
+  border: 1px solid #e2ebe6;
+  border-radius: 8px;
+  color: #22302a;
+  background: #ffffff;
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+
 .event-item {
   display: flex;
   align-items: center;
@@ -941,6 +1040,7 @@ button {
 
   .analytics-grid,
   .analytics-subgrid,
+  .ops-detail-grid,
   .quality-grid,
   .evaluation-case-list {
     grid-template-columns: 1fr 1fr;
@@ -1003,6 +1103,7 @@ button {
   .content-grid,
   .analytics-grid,
   .analytics-subgrid,
+  .ops-detail-grid,
   .quality-grid,
   .evaluation-case-list,
   .run-detail-grid {

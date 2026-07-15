@@ -66,6 +66,11 @@ class QdrantAnalytics(BaseModel):
     segments_count: int = 0
     status: str = "unknown"
     optimizer_status: str = "unknown"
+    indexed_payload_fields: list[str] = Field(default_factory=list)
+    required_payload_indexes: list[str] = Field(default_factory=list)
+    missing_payload_indexes: list[str] = Field(default_factory=list)
+    optimizer_attention: bool = False
+    index_attention: bool = False
     message: str = ""
 
 

@@ -13,7 +13,7 @@ This page is the short handoff for what the POC supports today, how to run it, a
 - Processing job status, local run, cancel, and retry controls through `GET /api/v1/processing-jobs/{job_id}`, `POST /api/v1/processing-jobs/{job_id}/run`, `POST /api/v1/processing-jobs/{job_id}/cancel`, and `POST /api/v1/processing-jobs/{job_id}/retry`.
 - Tenant-scoped document inventory, chunk preview, query pipeline, citations, Redis query cache, and cache/model-aware query metrics.
 - Offline retrieval quality gate through `python -m app.eval.run` and authenticated UI/API evaluation status, including no-answer, RBAC-denial, tenant-isolation, and answer-groundedness checks.
-- Admin analytics for documents, jobs, durable job-event history, query volume/cache/latency, p95/recent latency, model latency buckets, vector/reranker retrieval state, Qdrant live collection health, audit operations, audit filtering, evaluation health, and persisted evaluation trend history.
+- Admin analytics for documents, jobs, durable job-event history, query volume/cache/latency, p95/recent latency, model latency detail tables, vector/reranker retrieval state, Qdrant live collection health with payload-index diagnostics, audit operations, audit filtering, evaluation health, and persisted evaluation trend history.
 - Local/open-source model abstraction with deterministic hashing embeddings and extractive answer generation as defaults.
 - Optional Ollama embeddings and answer generation for local models, including tested Mac-host Ollama access from Docker through `host.docker.internal`.
 - Vector index abstraction with in-memory default, pgvector and Qdrant adapter paths, vector backfill command, model-status readiness checks, analytics warning thresholds, default no-op reranker, and deterministic local keyword reranker.
@@ -27,7 +27,7 @@ This page is the short handoff for what the POC supports today, how to run it, a
 - Persistent vector retrieval operations now include pgvector and Qdrant adapter paths, vector ops check/backfill automation, Qdrant payload indexes for RBAC filter fields, vector backend metrics in query responses, vector-index readiness in `/api/v1/model-status`, retrieval backend/reranker warning state in `/api/v1/analytics`, and documented production checks after backend/model changes.
 - Stronger local model foundations now include packaged profiles (`local-default`, `host-ollama`, `compose-ollama`, `vllm-gpu`), Ollama and vLLM-compatible embedding/answer-generation paths, model-status checks for embedding/answer/vector/reranker runtimes, deterministic local keyword reranking, HTTP-backed cross-encoder/vLLM reranking, latency warning threshold config, and UI surfaces for active model, profile, vector, reranker, and threshold state.
 - Operations controls now include queued/processing job cancel, failed-job retry history, Redis dead-letter queue routing after `PROCESSING_JOB_MAX_ATTEMPTS`, `WORKER_MAX_JOBS_PER_RUN` for supervised/batch workers, job cancel audit events, and `GET /api/v1/analytics?action=...&resource_type=...` audit filtering.
-- Deployment hardening now includes a GitHub Actions CI workflow, production Compose overlay example, Kubernetes starter manifest, production environment checklist, deployment hardening guide, backup/restore runbook, expanded evaluation gate, persisted evaluation trend records, durable job/model latency history tables, Qdrant live health, and local GPU/vLLM deployment examples.
+- Deployment hardening now includes a GitHub Actions CI workflow, production Compose overlay example, Kubernetes starter manifest, VM/systemd starter services, production environment checklist, deployment hardening guide, backup/restore runbook, expanded evaluation gate, persisted evaluation trend records, durable job/model latency history tables, Qdrant live health with payload-index diagnostics, and local GPU/vLLM deployment examples.
 
 ## Supported Document Intake Today
 
@@ -140,10 +140,8 @@ git diff --check
 
 Recommended next implementation slices:
 
-1. Add a richer operations detail UI for the persisted job-event, model-latency, and evaluation-run tables.
-2. Add Qdrant payload-index verification details and optimizer warnings beyond the current collection-level health summary.
-3. Add deployment manifests for any selected non-Kubernetes target, such as ECS, Fly.io, Render, or a VM/systemd layout.
-4. Add retention jobs for `query_events`, `model_latency_events`, `processing_job_events`, and `evaluation_runs`.
-5. Add public/token LLM providers only after policy approval and explicit `PUBLIC_LLM_ENABLED=true`.
+1. Add retention jobs for `query_events`, `model_latency_events`, `processing_job_events`, and `evaluation_runs`.
+2. Add optional ECS, Fly.io, or Render manifests if one of those platforms is selected.
+3. Add public/token LLM providers only after policy approval and explicit `PUBLIC_LLM_ENABLED=true`.
 
 Public token-based LLM providers remain intentionally deferred. They should stay behind explicit provider configuration and `PUBLIC_LLM_ENABLED=true`.

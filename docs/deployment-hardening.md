@@ -45,6 +45,24 @@ The Kubernetes starter manifest is [infra/k8s/rag-saas.example.yaml](../infra/k8
 
 It expects managed or separately deployed Postgres, Redis, MinIO, Qdrant, and Keycloak endpoints to match the ConfigMap values. Replace image names, secrets, issuer URLs, and storage/networking before use.
 
+## VM/Systemd Starter
+
+The VM starter files in [infra/systemd](../infra/systemd) provide a non-Kubernetes deployment target for a hardened Linux host:
+
+- `rag.env.example`: environment contract for backend and worker processes.
+- `rag-backend.service.example`: FastAPI service running through Uvicorn.
+- `rag-worker.service.example`: ingestion worker service for Redis-backed processing.
+
+Install the repository under `/opt/rag-saas-docs-ingestion-poc`, create a Python virtual environment, copy `rag.env.example` to `/etc/rag-saas/rag.env`, replace every placeholder, and point the service files at the installed path. Put TLS, static frontend hosting, and request limits in a reverse proxy such as Nginx or an equivalent load balancer.
+
+After installation:
+
+```bash
+sudo systemctl daemon-reload
+sudo systemctl enable --now rag-backend rag-worker
+curl http://127.0.0.1:8000/health
+```
+
 Start with the overlay after preparing a real environment file:
 
 ```bash
@@ -153,4 +171,12 @@ The app now records durable operational history when `ENABLE_DB_PERSISTENCE=true
 - `model_latency_events`: model/vector/reranker latency buckets by query runtime shape.
 - `evaluation_runs`: persisted retrieval quality-gate reports for trend history.
 
-The Admin Analytics API rolls these into recent job events, model latency buckets, and evaluation trend points.
+The Admin Analytics API rolls these into recent job events, model latency buckets, and evaluation trend points. The Admin Analytics UI now includes detail tables for model-latency buckets, persisted evaluation trends, processing job events, and Qdrant diagnostics.
+
+## Qdrant Diagnostics
+
+When `VECTOR_INDEX_BACKEND=qdrant`, `/api/v1/analytics` checks the live collection, vector counts, segment count, optimizer status, and payload-index coverage for RBAC filter fields. Missing payload indexes or non-green optimizer status are surfaced as attention states in the Admin Analytics UI. Run the vector ops command after backend, embedding, or Qdrant changes:
+
+```bash
+python -m app.rag.vector_ops
+```
