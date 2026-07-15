@@ -1,0 +1,12 @@
+[Unit]
+Description=RAG SaaS persisted operations history cleanup
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=rag
+Group=rag
+WorkingDirectory=/opt/rag-saas-docs-ingestion-poc
+EnvironmentFile=/etc/rag-saas/rag.env
+ExecStart=/opt/rag-saas-docs-ingestion-poc/.venv/bin/python -m app.rag.cleanup_ops_history

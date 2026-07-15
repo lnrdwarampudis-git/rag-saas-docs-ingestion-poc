@@ -1,0 +1,41 @@
+app = "rag-saas-docs"
+primary_region = "iad"
+
+[build]
+  dockerfile = "Dockerfile.backend"
+
+[env]
+  APP_ENV = "production"
+  ENABLE_DB_PERSISTENCE = "true"
+  VECTOR_INDEX_BACKEND = "qdrant"
+  LLM_PROVIDER = "local"
+  LOCAL_LLM_RUNTIME = "extractive"
+  LOCAL_LLM_MODEL_NAME = "extractive"
+  EMBEDDING_PROVIDER = "local"
+  LOCAL_EMBEDDING_RUNTIME = "hashing"
+  LOCAL_EMBEDDING_MODEL_NAME = "hashing-384"
+  PUBLIC_LLM_ENABLED = "false"
+  PROCESSING_QUEUE_NAME = "rag:processing-jobs"
+  OCR_PROCESSING_QUEUE_NAME = "rag:processing-jobs:ocr"
+  WORKER_QUEUE_NAMES = "rag:processing-jobs,rag:processing-jobs:ocr"
+  QUERY_EVENTS_RETENTION_DAYS = "30"
+  MODEL_LATENCY_EVENTS_RETENTION_DAYS = "30"
+  PROCESSING_JOB_EVENTS_RETENTION_DAYS = "30"
+  EVALUATION_RUNS_RETENTION_DAYS = "90"
+
+[processes]
+  app = "uvicorn app.main:app --host 0.0.0.0 --port 8000"
+  worker = "python -m app.worker"
+
+[http_service]
+  internal_port = 8000
+  force_https = true
+  auto_stop_machines = "stop"
+  auto_start_machines = true
+  min_machines_running = 1
+  processes = ["app"]
+
+[[vm]]
+  memory = "1gb"
+  cpu_kind = "shared"
+  cpus = 1

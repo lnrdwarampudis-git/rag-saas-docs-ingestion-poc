@@ -74,6 +74,29 @@ The Render starter blueprint is [infra/render/render.yaml.example](../infra/rend
 
 It assumes managed or separately provisioned Postgres, Redis, MinIO-compatible object storage, Qdrant, and Keycloak/OIDC endpoints. Replace all `sync: false` values in Render with environment-specific secrets and URLs before deploying.
 
+## Fly.io Starter
+
+The Fly.io starter files in [infra/fly](../infra/fly) provide a Docker-based app and worker process layout:
+
+- `fly.toml.example`: backend web process and ingestion worker process groups.
+- `.env.fly.example`: secret/environment values to set with `fly secrets set`.
+
+It assumes managed or separately provisioned Postgres, Redis, MinIO-compatible object storage, Qdrant, and Keycloak/OIDC endpoints. Copy the example to `fly.toml`, replace the `app` name and region, set secrets, and deploy:
+
+```bash
+cp infra/fly/fly.toml.example fly.toml
+fly secrets import < infra/fly/.env.fly.example
+fly deploy --config fly.toml
+fly scale count app=1 worker=1
+```
+
+Run retained operations-history cleanup as a one-off Fly machine command or from an external scheduler:
+
+```bash
+fly ssh console -C "python -m app.rag.cleanup_ops_history --dry-run"
+fly ssh console -C "python -m app.rag.cleanup_ops_history"
+```
+
 Start with the overlay after preparing a real environment file:
 
 ```bash

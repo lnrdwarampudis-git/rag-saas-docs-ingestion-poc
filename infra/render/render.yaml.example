@@ -1,0 +1,92 @@
+services:
+  - type: web
+    name: rag-saas-backend
+    runtime: docker
+    dockerfilePath: ./Dockerfile.backend
+    plan: standard
+    healthCheckPath: /health
+    envVars:
+      - key: APP_ENV
+        value: production
+      - key: ENABLE_DB_PERSISTENCE
+        value: "true"
+      - key: DATABASE_URL
+        sync: false
+      - key: REDIS_URL
+        sync: false
+      - key: MINIO_ENDPOINT
+        sync: false
+      - key: MINIO_PUBLIC_ENDPOINT
+        sync: false
+      - key: MINIO_ACCESS_KEY
+        sync: false
+      - key: MINIO_SECRET_KEY
+        sync: false
+      - key: QDRANT_URL
+        sync: false
+      - key: VECTOR_INDEX_BACKEND
+        value: qdrant
+      - key: LLM_PROVIDER
+        value: local
+      - key: LOCAL_LLM_RUNTIME
+        value: extractive
+      - key: EMBEDDING_PROVIDER
+        value: local
+      - key: LOCAL_EMBEDDING_RUNTIME
+        value: hashing
+      - key: PUBLIC_LLM_ENABLED
+        value: "false"
+      - key: QUERY_EVENTS_RETENTION_DAYS
+        value: "30"
+      - key: MODEL_LATENCY_EVENTS_RETENTION_DAYS
+        value: "30"
+      - key: PROCESSING_JOB_EVENTS_RETENTION_DAYS
+        value: "30"
+      - key: EVALUATION_RUNS_RETENTION_DAYS
+        value: "90"
+      - key: KEYCLOAK_ISSUER
+        sync: false
+      - key: KEYCLOAK_AUDIENCE
+        sync: false
+
+  - type: worker
+    name: rag-saas-worker
+    runtime: docker
+    dockerfilePath: ./Dockerfile.backend
+    dockerCommand: python -m app.worker
+    plan: standard
+    envVars:
+      - fromService:
+          type: web
+          name: rag-saas-backend
+          envVarKey: DATABASE_URL
+      - fromService:
+          type: web
+          name: rag-saas-backend
+          envVarKey: REDIS_URL
+      - key: ENABLE_DB_PERSISTENCE
+        value: "true"
+      - key: WORKER_QUEUE_NAMES
+        value: rag:processing-jobs,rag:processing-jobs:ocr
+
+  - type: cron
+    name: rag-saas-ops-retention
+    runtime: docker
+    dockerfilePath: ./Dockerfile.backend
+    dockerCommand: python -m app.rag.cleanup_ops_history
+    schedule: "0 7 * * *"
+    envVars:
+      - fromService:
+          type: web
+          name: rag-saas-backend
+          envVarKey: DATABASE_URL
+      - key: ENABLE_DB_PERSISTENCE
+        value: "true"
+      - key: QUERY_EVENTS_RETENTION_DAYS
+        value: "30"
+      - key: MODEL_LATENCY_EVENTS_RETENTION_DAYS
+        value: "30"
+      - key: PROCESSING_JOB_EVENTS_RETENTION_DAYS
+        value: "30"
+      - key: EVALUATION_RUNS_RETENTION_DAYS
+        value: "90"

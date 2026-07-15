@@ -94,7 +94,7 @@ For full setup, execution, test, and GitHub export instructions, see:
 - Vector retrieval operations with in-memory default, pgvector and Qdrant adapters, vector backfill/check command, Qdrant payload indexes for RBAC filters, vector/reranker query metrics, model-status readiness checks, and analytics warning thresholds
 - Local/open-source model provider abstraction for deterministic hashing embeddings, optional Ollama embeddings, vLLM-compatible embeddings/generation, extractive answer generation, optional Ollama answer generation, deterministic keyword reranking, HTTP cross-encoder/vLLM reranking, model/runtime readiness checks, and later gated public providers
 - Authenticated admin analytics API and UI detail views for document ingestion, processing jobs, persisted query cache/latency, model latency buckets, Qdrant diagnostics, recent audit operations, and retrieval evaluation health
-- Deployment hardening assets with CI quality gates, production Compose overlay example, Kubernetes starter manifest, VM/systemd service examples and timer, Render starter blueprint, production env checklist, backup/restore runbook, expanded evaluation gate, persisted eval trend history, durable job/model latency history, Qdrant live health, and local GPU model deployment examples
+- Deployment hardening assets with CI quality gates, production Compose overlay example, Kubernetes starter manifest, VM/systemd service examples and timer, Render starter blueprint, Fly.io process-group starter, production env checklist, backup/restore runbook, expanded evaluation gate, persisted eval trend history, durable job/model latency history, Qdrant live health, and local GPU model deployment examples
 
 ## Recommended Week 1 Commands
 
@@ -259,7 +259,7 @@ LOCAL_LLM_BASE_URL=http://localhost:11434
 PUBLIC_LLM_ENABLED=false
 ```
 
-`app/rag/model_providers.py` defines the embedding and answer-generation interfaces. `LOCAL_EMBEDDING_RUNTIME=ollama` or `vllm` is available for local semantic embeddings, and `LOCAL_LLM_RUNTIME=ollama` or `vllm` is available for local answer generation. Public token-based LLM providers remain blocked unless `PUBLIC_LLM_ENABLED=true`. See [Model Providers](docs/model-providers.md) for the full configuration reference and adapter contract, [Local Model Deployment](docs/local-model-deployment.md) for host-Ollama/Compose-Ollama/vLLM examples, and [Deployment Hardening](docs/deployment-hardening.md) for CI, production overlay, VM/systemd, Kubernetes, and backup/restore guidance.
+`app/rag/model_providers.py` defines the embedding and answer-generation interfaces. `LOCAL_EMBEDDING_RUNTIME=ollama` or `vllm` is available for local semantic embeddings, and `LOCAL_LLM_RUNTIME=ollama` or `vllm` is available for local answer generation. Public token-based LLM providers remain blocked unless `PUBLIC_LLM_ENABLED=true`. See [Model Providers](docs/model-providers.md) for the full configuration reference and adapter contract, [Local Model Deployment](docs/local-model-deployment.md) for host-Ollama/Compose-Ollama/vLLM examples, and [Deployment Hardening](docs/deployment-hardening.md) for CI, production overlay, VM/systemd, Kubernetes, Render, Fly.io, and backup/restore guidance.
 
 ## Architecture
 
