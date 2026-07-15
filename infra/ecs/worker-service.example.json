@@ -1,0 +1,20 @@
+{
+  "cluster": "rag-saas",
+  "serviceName": "rag-saas-worker",
+  "taskDefinition": "rag-saas-worker",
+  "desiredCount": 1,
+  "launchType": "FARGATE",
+  "platformVersion": "LATEST",
+  "deploymentConfiguration": {
+    "minimumHealthyPercent": 0,
+    "maximumPercent": 100
+  },
+  "networkConfiguration": {
+    "awsvpcConfiguration": {
+      "assignPublicIp": "DISABLED",
+      "subnets": ["subnet-private-a", "subnet-private-b"],
+      "securityGroups": ["sg-rag-saas-worker"]
+    }
+  },
+  "enableExecuteCommand": true
+}

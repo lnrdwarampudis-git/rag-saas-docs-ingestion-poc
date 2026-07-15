@@ -97,6 +97,30 @@ fly ssh console -C "python -m app.rag.cleanup_ops_history --dry-run"
 fly ssh console -C "python -m app.rag.cleanup_ops_history"
 ```
 
+## ECS Starter
+
+The ECS/Fargate starter files in [infra/ecs](../infra/ecs) provide AWS deployment manifests for:
+
+- backend task definition and service behind an Application Load Balancer target group
+- worker task definition and service
+- one-shot operations-history retention task definition
+- EventBridge rule target example for daily retention cleanup
+
+The examples assume managed or separately provisioned Postgres, Redis, MinIO-compatible object storage, Qdrant, and Keycloak/OIDC endpoints. Replace the account, region, ECR image, IAM role, VPC subnet, security group, target group, and Secrets Manager placeholders before use.
+
+Example flow:
+
+```bash
+aws ecs register-task-definition \
+  --cli-input-json file://infra/ecs/backend-task-definition.example.json
+aws ecs register-task-definition \
+  --cli-input-json file://infra/ecs/worker-task-definition.example.json
+aws ecs create-service \
+  --cli-input-json file://infra/ecs/backend-service.example.json
+aws ecs create-service \
+  --cli-input-json file://infra/ecs/worker-service.example.json
+```
+
 Start with the overlay after preparing a real environment file:
 
 ```bash

@@ -1,0 +1,23 @@
+{
+  "Name": "rag-saas-ops-retention-daily",
+  "ScheduleExpression": "cron(0 7 * * ? *)",
+  "State": "ENABLED",
+  "Targets": [
+    {
+      "Id": "rag-saas-ops-retention",
+      "Arn": "arn:aws:ecs:<region>:<account-id>:cluster/rag-saas",
+      "RoleArn": "arn:aws:iam::<account-id>:role/rag-saas-eventbridge-ecs-role",
+      "EcsParameters": {
+        "TaskDefinitionArn": "arn:aws:ecs:<region>:<account-id>:task-definition/rag-saas-ops-retention",
+        "LaunchType": "FARGATE",
+        "NetworkConfiguration": {
+          "awsvpcConfiguration": {
+            "AssignPublicIp": "DISABLED",
+            "Subnets": ["subnet-private-a", "subnet-private-b"],
+            "SecurityGroups": ["sg-rag-saas-worker"]
+          }
+        }
+      }
+    }
+  ]
+}

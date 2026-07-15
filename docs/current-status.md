@@ -27,7 +27,7 @@ This page is the short handoff for what the POC supports today, how to run it, a
 - Persistent vector retrieval operations now include pgvector and Qdrant adapter paths, vector ops check/backfill automation, Qdrant payload indexes for RBAC filter fields, vector backend metrics in query responses, vector-index readiness in `/api/v1/model-status`, retrieval backend/reranker warning state in `/api/v1/analytics`, and documented production checks after backend/model changes.
 - Stronger local model foundations now include packaged profiles (`local-default`, `host-ollama`, `compose-ollama`, `vllm-gpu`), Ollama and vLLM-compatible embedding/answer-generation paths, model-status checks for embedding/answer/vector/reranker runtimes, deterministic local keyword reranking, HTTP-backed cross-encoder/vLLM reranking, latency warning threshold config, and UI surfaces for active model, profile, vector, reranker, and threshold state.
 - Operations controls now include queued/processing job cancel, failed-job retry history, Redis dead-letter queue routing after `PROCESSING_JOB_MAX_ATTEMPTS`, `WORKER_MAX_JOBS_PER_RUN` for supervised/batch workers, job cancel audit events, and `GET /api/v1/analytics?action=...&resource_type=...` audit filtering.
-- Deployment hardening now includes a GitHub Actions CI workflow, production Compose overlay example, Kubernetes starter manifest, VM/systemd starter services and timer, Render starter blueprint with retention cron, Fly.io process-group starter, production environment checklist, deployment hardening guide, backup/restore runbook, expanded evaluation gate, persisted evaluation trend records, durable job/model latency history tables, Qdrant live health with payload-index diagnostics, and local GPU/vLLM deployment examples.
+- Deployment hardening now includes a GitHub Actions CI workflow, production Compose overlay example, Kubernetes starter manifest, VM/systemd starter services and timer, Render starter blueprint with retention cron, Fly.io process-group starter, ECS/Fargate task and service starters, production environment checklist, deployment hardening guide, backup/restore runbook, expanded evaluation gate, persisted evaluation trend records, durable job/model latency history tables, Qdrant live health with payload-index diagnostics, and local GPU/vLLM deployment examples.
 
 ## Supported Document Intake Today
 
@@ -140,7 +140,6 @@ git diff --check
 
 Recommended next implementation slices:
 
-1. Add optional ECS manifests if AWS ECS is selected.
-2. Add public/token LLM providers only after policy approval and explicit `PUBLIC_LLM_ENABLED=true`.
+1. Add public/token LLM providers only after policy approval and explicit `PUBLIC_LLM_ENABLED=true`.
 
 Public token-based LLM providers remain intentionally deferred. They should stay behind explicit provider configuration and `PUBLIC_LLM_ENABLED=true`.

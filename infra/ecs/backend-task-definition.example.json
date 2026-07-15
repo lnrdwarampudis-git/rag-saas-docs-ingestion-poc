@@ -1,0 +1,70 @@
+{
+  "family": "rag-saas-backend",
+  "networkMode": "awsvpc",
+  "requiresCompatibilities": ["FARGATE"],
+  "cpu": "1024",
+  "memory": "2048",
+  "executionRoleArn": "arn:aws:iam::<account-id>:role/rag-saas-ecs-execution-role",
+  "taskRoleArn": "arn:aws:iam::<account-id>:role/rag-saas-ecs-task-role",
+  "containerDefinitions": [
+    {
+      "name": "backend",
+      "image": "<account-id>.dkr.ecr.<region>.amazonaws.com/rag-saas-backend:<tag>",
+      "essential": true,
+      "portMappings": [
+        {
+          "containerPort": 8000,
+          "hostPort": 8000,
+          "protocol": "tcp"
+        }
+      ],
+      "environment": [
+        { "name": "APP_ENV", "value": "production" },
+        { "name": "ENABLE_DB_PERSISTENCE", "value": "true" },
+        { "name": "VECTOR_INDEX_BACKEND", "value": "qdrant" },
+        { "name": "LLM_PROVIDER", "value": "local" },
+        { "name": "LOCAL_LLM_RUNTIME", "value": "extractive" },
+        { "name": "LOCAL_LLM_MODEL_NAME", "value": "extractive" },
+        { "name": "EMBEDDING_PROVIDER", "value": "local" },
+        { "name": "LOCAL_EMBEDDING_RUNTIME", "value": "hashing" },
+        { "name": "LOCAL_EMBEDDING_MODEL_NAME", "value": "hashing-384" },
+        { "name": "PUBLIC_LLM_ENABLED", "value": "false" },
+        { "name": "PROCESSING_QUEUE_NAME", "value": "rag:processing-jobs" },
+        { "name": "OCR_PROCESSING_QUEUE_NAME", "value": "rag:processing-jobs:ocr" },
+        { "name": "QUERY_EVENTS_RETENTION_DAYS", "value": "30" },
+        { "name": "MODEL_LATENCY_EVENTS_RETENTION_DAYS", "value": "30" },
+        { "name": "PROCESSING_JOB_EVENTS_RETENTION_DAYS", "value": "30" },
+        { "name": "EVALUATION_RUNS_RETENTION_DAYS", "value": "90" }
+      ],
+      "secrets": [
+        { "name": "DATABASE_URL", "valueFrom": "arn:aws:secretsmanager:<region>:<account-id>:secret:rag-saas/database-url" },
+        { "name": "REDIS_URL", "valueFrom": "arn:aws:secretsmanager:<region>:<account-id>:secret:rag-saas/redis-url" },
+        { "name": "MINIO_ENDPOINT", "valueFrom": "arn:aws:secretsmanager:<region>:<account-id>:secret:rag-saas/minio-endpoint" },
+        { "name": "MINIO_PUBLIC_ENDPOINT", "valueFrom": "arn:aws:secretsmanager:<region>:<account-id>:secret:rag-saas/minio-public-endpoint" },
+        { "name": "MINIO_ACCESS_KEY", "valueFrom": "arn:aws:secretsmanager:<region>:<account-id>:secret:rag-saas/minio-access-key" },
+        { "name": "MINIO_SECRET_KEY", "valueFrom": "arn:aws:secretsmanager:<region>:<account-id>:secret:rag-saas/minio-secret-key" },
+        { "name": "QDRANT_URL", "valueFrom": "arn:aws:secretsmanager:<region>:<account-id>:secret:rag-saas/qdrant-url" },
+        { "name": "KEYCLOAK_ISSUER", "valueFrom": "arn:aws:secretsmanager:<region>:<account-id>:secret:rag-saas/keycloak-issuer" },
+        { "name": "KEYCLOAK_AUDIENCE", "valueFrom": "arn:aws:secretsmanager:<region>:<account-id>:secret:rag-saas/keycloak-audience" }
+      ],
+      "healthCheck": {
+        "command": [
+          "CMD-SHELL",
+          "python -c \"import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health').read()\""
+        ],
+        "interval": 30,
+        "timeout": 5,
+        "retries": 3,
+        "startPeriod": 30
+      },
+      "logConfiguration": {
+        "logDriver": "awslogs",
+        "options": {
+          "awslogs-group": "/ecs/rag-saas",
+          "awslogs-region": "<region>",
+          "awslogs-stream-prefix": "backend"
+        }
+      }
+    }
+  ]
+}

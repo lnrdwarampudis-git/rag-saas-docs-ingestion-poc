@@ -1,0 +1,28 @@
+{
+  "cluster": "rag-saas",
+  "serviceName": "rag-saas-backend",
+  "taskDefinition": "rag-saas-backend",
+  "desiredCount": 2,
+  "launchType": "FARGATE",
+  "platformVersion": "LATEST",
+  "deploymentConfiguration": {
+    "minimumHealthyPercent": 100,
+    "maximumPercent": 200
+  },
+  "networkConfiguration": {
+    "awsvpcConfiguration": {
+      "assignPublicIp": "DISABLED",
+      "subnets": ["subnet-private-a", "subnet-private-b"],
+      "securityGroups": ["sg-rag-saas-backend"]
+    }
+  },
+  "loadBalancers": [
+    {
+      "targetGroupArn": "arn:aws:elasticloadbalancing:<region>:<account-id>:targetgroup/rag-saas-backend/<id>",
+      "containerName": "backend",
+      "containerPort": 8000
+    }
+  ],
+  "healthCheckGracePeriodSeconds": 60,
+  "enableExecuteCommand": true
+}

@@ -1,0 +1,50 @@
+{
+  "family": "rag-saas-worker",
+  "networkMode": "awsvpc",
+  "requiresCompatibilities": ["FARGATE"],
+  "cpu": "1024",
+  "memory": "2048",
+  "executionRoleArn": "arn:aws:iam::<account-id>:role/rag-saas-ecs-execution-role",
+  "taskRoleArn": "arn:aws:iam::<account-id>:role/rag-saas-ecs-task-role",
+  "containerDefinitions": [
+    {
+      "name": "worker",
+      "image": "<account-id>.dkr.ecr.<region>.amazonaws.com/rag-saas-backend:<tag>",
+      "essential": true,
+      "command": ["python", "-m", "app.worker"],
+      "environment": [
+        { "name": "APP_ENV", "value": "production" },
+        { "name": "ENABLE_DB_PERSISTENCE", "value": "true" },
+        { "name": "VECTOR_INDEX_BACKEND", "value": "qdrant" },
+        { "name": "LLM_PROVIDER", "value": "local" },
+        { "name": "LOCAL_LLM_RUNTIME", "value": "extractive" },
+        { "name": "LOCAL_LLM_MODEL_NAME", "value": "extractive" },
+        { "name": "EMBEDDING_PROVIDER", "value": "local" },
+        { "name": "LOCAL_EMBEDDING_RUNTIME", "value": "hashing" },
+        { "name": "LOCAL_EMBEDDING_MODEL_NAME", "value": "hashing-384" },
+        { "name": "PUBLIC_LLM_ENABLED", "value": "false" },
+        { "name": "WORKER_QUEUE_NAMES", "value": "rag:processing-jobs,rag:processing-jobs:ocr" },
+        { "name": "WORKER_MAX_JOBS_PER_RUN", "value": "0" }
+      ],
+      "secrets": [
+        { "name": "DATABASE_URL", "valueFrom": "arn:aws:secretsmanager:<region>:<account-id>:secret:rag-saas/database-url" },
+        { "name": "REDIS_URL", "valueFrom": "arn:aws:secretsmanager:<region>:<account-id>:secret:rag-saas/redis-url" },
+        { "name": "MINIO_ENDPOINT", "valueFrom": "arn:aws:secretsmanager:<region>:<account-id>:secret:rag-saas/minio-endpoint" },
+        { "name": "MINIO_PUBLIC_ENDPOINT", "valueFrom": "arn:aws:secretsmanager:<region>:<account-id>:secret:rag-saas/minio-public-endpoint" },
+        { "name": "MINIO_ACCESS_KEY", "valueFrom": "arn:aws:secretsmanager:<region>:<account-id>:secret:rag-saas/minio-access-key" },
+        { "name": "MINIO_SECRET_KEY", "valueFrom": "arn:aws:secretsmanager:<region>:<account-id>:secret:rag-saas/minio-secret-key" },
+        { "name": "QDRANT_URL", "valueFrom": "arn:aws:secretsmanager:<region>:<account-id>:secret:rag-saas/qdrant-url" },
+        { "name": "KEYCLOAK_ISSUER", "valueFrom": "arn:aws:secretsmanager:<region>:<account-id>:secret:rag-saas/keycloak-issuer" },
+        { "name": "KEYCLOAK_AUDIENCE", "valueFrom": "arn:aws:secretsmanager:<region>:<account-id>:secret:rag-saas/keycloak-audience" }
+      ],
+      "logConfiguration": {
+        "logDriver": "awslogs",
+        "options": {
+          "awslogs-group": "/ecs/rag-saas",
+          "awslogs-region": "<region>",
+          "awslogs-stream-prefix": "worker"
+        }
+      }
+    }
+  ]
+}
