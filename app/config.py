@@ -5,7 +5,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 class Settings(BaseSettings):
     app_name: str = "rag-saas-docs-ingestion-poc"
-    environment: str = "local"
+    environment: str = "dev"
     database_url: str = "postgresql+psycopg://rag:rag@localhost:5432/rag"
     redis_url: str = "redis://localhost:6379/0"
     processing_queue_name: str = "rag:processing-jobs"

@@ -1,6 +1,6 @@
 # Setup Guide
 
-This guide prepares the RAG SaaS document ingestion POC for local execution.
+This guide prepares the RAG SaaS document ingestion POC for dev/local execution.
 
 ## Prerequisites
 
@@ -15,6 +15,34 @@ This guide prepares the RAG SaaS document ingestion POC for local execution.
 git clone <your-github-repo-url>
 cd rag-saas-docs-ingestion-poc
 cp .env.example .env
+```
+
+`.env.example` is the default dev profile and sets:
+
+```text
+ENVIRONMENT=dev
+```
+
+The named environment templates live in [../infra/env](../infra/env):
+
+| Template | Purpose | Model default |
+| --- | --- | --- |
+| `.env.dev.example` | Local developer Compose and host execution. | Local hashing embeddings and extractive answers. |
+| `.env.test.example` | Repeatable automated test/evaluation runs. | Local hashing embeddings and extractive answers. |
+| `.env.pvs.example` | PVS/pre-production validation or staging. | Local providers, with Qdrant and persistence-oriented defaults. |
+| `.env.prod.example` | Production deployment checklist. | Local providers until public providers are explicitly approved. |
+
+For a dev checkout, continue using:
+
+```bash
+cp .env.example .env
+```
+
+For another environment, copy the matching template outside source control or
+into `.env` for local validation, then replace placeholders and secrets:
+
+```bash
+cp infra/env/.env.pvs.example .env
 ```
 
 Optional: edit `.env` if you want Docker to expose a local document folder:
@@ -54,7 +82,7 @@ PUBLIC_LLM_MODEL_NAME=
 PUBLIC_EMBEDDING_MODEL_NAME=
 ```
 
-No model download or public LLM token is required for the default stack. See [Model Providers](model-providers.md) before changing these values. `LOCAL_EMBEDDING_RUNTIME=ollama` and `LOCAL_LLM_RUNTIME=ollama` are supported when Ollama is running locally; `LOCAL_EMBEDDING_RUNTIME=vllm` and `LOCAL_LLM_RUNTIME=vllm` are available for OpenAI-compatible local vLLM services. Public OpenAI-compatible providers are also available, but they require `PUBLIC_LLM_ENABLED=true`, `PUBLIC_LLM_API_KEY`, and explicit public model names.
+No model download or public LLM token is required for the default stack. See [Model Providers](model-providers.md) before changing these values. `LOCAL_EMBEDDING_RUNTIME=ollama` and `LOCAL_LLM_RUNTIME=ollama` are supported when Ollama is running locally; `LOCAL_EMBEDDING_RUNTIME=vllm` and `LOCAL_LLM_RUNTIME=vllm` are available for OpenAI-compatible local vLLM services. Public OpenAI-compatible providers are also available, but they require `PUBLIC_LLM_ENABLED=true`, `PUBLIC_LLM_API_KEY`, and explicit public model names. Keep those disabled for dev/test/PVS unless a production provider decision has been made.
 
 ## Optional Mac-Host Ollama For Docker Backend
 

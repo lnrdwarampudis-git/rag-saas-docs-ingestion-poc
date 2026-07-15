@@ -20,6 +20,18 @@ cp .env.example .env
 docker compose up -d --build
 ```
 
+`.env.example` is the default **dev** profile. Named environment templates are
+also available under `infra/env/`:
+
+- `infra/env/.env.dev.example`
+- `infra/env/.env.test.example`
+- `infra/env/.env.pvs.example`
+- `infra/env/.env.prod.example`
+
+All templates keep `LLM_PROVIDER=local`, `EMBEDDING_PROVIDER=local`, and
+`PUBLIC_LLM_ENABLED=false` by default. Public token-based providers are reserved
+for a later production decision and must be explicitly enabled.
+
 Open:
 
 - UI: `http://127.0.0.1:5173`
@@ -95,6 +107,7 @@ For full setup, execution, test, and GitHub export instructions, see:
 - Local/open-source model provider abstraction for deterministic hashing embeddings, optional Ollama embeddings, vLLM-compatible embeddings/generation, extractive answer generation, optional Ollama answer generation, deterministic keyword reranking, HTTP cross-encoder/vLLM reranking, model/runtime readiness checks, and later gated public providers
 - Authenticated admin analytics API and UI detail views for document ingestion, processing jobs, persisted query cache/latency, model latency buckets, Qdrant diagnostics, recent audit operations, and retrieval evaluation health
 - Deployment hardening assets with CI quality gates, production Compose overlay example, Kubernetes starter manifest, VM/systemd service examples and timer, Render starter blueprint, Fly.io process-group starter, ECS/Fargate task and service starters, production env checklist, backup/restore runbook, expanded evaluation gate, persisted eval trend history, durable job/model latency history, Qdrant live health, and local GPU model deployment examples
+- Environment configuration templates for dev, test, PVS/pre-production validation, and production under `infra/env/`, with dev as the default local profile and local/open-source models as the default in every environment.
 
 ## Recommended Week 1 Commands
 

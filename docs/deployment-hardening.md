@@ -4,7 +4,14 @@ This guide captures the production-readiness controls added after the local POC 
 
 ## Environment Strategy
 
-Use [infra/deploy/.env.prod.example](../infra/deploy/.env.prod.example) as the production checklist. Copy it outside source control, replace every `change-me` value, and inject secrets through the target platform whenever possible.
+Use the named templates in [infra/env](../infra/env) to keep environment intent explicit:
+
+- `.env.dev.example`: developer/local default profile.
+- `.env.test.example`: automated test and retrieval-evaluation profile.
+- `.env.pvs.example`: PVS/pre-production validation or staging.
+- `.env.prod.example`: production checklist.
+
+Use [infra/env/.env.prod.example](../infra/env/.env.prod.example) as the production checklist. The older [infra/deploy/.env.prod.example](../infra/deploy/.env.prod.example) remains compatible with the production Compose overlay. Copy the selected file outside source control, replace every `change-me` value, and inject secrets through the target platform whenever possible.
 
 Required secret classes:
 

@@ -5,7 +5,7 @@ services:
       dockerfile: Dockerfile.backend
     environment:
       APP_NAME: rag-saas-docs-ingestion-poc
-      ENVIRONMENT: docker
+      ENVIRONMENT: ${ENVIRONMENT:-dev}
       DATABASE_URL: postgresql+psycopg://rag:rag@postgres:5432/rag
       REDIS_URL: redis://redis:6379/0
       PROCESSING_QUEUE_NAME: ${PROCESSING_QUEUE_NAME:-rag:processing-jobs}
@@ -102,7 +102,7 @@ services:
     command: ["python", "-m", "app.worker"]
     environment:
       APP_NAME: rag-saas-docs-ingestion-poc
-      ENVIRONMENT: docker
+      ENVIRONMENT: ${ENVIRONMENT:-dev}
       DATABASE_URL: postgresql+psycopg://rag:rag@postgres:5432/rag
       REDIS_URL: redis://redis:6379/0
       PROCESSING_QUEUE_NAME: ${PROCESSING_QUEUE_NAME:-rag:processing-jobs}
@@ -188,7 +188,7 @@ services:
     command: ["python", "-m", "app.worker"]
     environment:
       APP_NAME: rag-saas-docs-ingestion-poc
-      ENVIRONMENT: docker
+      ENVIRONMENT: ${ENVIRONMENT:-dev}
       DATABASE_URL: postgresql+psycopg://rag:rag@postgres:5432/rag
       REDIS_URL: redis://redis:6379/0
       PROCESSING_QUEUE_NAME: ${PROCESSING_QUEUE_NAME:-rag:processing-jobs}

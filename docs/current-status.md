@@ -15,6 +15,7 @@ This page is the short handoff for what the POC supports today, how to run it, a
 - Offline retrieval quality gate through `python -m app.eval.run` and authenticated UI/API evaluation status, including no-answer, RBAC-denial, tenant-isolation, and answer-groundedness checks.
 - Admin analytics for documents, jobs, durable job-event history, query volume/cache/latency, p95/recent latency, model latency detail tables, vector/reranker retrieval state, Qdrant live collection health with payload-index diagnostics, audit operations, audit filtering, evaluation health, persisted evaluation trend history, and configurable retention cleanup for persisted ops history.
 - Local/open-source model abstraction with deterministic hashing embeddings and extractive answer generation as defaults, plus opt-in public OpenAI-compatible providers gated behind `PUBLIC_LLM_ENABLED=true`.
+- Dev is the default environment profile (`ENVIRONMENT=dev`), with named dev/test/PVS/prod templates under `infra/env/`.
 - Optional Ollama embeddings and answer generation for local models, including tested Mac-host Ollama access from Docker through `host.docker.internal`.
 - Vector index abstraction with in-memory default, pgvector and Qdrant adapter paths, vector backfill command, model-status readiness checks, analytics warning thresholds, default no-op reranker, and deterministic local keyword reranker.
 - Container-packaged OCR for images and scanned/image-backed PDFs using Tesseract plus PyMuPDF page rendering.
@@ -50,6 +51,21 @@ OCR is wired in the parser layer and can be forced from the API/UI with `force_o
 cp .env.example .env
 docker compose up -d --build
 ```
+
+The default profile is dev:
+
+```text
+ENVIRONMENT=dev
+LLM_PROVIDER=local
+EMBEDDING_PROVIDER=local
+PUBLIC_LLM_ENABLED=false
+```
+
+Use [../infra/env/.env.test.example](../infra/env/.env.test.example),
+[../infra/env/.env.pvs.example](../infra/env/.env.pvs.example), or
+[../infra/env/.env.prod.example](../infra/env/.env.prod.example) when preparing
+non-dev runs. PVS and production examples still point to local/open-source
+providers by default; public token-based providers are a later production switch.
 
 Open the UI at `http://127.0.0.1:5173`, sign in with a demo user, upload or queue a document, wait for ingestion to finish, and ask a question.
 
