@@ -52,6 +52,7 @@ The VM starter files in [infra/systemd](../infra/systemd) provide a non-Kubernet
 - `rag.env.example`: environment contract for backend and worker processes.
 - `rag-backend.service.example`: FastAPI service running through Uvicorn.
 - `rag-worker.service.example`: ingestion worker service for Redis-backed processing.
+- `rag-ops-retention.service.example` and `rag-ops-retention.timer.example`: daily cleanup of persisted operations history.
 
 Install the repository under `/opt/rag-saas-docs-ingestion-poc`, create a Python virtual environment, copy `rag.env.example` to `/etc/rag-saas/rag.env`, replace every placeholder, and point the service files at the installed path. Put TLS, static frontend hosting, and request limits in a reverse proxy such as Nginx or an equivalent load balancer.
 
@@ -59,9 +60,19 @@ After installation:
 
 ```bash
 sudo systemctl daemon-reload
-sudo systemctl enable --now rag-backend rag-worker
+sudo systemctl enable --now rag-backend rag-worker rag-ops-retention.timer
 curl http://127.0.0.1:8000/health
 ```
+
+## Render Starter
+
+The Render starter blueprint is [infra/render/render.yaml.example](../infra/render/render.yaml.example). It defines:
+
+- backend web service
+- ingestion worker
+- daily operations-history retention cron
+
+It assumes managed or separately provisioned Postgres, Redis, MinIO-compatible object storage, Qdrant, and Keycloak/OIDC endpoints. Replace all `sync: false` values in Render with environment-specific secrets and URLs before deploying.
 
 Start with the overlay after preparing a real environment file:
 
@@ -172,6 +183,20 @@ The app now records durable operational history when `ENABLE_DB_PERSISTENCE=true
 - `evaluation_runs`: persisted retrieval quality-gate reports for trend history.
 
 The Admin Analytics API rolls these into recent job events, model latency buckets, and evaluation trend points. The Admin Analytics UI now includes detail tables for model-latency buckets, persisted evaluation trends, processing job events, and Qdrant diagnostics.
+
+Run cleanup manually or through cron/timers:
+
+```bash
+python -m app.rag.cleanup_ops_history --dry-run
+python -m app.rag.cleanup_ops_history
+```
+
+Default retention windows are:
+
+- `QUERY_EVENTS_RETENTION_DAYS=30`
+- `MODEL_LATENCY_EVENTS_RETENTION_DAYS=30`
+- `PROCESSING_JOB_EVENTS_RETENTION_DAYS=30`
+- `EVALUATION_RUNS_RETENTION_DAYS=90`
 
 ## Qdrant Diagnostics
 

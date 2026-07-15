@@ -570,6 +570,13 @@ order by created_at desc
 limit 10;
 ```
 
+Cleanup persisted operations history:
+
+```bash
+python -m app.rag.cleanup_ops_history --dry-run
+python -m app.rag.cleanup_ops_history
+```
+
 ## Troubleshooting
 
 - If upload returns `413 Request Entity Too Large`, confirm the frontend nginx config includes `client_max_body_size 2g` and rebuild the frontend.

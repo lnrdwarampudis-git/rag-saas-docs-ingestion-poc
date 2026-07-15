@@ -14,6 +14,10 @@ class Settings(BaseSettings):
     worker_max_jobs_per_run: int = 0
     processing_dead_letter_queue_name: str = "rag:processing-jobs:dead-letter"
     processing_job_max_attempts: int = 3
+    query_events_retention_days: int = 30
+    model_latency_events_retention_days: int = 30
+    processing_job_events_retention_days: int = 30
+    evaluation_runs_retention_days: int = 90
     minio_endpoint: str = "http://localhost:9000"
     minio_public_endpoint: str = "http://localhost:9000"
     minio_access_key: str = "minio"
@@ -71,7 +75,12 @@ class Settings(BaseSettings):
     local_model_profile: str = "custom"
     local_model_gpu_profile: str = "none"
 
-    model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
+    model_config = SettingsConfigDict(
+        env_file=".env",
+        env_file_encoding="utf-8",
+        extra="ignore",
+        protected_namespaces=("settings_",),
+    )
 
 
 @lru_cache
