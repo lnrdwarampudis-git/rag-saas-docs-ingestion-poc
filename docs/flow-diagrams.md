@@ -224,15 +224,19 @@ flowchart LR
   localLlm --> extractive["Default extractive generator"]
   localLlm --> ollamaLlm["Optional Ollama generator"]
   localLlm --> vllmLlm["vLLM-compatible generator"]
-  llmProvider --> public{"public provider later"}
+  embeddingProvider --> publicEmbedding{"openai"}
+  publicEmbedding --> publicEmbedAdapter["Public OpenAI-compatible embeddings"]
+  llmProvider --> public{"openai"}
   public --> gate["PUBLIC_LLM_ENABLED=true required"]
-  gate --> tokenApi["Token/API-based LLM provider"]
+  gate --> tokenApi["Public OpenAI-compatible chat API"]
   hashing --> cacheKey["Provider/runtime/model names<br/>included in cache key + metrics"]
   extractive --> cacheKey
   ollamaEmbedding --> cacheKey
   vllmEmbedding --> cacheKey
+  publicEmbedAdapter --> cacheKey
   ollamaLlm --> cacheKey
   vllmLlm --> cacheKey
+  tokenApi --> cacheKey
   pgvectorIndex --> cacheKey
   qdrantIndex --> cacheKey
   noReranker --> cacheKey

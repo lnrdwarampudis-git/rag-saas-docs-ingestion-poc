@@ -22,6 +22,56 @@ def test_default_model_status_reports_ready_local_runtimes() -> None:
     assert status.performance.retrieval_warning_ms == 1500.0
 
 
+def test_public_model_status_requires_gate_and_secrets() -> None:
+    status = get_model_status(
+        Settings(
+            _env_file=None,
+            llm_provider="openai",
+            embedding_provider="openai",
+            public_llm_enabled=False,
+        )
+    )
+
+    assert status.answer.ready is False
+    assert "PUBLIC_LLM_ENABLED" in status.answer.message
+    assert status.embedding.ready is False
+
+    status = get_model_status(
+        Settings(
+            _env_file=None,
+            llm_provider="openai",
+            embedding_provider="openai",
+            public_llm_enabled=True,
+        )
+    )
+
+    assert status.answer.ready is False
+    assert "PUBLIC_LLM_API_KEY" in status.answer.message
+
+
+def test_public_model_status_reports_configured_without_network_call() -> None:
+    status = get_model_status(
+        Settings(
+            _env_file=None,
+            llm_provider="openai",
+            embedding_provider="openai",
+            public_llm_enabled=True,
+            public_llm_api_key="token",
+            public_llm_base_url="https://api.openai.test",
+            public_llm_model_name="chat-model",
+            public_embedding_model_name="embedding-model",
+        )
+    )
+
+    assert status.answer.ready is True
+    assert status.answer.provider == "openai"
+    assert status.answer.runtime == "openai-compatible"
+    assert status.answer.model_name == "chat-model"
+    assert status.answer.base_url == "https://api.openai.test"
+    assert status.embedding.ready is True
+    assert status.embedding.model_name == "embedding-model"
+
+
 def test_ollama_status_reports_ready_when_model_is_installed(monkeypatch) -> None:
     original_client = httpx.Client
     monkeypatch.setattr(

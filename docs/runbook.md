@@ -140,6 +140,10 @@ LOCAL_LLM_RUNTIME=extractive
 LOCAL_LLM_MODEL_NAME=extractive
 LOCAL_LLM_BASE_URL=http://localhost:11434
 PUBLIC_LLM_ENABLED=false
+PUBLIC_LLM_BASE_URL=https://api.openai.com
+PUBLIC_LLM_API_KEY=
+PUBLIC_LLM_MODEL_NAME=
+PUBLIC_EMBEDDING_MODEL_NAME=
 ```
 
 See [Model Providers](model-providers.md) for the full setting list, cache behavior, and adapter contract.
@@ -582,7 +586,8 @@ python -m app.rag.cleanup_ops_history
 - If upload returns `413 Request Entity Too Large`, confirm the frontend nginx config includes `client_max_body_size 2g` and rebuild the frontend.
 - If any `/api/v1/*` call returns `401 Unauthorized`, your token is missing, expired, or was issued before `docker compose down -v` reseeded a new realm/tenant -- sign out and back in (or re-fetch a token per the smoke test above).
 - If queries return no context, confirm the uploaded chunks are in `document_chunks` and that you're signed in as a user in the same tenant that uploaded them (the default demo tenant is `00000000-0000-4000-8000-000000000001`).
-- If query construction fails with `ModelProviderConfigurationError`, check `.env` for unsupported provider values. Today the implemented runtimes are `EMBEDDING_PROVIDER=local`, `LOCAL_EMBEDDING_RUNTIME=hashing`, `ollama`, or `vllm`, `LLM_PROVIDER=local`, and `LOCAL_LLM_RUNTIME=extractive`, `ollama`, or `vllm`.
+- If query construction fails with `ModelProviderConfigurationError`, check `.env` for unsupported provider values or missing public-provider secrets. Implemented provider paths are `EMBEDDING_PROVIDER=local` with `LOCAL_EMBEDDING_RUNTIME=hashing`, `ollama`, or `vllm`; `EMBEDDING_PROVIDER=openai` with `PUBLIC_LLM_ENABLED=true`; `LLM_PROVIDER=local` with `LOCAL_LLM_RUNTIME=extractive`, `ollama`, or `vllm`; and `LLM_PROVIDER=openai` with `PUBLIC_LLM_ENABLED=true`.
+- If public OpenAI-compatible providers are selected, confirm `PUBLIC_LLM_API_KEY`, `PUBLIC_LLM_MODEL_NAME`, and/or `PUBLIC_EMBEDDING_MODEL_NAME` are set through a secret manager. `/api/v1/model-status` validates configuration only and does not call the public API.
 - If you only want to switch local model modes, prefer `LOCAL_MODEL_PROFILE=local-default`, `host-ollama`, `compose-ollama`, or `vllm-gpu`; use `LOCAL_MODEL_PROFILE=custom` when setting individual runtime values manually.
 - If `LOCAL_EMBEDDING_RUNTIME=ollama` fails with `ModelProviderRequestError`, confirm Ollama is running, `LOCAL_EMBEDDING_BASE_URL` is reachable from the backend process, and `LOCAL_EMBEDDING_MODEL_NAME` has been pulled locally. For Docker Compose with Ollama on the host machine, use `LOCAL_EMBEDDING_BASE_URL=http://host.docker.internal:11434`.
 - If `LOCAL_LLM_RUNTIME=ollama` fails with `ModelProviderRequestError`, confirm Ollama is running, `LOCAL_LLM_BASE_URL` is reachable from the backend process, and `LOCAL_LLM_MODEL_NAME` has been pulled locally. For Docker Compose with Ollama on the host machine, use `LOCAL_LLM_BASE_URL=http://host.docker.internal:11434`.

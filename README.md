@@ -233,7 +233,7 @@ Username: rag
 Password: rag
 ```
 
-The query endpoint uses the local model provider abstraction plus a vector index boundary. The default configuration keeps demos deterministic with hashing embeddings, the in-memory vector index, no reranker, and extractive answer generation. `VECTOR_INDEX_BACKEND=pgvector` enables the PostgreSQL/pgvector adapter when DB persistence is on, and `VECTOR_INDEX_BACKEND=qdrant` enables the Qdrant adapter for higher-scale vector experiments. `python -m app.rag.vector_ops` checks the selected vector backend, ensures Qdrant payload indexes when needed, and runs vector backfill. For local semantic embeddings or local answer generation, either set the individual runtime values to `ollama` or `vllm`, or set `LOCAL_MODEL_PROFILE=host-ollama`, `compose-ollama`, or `vllm-gpu` to apply a packaged local profile. `RERANKER_PROVIDER=local` plus `LOCAL_RERANKER_RUNTIME=keyword`, `cross-encoder`, or `vllm` enables deterministic or HTTP-backed local reranking. `/api/v1/model-status` and the UI model/status panels report the selected profile, GPU profile label, embedding, answer, vector-index, reranker, and latency-threshold readiness.
+The query endpoint uses the model provider abstraction plus a vector index boundary. The default configuration keeps demos deterministic with hashing embeddings, the in-memory vector index, no reranker, and extractive answer generation. `VECTOR_INDEX_BACKEND=pgvector` enables the PostgreSQL/pgvector adapter when DB persistence is on, and `VECTOR_INDEX_BACKEND=qdrant` enables the Qdrant adapter for higher-scale vector experiments. `python -m app.rag.vector_ops` checks the selected vector backend, ensures Qdrant payload indexes when needed, and runs vector backfill. For local semantic embeddings or local answer generation, either set the individual runtime values to `ollama` or `vllm`, or set `LOCAL_MODEL_PROFILE=host-ollama`, `compose-ollama`, or `vllm-gpu` to apply a packaged local profile. Public OpenAI-compatible providers are available only when `PUBLIC_LLM_ENABLED=true` plus API key/model settings are present. `RERANKER_PROVIDER=local` plus `LOCAL_RERANKER_RUNTIME=keyword`, `cross-encoder`, or `vllm` enables deterministic or HTTP-backed local reranking. `/api/v1/model-status` and the UI model/status panels report the selected profile, GPU profile label, embedding, answer, vector-index, reranker, and latency-threshold readiness.
 
 Run the offline retrieval quality gate:
 
@@ -257,9 +257,13 @@ LOCAL_LLM_RUNTIME=extractive
 LOCAL_LLM_MODEL_NAME=extractive
 LOCAL_LLM_BASE_URL=http://localhost:11434
 PUBLIC_LLM_ENABLED=false
+PUBLIC_LLM_BASE_URL=https://api.openai.com
+PUBLIC_LLM_API_KEY=
+PUBLIC_LLM_MODEL_NAME=
+PUBLIC_EMBEDDING_MODEL_NAME=
 ```
 
-`app/rag/model_providers.py` defines the embedding and answer-generation interfaces. `LOCAL_EMBEDDING_RUNTIME=ollama` or `vllm` is available for local semantic embeddings, and `LOCAL_LLM_RUNTIME=ollama` or `vllm` is available for local answer generation. Public token-based LLM providers remain blocked unless `PUBLIC_LLM_ENABLED=true`. See [Model Providers](docs/model-providers.md) for the full configuration reference and adapter contract, [Local Model Deployment](docs/local-model-deployment.md) for host-Ollama/Compose-Ollama/vLLM examples, and [Deployment Hardening](docs/deployment-hardening.md) for CI, production overlay, VM/systemd, Kubernetes, Render, Fly.io, ECS, and backup/restore guidance.
+`app/rag/model_providers.py` defines the embedding and answer-generation interfaces. `LOCAL_EMBEDDING_RUNTIME=ollama` or `vllm` is available for local semantic embeddings, `LOCAL_LLM_RUNTIME=ollama` or `vllm` is available for local answer generation, and `EMBEDDING_PROVIDER=openai` / `LLM_PROVIDER=openai` is available for explicitly enabled public OpenAI-compatible providers. See [Model Providers](docs/model-providers.md) for the full configuration reference and adapter contract, [Local Model Deployment](docs/local-model-deployment.md) for host-Ollama/Compose-Ollama/vLLM examples, and [Deployment Hardening](docs/deployment-hardening.md) for CI, production overlay, VM/systemd, Kubernetes, Render, Fly.io, ECS, and backup/restore guidance.
 
 ## Architecture
 

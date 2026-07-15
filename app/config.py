@@ -72,6 +72,10 @@ class Settings(BaseSettings):
     local_embedding_base_url: str = "http://localhost:11434"
     local_model_request_timeout_seconds: float = 30.0
     public_llm_enabled: bool = False
+    public_llm_base_url: str = "https://api.openai.com"
+    public_llm_api_key: str = ""
+    public_llm_model_name: str = ""
+    public_embedding_model_name: str = ""
     local_model_profile: str = "custom"
     local_model_gpu_profile: str = "none"
 

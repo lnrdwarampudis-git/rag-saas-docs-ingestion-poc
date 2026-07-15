@@ -43,4 +43,4 @@ Make RAG answer quality measurable and improve precision before adding heavier l
 - Continue tuning the implemented vLLM-compatible embedding and generation adapter paths behind the existing provider interfaces.
 - Add a local open-source embedding service, such as BGE, E5, or Mixedbread.
 - Add a local reranker, such as BGE reranker.
-- Add optional public token-based LLM provider adapters only after local/provider abstraction is stable.
+- Add optional public token-based LLM provider adapters only after local/provider abstraction is stable. This follow-on is now implemented through the OpenAI-compatible public provider path, gated by `PUBLIC_LLM_ENABLED=true`.

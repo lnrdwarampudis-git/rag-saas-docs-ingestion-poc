@@ -38,6 +38,10 @@ LOCAL_LLM_RUNTIME=extractive
 LOCAL_LLM_MODEL_NAME=extractive
 LOCAL_LLM_BASE_URL=http://localhost:11434
 PUBLIC_LLM_ENABLED=false
+PUBLIC_LLM_BASE_URL=https://api.openai.com
+PUBLIC_LLM_API_KEY=
+PUBLIC_LLM_MODEL_NAME=
+PUBLIC_EMBEDDING_MODEL_NAME=
 ```
 
 `LOCAL_EMBEDDING_BASE_URL` is used when `LOCAL_EMBEDDING_RUNTIME=ollama`; `LOCAL_LLM_BASE_URL` is used when `LOCAL_LLM_RUNTIME=ollama`. The default hashing and extractive runtimes do not call local model URLs.
@@ -46,7 +50,7 @@ PUBLIC_LLM_ENABLED=false
 
 | Setting | Supported now | Reserved for later | Notes |
 | --- | --- | --- | --- |
-| `EMBEDDING_PROVIDER` | `local` | public/provider-specific services | Non-local values fail fast today. |
+| `EMBEDDING_PROVIDER` | `local`, `openai` | additional provider-specific services | `openai` uses the public OpenAI-compatible embeddings adapter and requires `PUBLIC_LLM_ENABLED=true`. |
 | `LOCAL_EMBEDDING_RUNTIME` | `hashing`, `ollama`, `vllm` | adapter-specific runtimes | `hashing` uses the deterministic in-process baseline; `ollama` calls `/api/embed`; `vllm` calls OpenAI-compatible `/v1/embeddings`. |
 | `LOCAL_EMBEDDING_MODEL_NAME` | `hashing-384`, any installed Ollama embedding model | BGE, E5, Mixedbread, or adapter model names | Informational for hashing; sent as `model` for Ollama; included in metrics/cache keys. |
 | `EMBEDDING_DIMENSIONS` | integer dimension count practical for local ranking | adapter-specific dimensions | Default is `384`; keep it greater than zero for hashing embeddings. |
@@ -66,10 +70,14 @@ PUBLIC_LLM_ENABLED=false
 | `LOCAL_MODEL_REQUEST_TIMEOUT_SECONDS` | positive number | adapter-specific timeouts | Used by Ollama/vLLM HTTP clients. |
 | `LOCAL_MODEL_PROFILE` | `custom`, `local-default`, `host-ollama`, `compose-ollama`, `vllm-gpu` | deployment-specific profile names | Applies a tested local profile before provider construction. `custom` leaves individual settings unchanged. |
 | `LOCAL_MODEL_GPU_PROFILE` | `none` or a deployment label | GPU-specific values | Informational today; reported by model status/UI so operators can label GPU deployments. |
-| `LLM_PROVIDER` | `local` | public token-based providers | Public providers require `PUBLIC_LLM_ENABLED=true` and adapter code. |
+| `LLM_PROVIDER` | `local`, `openai` | additional public token-based providers | `openai` uses the public OpenAI-compatible chat-completions adapter and requires `PUBLIC_LLM_ENABLED=true`. |
 | `LOCAL_LLM_RUNTIME` | `extractive`, `ollama`, `vllm` | adapter-specific runtimes | `extractive` selects sentences from authorized chunks; `ollama` calls `/api/generate`; `vllm` calls OpenAI-compatible `/v1/chat/completions`. |
 | `LOCAL_LLM_MODEL_NAME` | `extractive`, any installed Ollama generation model | local model names | Sent as `model` for Ollama; included in metrics/cache keys. |
-| `PUBLIC_LLM_ENABLED` | `false` | `true` after policy approval and adapter implementation | Keeps external API usage opt-in. |
+| `PUBLIC_LLM_ENABLED` | `false`, `true` | policy-controlled deployment values | Keeps external API usage opt-in. Public adapters fail closed unless this is `true`. |
+| `PUBLIC_LLM_BASE_URL` | OpenAI-compatible base URL | deployment-specific public endpoints | Used by public embedding and answer-generation adapters. Defaults to `https://api.openai.com`. |
+| `PUBLIC_LLM_API_KEY` | non-empty token when public providers are enabled | secret-manager values | Sent as a bearer token by public provider adapters. Keep this out of source control. |
+| `PUBLIC_LLM_MODEL_NAME` | chat/generation model name | approved deployment model names | Required when `LLM_PROVIDER=openai`. |
+| `PUBLIC_EMBEDDING_MODEL_NAME` | embedding model name | approved deployment model names | Required when `EMBEDDING_PROVIDER=openai`. |
 
 If `RERANKER_PROVIDER=local` is selected with `LOCAL_RERANKER_RUNTIME=cross-encoder` or `vllm`, the app expects `LOCAL_RERANKER_BASE_URL` to expose `POST /rerank` with `query`, `documents`, `model`, and `top_n`, returning either `results` entries with `index` and `relevance_score` or a numeric `scores` array.
 
@@ -135,6 +143,35 @@ LOCAL_LLM_BASE_URL=http://localhost:8000
 ```
 
 The embedding adapter calls `POST /v1/embeddings`; the answer adapter calls `POST /v1/chat/completions`.
+
+## Public OpenAI-Compatible Providers
+
+Public token-based providers are implemented but disabled by default. They should only be enabled after deployment policy approval, secret-management setup, and cost/rate-limit review.
+
+Use local embeddings with public answer generation:
+
+```text
+PUBLIC_LLM_ENABLED=true
+LLM_PROVIDER=openai
+PUBLIC_LLM_BASE_URL=https://api.openai.com
+PUBLIC_LLM_API_KEY=...
+PUBLIC_LLM_MODEL_NAME=<approved-chat-model>
+EMBEDDING_PROVIDER=local
+LOCAL_EMBEDDING_RUNTIME=hashing
+```
+
+Use public embeddings and public answer generation:
+
+```text
+PUBLIC_LLM_ENABLED=true
+EMBEDDING_PROVIDER=openai
+PUBLIC_EMBEDDING_MODEL_NAME=<approved-embedding-model>
+LLM_PROVIDER=openai
+PUBLIC_LLM_MODEL_NAME=<approved-chat-model>
+PUBLIC_LLM_API_KEY=...
+```
+
+The public embedding adapter calls `POST /v1/embeddings`, the answer adapter calls `POST /v1/chat/completions`, and both send `Authorization: Bearer <PUBLIC_LLM_API_KEY>`. `/api/v1/model-status` checks configuration only; it does not call the public API.
 
 ## Ollama Embeddings
 
@@ -285,7 +322,7 @@ Query responses include model metadata in `metrics`:
 }
 ```
 
-The Redis query cache key also includes provider, runtime, and model names. Changing model settings therefore creates a new cache entry instead of reusing an answer generated under a previous runtime.
+The Redis query cache key also includes provider, runtime, and model names. Changing model settings therefore creates a new cache entry instead of reusing an answer generated under a previous runtime. Public-provider cache keys include `openai-compatible` runtime labels and the configured public model names.
 
 ## Runtime Status
 
@@ -299,7 +336,7 @@ The response reports the configured model profile, GPU profile label, embedding,
 
 The React console uses this endpoint to show the model readiness pill and the active profile, embedding, answer, vector-index, reranker, and latency-threshold cards.
 
-Ollama query-time failures raise `ModelProviderRequestError` with the operation, model name, endpoint, and HTTP status or timeout class. The query API converts those provider errors into `503 Service Unavailable` responses so callers see a clear local-model readiness issue instead of a generic server failure.
+Ollama, vLLM, and public OpenAI-compatible query-time failures raise `ModelProviderRequestError` with the operation, model name, endpoint, and HTTP status or timeout class. The query API converts those provider errors into `503 Service Unavailable` responses so callers see a clear model-provider readiness issue instead of a generic server failure.
 
 ## Evaluation Behavior
 
@@ -315,4 +352,12 @@ When adding more local model support:
 4. Add tests for config selection, adapter failure modes, status checks, cache-key separation, and query metrics.
 5. Run `python3 -m pytest`, `python3 -m app.eval.run`, `npm run build`, and `docker compose config`.
 
-Public token-based providers should be added only after deployment policy allows external API usage, and should remain gated behind `PUBLIC_LLM_ENABLED=true`.
+## Adding Another Public Adapter
+
+When adding another public token-based provider:
+
+1. Keep the provider behind `PUBLIC_LLM_ENABLED=true`.
+2. Add provider-specific API key/base URL/model settings.
+3. Do not call public APIs from `/api/v1/model-status`; report configuration readiness only.
+4. Add tests for gate enforcement, missing secrets, request shape, authorization headers, error details, cache-key separation, and query metrics.
+5. Update deployment docs with secret-manager guidance before enabling the provider in any environment.

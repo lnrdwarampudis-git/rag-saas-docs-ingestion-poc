@@ -48,9 +48,13 @@ LOCAL_LLM_RUNTIME=extractive
 LOCAL_LLM_MODEL_NAME=extractive
 LOCAL_LLM_BASE_URL=http://localhost:11434
 PUBLIC_LLM_ENABLED=false
+PUBLIC_LLM_BASE_URL=https://api.openai.com
+PUBLIC_LLM_API_KEY=
+PUBLIC_LLM_MODEL_NAME=
+PUBLIC_EMBEDDING_MODEL_NAME=
 ```
 
-No model download or public LLM token is required for the default stack. See [Model Providers](model-providers.md) before changing these values. `LOCAL_EMBEDDING_RUNTIME=ollama` and `LOCAL_LLM_RUNTIME=ollama` are supported when Ollama is running locally; `LOCAL_EMBEDDING_RUNTIME=vllm` and `LOCAL_LLM_RUNTIME=vllm` are available for OpenAI-compatible local vLLM services.
+No model download or public LLM token is required for the default stack. See [Model Providers](model-providers.md) before changing these values. `LOCAL_EMBEDDING_RUNTIME=ollama` and `LOCAL_LLM_RUNTIME=ollama` are supported when Ollama is running locally; `LOCAL_EMBEDDING_RUNTIME=vllm` and `LOCAL_LLM_RUNTIME=vllm` are available for OpenAI-compatible local vLLM services. Public OpenAI-compatible providers are also available, but they require `PUBLIC_LLM_ENABLED=true`, `PUBLIC_LLM_API_KEY`, and explicit public model names.
 
 ## Optional Mac-Host Ollama For Docker Backend
 

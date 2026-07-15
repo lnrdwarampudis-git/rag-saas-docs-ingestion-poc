@@ -215,20 +215,102 @@ class VllmAnswerGenerator:
         return answer
 
 
+class OpenAIEmbeddingModel:
+    def __init__(
+        self,
+        base_url: str,
+        api_key: str,
+        model_name: str,
+        timeout_seconds: float = 30.0,
+        client: httpx.Client | None = None,
+    ) -> None:
+        self.model_name = model_name
+        self.base_url = base_url.rstrip("/")
+        self._client = client or httpx.Client(
+            base_url=self.base_url,
+            timeout=timeout_seconds,
+            headers=_authorization_headers(api_key),
+        )
+
+    def embed(self, text: str) -> list[float]:
+        response = _post_json(
+            client=self._client,
+            endpoint="/v1/embeddings",
+            payload={"model": self.model_name, "input": text},
+            provider="OpenAI-compatible",
+            model_name=self.model_name,
+            base_url=self.base_url,
+            operation="embedding",
+        )
+        embedding = _openai_embedding_from_response(response.json(), provider="OpenAI-compatible")
+        return _normalize_embedding(embedding)
+
+
+class OpenAIAnswerGenerator:
+    def __init__(
+        self,
+        base_url: str,
+        api_key: str,
+        model_name: str,
+        timeout_seconds: float = 30.0,
+        client: httpx.Client | None = None,
+    ) -> None:
+        self.model_name = model_name
+        self.base_url = base_url.rstrip("/")
+        self._client = client or httpx.Client(
+            base_url=self.base_url,
+            timeout=timeout_seconds,
+            headers=_authorization_headers(api_key),
+        )
+
+    def generate(self, query: str, results: list[RetrievalResult]) -> str:
+        if not results:
+            return ExtractiveAnswerGenerator().generate(query, results)
+
+        response = _post_json(
+            client=self._client,
+            endpoint="/v1/chat/completions",
+            payload={
+                "model": self.model_name,
+                "messages": [
+                    {
+                        "role": "system",
+                        "content": (
+                            "Answer using only the authorized context. If there is not enough "
+                            "authorized evidence, say so. Keep the answer concise."
+                        ),
+                    },
+                    {"role": "user", "content": _answer_prompt(query, results)},
+                ],
+                "temperature": 0,
+            },
+            provider="OpenAI-compatible",
+            model_name=self.model_name,
+            base_url=self.base_url,
+            operation="answer generation",
+        )
+        answer = _openai_chat_answer_from_response(response.json())
+        if not answer:
+            raise ModelProviderRequestError(
+                "OpenAI-compatible generation response did not include answer text."
+            )
+        return answer
+
+
 def build_model_provider(settings: Settings | None = None) -> ModelProvider:
     settings = resolve_model_profile(settings or get_settings())
     provider_name = settings.llm_provider.lower()
     embedding_provider = settings.embedding_provider.lower()
 
-    if provider_name != "local" and not settings.public_llm_enabled:
+    if (provider_name != "local" or embedding_provider != "local") and not settings.public_llm_enabled:
         raise ModelProviderConfigurationError(
             "Public LLM providers require PUBLIC_LLM_ENABLED=true."
         )
-    if provider_name != "local":
+    if provider_name not in {"local", "openai"}:
         raise ModelProviderConfigurationError(
             f"Unsupported LLM_PROVIDER '{settings.llm_provider}'."
         )
-    if embedding_provider != "local":
+    if embedding_provider not in {"local", "openai"}:
         raise ModelProviderConfigurationError(
             f"Unsupported EMBEDDING_PROVIDER '{settings.embedding_provider}'."
         )
@@ -236,12 +318,36 @@ def build_model_provider(settings: Settings | None = None) -> ModelProvider:
     return ModelProvider(
         provider_name=provider_name,
         embedding_provider=embedding_provider,
-        embedding_runtime=settings.local_embedding_runtime.lower(),
-        embedding_model_name=settings.local_embedding_model_name,
-        answer_runtime=settings.local_llm_runtime.lower(),
-        answer_model_name=settings.local_llm_model_name,
-        embedding_model=_build_local_embedding_model(settings),
-        answer_generator=_build_local_answer_generator(settings),
+        embedding_runtime=(
+            settings.local_embedding_runtime.lower()
+            if embedding_provider == "local"
+            else "openai-compatible"
+        ),
+        embedding_model_name=(
+            settings.local_embedding_model_name
+            if embedding_provider == "local"
+            else settings.public_embedding_model_name
+        ),
+        answer_runtime=(
+            settings.local_llm_runtime.lower()
+            if provider_name == "local"
+            else "openai-compatible"
+        ),
+        answer_model_name=(
+            settings.local_llm_model_name
+            if provider_name == "local"
+            else settings.public_llm_model_name
+        ),
+        embedding_model=(
+            _build_local_embedding_model(settings)
+            if embedding_provider == "local"
+            else _build_openai_embedding_model(settings)
+        ),
+        answer_generator=(
+            _build_local_answer_generator(settings)
+            if provider_name == "local"
+            else _build_openai_answer_generator(settings)
+        ),
     )
 
 
@@ -287,6 +393,48 @@ def _build_local_answer_generator(settings: Settings) -> AnswerGenerator:
     )
 
 
+def _build_openai_embedding_model(settings: Settings) -> EmbeddingModel:
+    _require_public_provider_settings(
+        settings,
+        model_name=settings.public_embedding_model_name,
+        model_setting_name="PUBLIC_EMBEDDING_MODEL_NAME",
+    )
+    return OpenAIEmbeddingModel(
+        base_url=settings.public_llm_base_url,
+        api_key=settings.public_llm_api_key,
+        model_name=settings.public_embedding_model_name,
+        timeout_seconds=settings.local_model_request_timeout_seconds,
+    )
+
+
+def _build_openai_answer_generator(settings: Settings) -> AnswerGenerator:
+    _require_public_provider_settings(
+        settings,
+        model_name=settings.public_llm_model_name,
+        model_setting_name="PUBLIC_LLM_MODEL_NAME",
+    )
+    return OpenAIAnswerGenerator(
+        base_url=settings.public_llm_base_url,
+        api_key=settings.public_llm_api_key,
+        model_name=settings.public_llm_model_name,
+        timeout_seconds=settings.local_model_request_timeout_seconds,
+    )
+
+
+def _require_public_provider_settings(
+    settings: Settings,
+    *,
+    model_name: str,
+    model_setting_name: str,
+) -> None:
+    if not settings.public_llm_enabled:
+        raise ModelProviderConfigurationError("Public LLM providers require PUBLIC_LLM_ENABLED=true.")
+    if not settings.public_llm_api_key.strip():
+        raise ModelProviderConfigurationError("Public LLM providers require PUBLIC_LLM_API_KEY.")
+    if not model_name.strip():
+        raise ModelProviderConfigurationError(f"Public LLM providers require {model_setting_name}.")
+
+
 def _clean_answer_text(text: str) -> str:
     cleaned = re.sub(r"[\x00-\x08\x0b-\x1f]", " ", text)
     replacements = {
@@ -327,13 +475,15 @@ def _ollama_embedding_from_response(data: dict) -> list[float]:
     return [float(value) for value in embedding]
 
 
-def _openai_embedding_from_response(data: dict) -> list[float]:
+def _openai_embedding_from_response(data: dict, *, provider: str = "vLLM") -> list[float]:
     items = data.get("data")
     if not isinstance(items, list) or not items or not isinstance(items[0], dict):
-        raise ModelProviderRequestError("vLLM embedding response did not include data[0].embedding.")
+        raise ModelProviderRequestError(
+            f"{provider} embedding response did not include data[0].embedding."
+        )
     embedding = items[0].get("embedding")
     if not isinstance(embedding, list) or not all(isinstance(value, (int, float)) for value in embedding):
-        raise ModelProviderRequestError("vLLM embedding response did not include a numeric vector.")
+        raise ModelProviderRequestError(f"{provider} embedding response did not include a numeric vector.")
     return [float(value) for value in embedding]
 
 
@@ -400,6 +550,10 @@ def _post_json(
             f"{provider} {operation} response for model '{model_name}' was not valid JSON."
         ) from exc
     return response
+
+
+def _authorization_headers(api_key: str) -> dict[str, str]:
+    return {"Authorization": f"Bearer {api_key}"}
 
 
 def _provider_error_detail(response: httpx.Response) -> str:

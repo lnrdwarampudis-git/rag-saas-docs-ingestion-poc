@@ -9,6 +9,7 @@ from app.schemas.model_status import ModelPerformanceStatus, ModelRuntimeStatus,
 
 SUPPORTED_EMBEDDING_RUNTIMES = {"hashing", "ollama", "vllm"}
 SUPPORTED_ANSWER_RUNTIMES = {"extractive", "ollama", "vllm"}
+SUPPORTED_PUBLIC_PROVIDERS = {"openai"}
 SUPPORTED_RERANKER_RUNTIMES = {"none", "keyword", "cross-encoder", "vllm"}
 
 
@@ -41,12 +42,13 @@ def _embedding_status(
     runtime: str,
 ) -> ModelRuntimeStatus:
     if embedding_provider != "local":
-        return ModelRuntimeStatus(
+        return _public_provider_status(
+            settings,
             provider=embedding_provider,
-            runtime=runtime,
-            model_name=settings.local_embedding_model_name,
-            ready=False,
-            message="Unsupported embedding provider.",
+            runtime="openai-compatible",
+            model_name=settings.public_embedding_model_name,
+            model_setting_name="PUBLIC_EMBEDDING_MODEL_NAME",
+            component="embedding",
         )
     if runtime == "hashing":
         return ModelRuntimeStatus(
@@ -84,16 +86,13 @@ def _embedding_status(
 
 def _answer_status(settings: Settings, llm_provider: str, runtime: str) -> ModelRuntimeStatus:
     if llm_provider != "local":
-        return ModelRuntimeStatus(
+        return _public_provider_status(
+            settings,
             provider=llm_provider,
-            runtime=runtime,
-            model_name=settings.local_llm_model_name,
-            ready=settings.public_llm_enabled,
-            message=(
-                "Public LLM provider is enabled."
-                if settings.public_llm_enabled
-                else "Public LLM providers require PUBLIC_LLM_ENABLED=true."
-            ),
+            runtime="openai-compatible",
+            model_name=settings.public_llm_model_name,
+            model_setting_name="PUBLIC_LLM_MODEL_NAME",
+            component="answer generation",
         )
     if runtime == "extractive":
         return ModelRuntimeStatus(
@@ -126,6 +125,61 @@ def _answer_status(settings: Settings, llm_provider: str, runtime: str) -> Model
         runtime=runtime,
         model_name=settings.local_llm_model_name,
         supported_runtimes=SUPPORTED_ANSWER_RUNTIMES,
+    )
+
+
+def _public_provider_status(
+    settings: Settings,
+    *,
+    provider: str,
+    runtime: str,
+    model_name: str,
+    model_setting_name: str,
+    component: str,
+) -> ModelRuntimeStatus:
+    if provider not in SUPPORTED_PUBLIC_PROVIDERS:
+        return ModelRuntimeStatus(
+            provider=provider,
+            runtime=runtime,
+            model_name=model_name,
+            ready=False,
+            message=f"Unsupported public provider. Supported public providers: {', '.join(sorted(SUPPORTED_PUBLIC_PROVIDERS))}.",
+            base_url=settings.public_llm_base_url,
+        )
+    if not settings.public_llm_enabled:
+        return ModelRuntimeStatus(
+            provider=provider,
+            runtime=runtime,
+            model_name=model_name,
+            ready=False,
+            message="Public LLM providers require PUBLIC_LLM_ENABLED=true.",
+            base_url=settings.public_llm_base_url,
+        )
+    if not settings.public_llm_api_key.strip():
+        return ModelRuntimeStatus(
+            provider=provider,
+            runtime=runtime,
+            model_name=model_name,
+            ready=False,
+            message="Public LLM providers require PUBLIC_LLM_API_KEY.",
+            base_url=settings.public_llm_base_url,
+        )
+    if not model_name.strip():
+        return ModelRuntimeStatus(
+            provider=provider,
+            runtime=runtime,
+            model_name=model_name,
+            ready=False,
+            message=f"Public LLM providers require {model_setting_name}.",
+            base_url=settings.public_llm_base_url,
+        )
+    return ModelRuntimeStatus(
+        provider=provider,
+        runtime=runtime,
+        model_name=model_name,
+        ready=True,
+        message=f"Public {component} provider is configured. Readiness does not call the external API.",
+        base_url=settings.public_llm_base_url,
     )
 
 

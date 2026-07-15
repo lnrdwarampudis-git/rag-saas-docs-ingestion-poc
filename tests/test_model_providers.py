@@ -9,6 +9,8 @@ from app.rag.model_providers import (
     ModelProviderRequestError,
     OllamaAnswerGenerator,
     OllamaEmbeddingModel,
+    OpenAIAnswerGenerator,
+    OpenAIEmbeddingModel,
     VllmAnswerGenerator,
     VllmEmbeddingModel,
     build_model_provider,
@@ -39,6 +41,68 @@ def test_public_llm_provider_requires_explicit_enablement() -> None:
         build_model_provider(
             Settings(_env_file=None, llm_provider="openai", public_llm_enabled=False)
         )
+
+
+def test_public_embedding_provider_requires_explicit_enablement() -> None:
+    with pytest.raises(ModelProviderConfigurationError, match="PUBLIC_LLM_ENABLED"):
+        build_model_provider(
+            Settings(_env_file=None, embedding_provider="openai", public_llm_enabled=False)
+        )
+
+
+def test_openai_provider_requires_api_key_and_models() -> None:
+    with pytest.raises(ModelProviderConfigurationError, match="PUBLIC_LLM_API_KEY"):
+        build_model_provider(
+            Settings(
+                _env_file=None,
+                llm_provider="openai",
+                embedding_provider="openai",
+                public_llm_enabled=True,
+            )
+        )
+
+    with pytest.raises(ModelProviderConfigurationError, match="PUBLIC_LLM_MODEL_NAME"):
+        build_model_provider(
+            Settings(
+                _env_file=None,
+                llm_provider="openai",
+                public_llm_enabled=True,
+                public_llm_api_key="token",
+            )
+        )
+
+    with pytest.raises(ModelProviderConfigurationError, match="PUBLIC_EMBEDDING_MODEL_NAME"):
+        build_model_provider(
+            Settings(
+                _env_file=None,
+                embedding_provider="openai",
+                public_llm_enabled=True,
+                public_llm_api_key="token",
+            )
+        )
+
+
+def test_openai_provider_is_available_when_enabled() -> None:
+    provider = build_model_provider(
+        Settings(
+            _env_file=None,
+            llm_provider="openai",
+            embedding_provider="openai",
+            public_llm_enabled=True,
+            public_llm_api_key="token",
+            public_llm_model_name="chat-model",
+            public_embedding_model_name="embedding-model",
+        )
+    )
+
+    assert provider.provider_name == "openai"
+    assert provider.embedding_provider == "openai"
+    assert provider.answer_runtime == "openai-compatible"
+    assert provider.embedding_runtime == "openai-compatible"
+    assert provider.answer_model_name == "chat-model"
+    assert provider.embedding_model_name == "embedding-model"
+    assert isinstance(provider.embedding_model, OpenAIEmbeddingModel)
+    assert isinstance(provider.answer_generator, OpenAIAnswerGenerator)
 
 
 def test_ollama_embedding_runtime_is_available() -> None:
@@ -301,6 +365,36 @@ def test_vllm_embedding_model_posts_to_openai_compatible_endpoint() -> None:
     assert embedding == [5 / 13, 12 / 13]
 
 
+def test_openai_embedding_model_posts_authorized_request() -> None:
+    requests: list[httpx.Request] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        requests.append(request)
+        return httpx.Response(200, json={"data": [{"embedding": [8, 15]}]})
+
+    client = httpx.Client(
+        base_url="https://api.openai.test",
+        transport=httpx.MockTransport(handler),
+        headers={"Authorization": "Bearer test-token"},
+    )
+    model = OpenAIEmbeddingModel(
+        base_url="https://api.openai.test",
+        api_key="test-token",
+        model_name="embedding-model",
+        client=client,
+    )
+
+    embedding = model.embed("Redis vector retrieval")
+
+    assert requests[0].url.path == "/v1/embeddings"
+    assert requests[0].headers["authorization"] == "Bearer test-token"
+    assert _request_json(requests[0]) == {
+        "model": "embedding-model",
+        "input": "Redis vector retrieval",
+    }
+    assert embedding == [8 / 17, 15 / 17]
+
+
 def test_vllm_generation_runtime_is_available() -> None:
     provider = build_model_provider(
         Settings(
@@ -379,6 +473,55 @@ def test_vllm_answer_generator_posts_chat_completion() -> None:
     assert requests[0].url.path == "/v1/chat/completions"
     assert payload["model"] == "mistralai/Mistral-7B-Instruct-v0.3"
     assert payload["temperature"] == 0
+    assert answer == "Redis lowers repeated query latency."
+
+
+def test_openai_answer_generator_posts_authorized_context() -> None:
+    requests: list[httpx.Request] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        requests.append(request)
+        return httpx.Response(
+            200,
+            json={"choices": [{"message": {"content": "Redis lowers repeated query latency."}}]},
+        )
+
+    client = httpx.Client(
+        base_url="https://api.openai.test",
+        transport=httpx.MockTransport(handler),
+        headers={"Authorization": "Bearer test-token"},
+    )
+    generator = OpenAIAnswerGenerator(
+        base_url="https://api.openai.test",
+        api_key="test-token",
+        model_name="chat-model",
+        client=client,
+    )
+
+    answer = generator.generate(
+        "How does Redis help?",
+        [
+            RetrievalResult(
+                chunk=ChunkDTO(
+                    chunk_index=0,
+                    text="Redis cache improves repeated RAG query latency.",
+                    token_count=7,
+                    metadata={"file_name": "architecture.md"},
+                ),
+                score=1.0,
+                keyword_score=1.0,
+                vector_score=1.0,
+                early_score=1.0,
+            )
+        ],
+    )
+
+    payload = _request_json(requests[0])
+    assert requests[0].url.path == "/v1/chat/completions"
+    assert requests[0].headers["authorization"] == "Bearer test-token"
+    assert payload["model"] == "chat-model"
+    assert payload["temperature"] == 0
+    assert "Redis cache improves repeated RAG query latency." in payload["messages"][1]["content"]
     assert answer == "Redis lowers repeated query latency."
 
 
